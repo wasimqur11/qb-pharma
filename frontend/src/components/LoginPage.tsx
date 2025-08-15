@@ -60,42 +60,52 @@ const LoginPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 flex items-center justify-center py-8 px-4">
-      <div className="max-w-sm w-full space-y-6">
+    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-gray-900 to-purple-900 flex items-center justify-center py-8 px-4 relative overflow-hidden">
+      {/* Background Pattern */}
+      <div className="absolute inset-0 opacity-10">
+        <div className="absolute top-20 left-20 w-72 h-72 bg-blue-500 rounded-full mix-blend-multiply filter blur-xl animate-pulse"></div>
+        <div className="absolute top-40 right-20 w-72 h-72 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl animate-pulse delay-1000"></div>
+        <div className="absolute -bottom-8 left-40 w-72 h-72 bg-pink-500 rounded-full mix-blend-multiply filter blur-xl animate-pulse delay-2000"></div>
+      </div>
+      
+      <div className="max-w-sm w-full space-y-6 relative z-10">
         {/* Header */}
         <div className="text-center">
           <div className="flex justify-center mb-4">
-            <div className="w-12 h-12 flex items-center justify-center bg-gray-800 rounded-lg border border-gray-700">
-              <img src={qbLogo} alt="QB Pharmacy Management" className="h-8 w-8 object-contain" />
+            <div className="w-16 h-16 flex items-center justify-center bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-2xl">
+              <img src={qbLogo} alt="QB Pharmacy Management" className="h-10 w-10 object-contain" />
             </div>
           </div>
-          <h2 className="text-2xl font-bold text-white">
+          <h2 className="text-3xl font-bold text-white drop-shadow-lg">
             QB Pharmacy Management
           </h2>
-          <p className="mt-1 text-xs text-gray-400">
+          <p className="mt-2 text-sm text-white/80 drop-shadow-md">
             Where Healthcare Meets Analytics
           </p>
         </div>
 
         {/* Login Form */}
-        <div className="bg-gray-800 border border-gray-700 rounded-lg shadow-xl p-6">
+        <div className="bg-black/40 backdrop-blur-xl border border-white/30 rounded-2xl shadow-2xl p-8 relative overflow-hidden">
+          {/* Glass effect overlay */}
+          <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-black/20 rounded-2xl"></div>
+          <div className="relative z-10">
           <form className="space-y-4" onSubmit={handleSubmit}>
             {/* Error Message */}
             {error && (
-              <div className="bg-red-900/50 border border-red-700 rounded-lg p-3 flex items-center gap-2">
-                <ExclamationTriangleIcon className="h-4 w-4 text-red-400 flex-shrink-0" />
-                <p className="text-red-300 text-xs">{error}</p>
+              <div className="bg-red-500/20 backdrop-blur-sm border border-red-400/30 rounded-xl p-3 flex items-center gap-2">
+                <ExclamationTriangleIcon className="h-4 w-4 text-red-300 flex-shrink-0" />
+                <p className="text-red-200 text-xs">{error}</p>
               </div>
             )}
 
             {/* Username Field */}
             <div>
-              <label htmlFor="username" className="block text-xs font-medium text-gray-300 mb-1">
+              <label htmlFor="username" className="block text-sm font-semibold text-white mb-2 drop-shadow-md">
                 Username
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <UserIcon className="h-4 w-4 text-gray-400" />
+                  <UserIcon className="h-5 w-5 text-white/80" />
                 </div>
                 <input
                   id="username"
@@ -105,7 +115,7 @@ const LoginPage: React.FC = () => {
                   required
                   value={formData.username}
                   onChange={handleInputChange('username')}
-                  className="w-full pl-9 pr-3 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                  className="w-full pl-10 pr-3 py-3 bg-black/30 backdrop-blur-sm border border-white/40 rounded-xl text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all duration-300 text-sm font-medium shadow-inner"
                   placeholder="Enter username"
                 />
               </div>
@@ -113,12 +123,12 @@ const LoginPage: React.FC = () => {
 
             {/* Password Field */}
             <div>
-              <label htmlFor="password" className="block text-xs font-medium text-gray-300 mb-1">
+              <label htmlFor="password" className="block text-sm font-semibold text-white mb-2 drop-shadow-md">
                 Password
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <LockClosedIcon className="h-4 w-4 text-gray-400" />
+                  <LockClosedIcon className="h-5 w-5 text-white/80" />
                 </div>
                 <input
                   id="password"
@@ -128,18 +138,18 @@ const LoginPage: React.FC = () => {
                   required
                   value={formData.password}
                   onChange={handleInputChange('password')}
-                  className="w-full pl-9 pr-11 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                  className="w-full pl-10 pr-12 py-3 bg-black/30 backdrop-blur-sm border border-white/40 rounded-xl text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all duration-300 text-sm font-medium shadow-inner"
                   placeholder="Enter password"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-300 transition-colors"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-white/80 hover:text-white transition-colors"
                 >
                   {showPassword ? (
-                    <EyeSlashIcon className="h-4 w-4" />
+                    <EyeSlashIcon className="h-5 w-5" />
                   ) : (
-                    <EyeIcon className="h-4 w-4" />
+                    <EyeIcon className="h-5 w-5" />
                   )}
                 </button>
               </div>
@@ -149,7 +159,7 @@ const LoginPage: React.FC = () => {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="w-full flex justify-center py-3 px-4 bg-gradient-to-r from-blue-600 to-purple-600 backdrop-blur-sm border border-white/40 rounded-xl shadow-xl text-sm font-bold text-white hover:from-blue-500 hover:to-purple-500 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-[1.02] drop-shadow-lg"
             >
               {isSubmitting ? (
                 <>
@@ -163,20 +173,21 @@ const LoginPage: React.FC = () => {
           </form>
 
           {/* Demo Credentials */}
-          <div className="mt-4 pt-4 border-t border-gray-700">
-            <div className="bg-blue-900/30 border border-blue-700/50 rounded-lg p-3">
-              <h3 className="text-xs font-medium text-blue-300 mb-1">Demo Credentials</h3>
-              <div className="text-xs text-blue-200 space-y-0.5">
-                <p><span className="font-medium">Username:</span> superadmin</p>
-                <p><span className="font-medium">Password:</span> admin123</p>
+          <div className="mt-6 pt-4 border-t border-white/20">
+            <div className="bg-black/30 backdrop-blur-sm border border-blue-400/50 rounded-xl p-4">
+              <h3 className="text-sm font-bold text-white mb-2 drop-shadow-md">Demo Credentials</h3>
+              <div className="text-sm text-white space-y-1 font-medium">
+                <p><span className="font-bold">Username:</span> superadmin</p>
+                <p><span className="font-bold">Password:</span> admin123</p>
               </div>
             </div>
+          </div>
           </div>
         </div>
 
         {/* Footer */}
         <div className="text-center">
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-white/60 drop-shadow-md">
             © 2024 QB Pharmacy Management
           </p>
         </div>
