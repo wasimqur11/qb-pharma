@@ -3,9 +3,9 @@ import {
   LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer 
 } from 'recharts';
-import { mockDashboardStats } from '../data/mockData';
-import { revenueData, expenseData, monthlyData, doctorPerformance, kpiData } from '../data/mockChartData';
+// No mock data imports - clean slate for real pharmacy
 import type { DashboardStats, PayableBalance, Transaction } from '../types';
+import qbLogo from '../assets/qblogo.png';
 import TransactionForm from './TransactionForm';
 import StakeholderManagement from './StakeholderManagement';
 import AccountStatement from './AccountStatement';
@@ -33,10 +33,19 @@ const DarkCorporateDashboard: React.FC = () => {
     to: new Date().toISOString().split('T')[0]
   });
   const [selectedPeriod, setSelectedPeriod] = useState('30days');
-  const stats: DashboardStats = mockDashboardStats;
+  // Empty stats for fresh pharmacy setup
+  const stats: DashboardStats = {
+    todayRevenue: 0,
+    cashPosition: 0,
+    monthlyProfit: 0,
+    doctorPayables: [],
+    businessPartnerPayables: [],
+    employeeSalaryDue: [],
+    distributorCredits: []
+  };
 
   const formatCurrency = (amount: number) => {
-    return `₨${amount.toLocaleString()}`;
+    return `₹${amount.toLocaleString()}`;
   };
 
   const formatNumber = (num: number) => {
@@ -109,8 +118,8 @@ const DarkCorporateDashboard: React.FC = () => {
           {/* Left Section - Brand */}
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                <BuildingOfficeIcon className="h-4 w-4 text-white" />
+              <div className="w-8 h-8 flex items-center justify-center">
+                <img src={qbLogo} alt="QB Pharmacy" className="h-8 w-8 object-contain" />
               </div>
               <div className="hidden sm:block">
                 <h1 className="text-base font-semibold text-white">QB Pharmacy</h1>
@@ -417,8 +426,8 @@ const DarkCorporateDashboard: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
           title="Pharmacy Sales"
-          value="₨85,000"
-          change="+12.5%"
+          value={formatCurrency(stats.cashPosition)}
+          change="+0%"
           changeType="increase"
           subtitle="Today's pharmacy revenue"
           icon={CurrencyDollarIcon}
@@ -426,23 +435,23 @@ const DarkCorporateDashboard: React.FC = () => {
         <MetricCard
           title="Business Cash"
           value={formatCurrency(stats.cashPosition)}
-          change="+8.2%"
+          change="+0%"
           changeType="increase"
           subtitle="Available business funds"
           icon={BanknotesIcon}
         />
         <MetricCard
           title="Business Profit"
-          value="₨285,000"
-          change="+15.3%"
+          value={formatCurrency(stats.todayRevenue)}
+          change="+0%"
           changeType="increase"
           subtitle="Pharmacy business profit"
           icon={ChartBarIcon}
         />
         <MetricCard
           title="Owner Profit Due"
-          value="₨95,000"
-          change="+5.8%"
+          value={formatCurrency(stats.monthlyProfit)}
+          change="+0%"
           changeType="increase"
           subtitle="Total owed to business owners"
           icon={UserGroupIcon}
@@ -457,7 +466,7 @@ const DarkCorporateDashboard: React.FC = () => {
           height="300px"
         >
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={revenueData}>
+            <LineChart data={[]}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
               <XAxis dataKey="day" stroke="#9ca3af" fontSize={11} />
               <YAxis stroke="#9ca3af" fontSize={11} />
@@ -480,7 +489,7 @@ const DarkCorporateDashboard: React.FC = () => {
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
-                data={expenseData}
+                data={[]}
                 cx="50%"
                 cy="50%"
                 innerRadius={35}
@@ -488,7 +497,7 @@ const DarkCorporateDashboard: React.FC = () => {
                 paddingAngle={2}
                 dataKey="value"
               >
-                {expenseData.map((entry, index) => (
+                {[].map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.color} />
                 ))}
               </Pie>
@@ -530,32 +539,32 @@ const DarkCorporateDashboard: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
           title="Today's Consultations"
-          value="₨24,000"
-          change="+8.5%"
+          value={formatCurrency(0)}
+          change="+0%"
           changeType="increase"
           subtitle="12 patients treated"
           icon={UserGroupIcon}
         />
         <MetricCard
           title="Doctor Expenses"
-          value="₨15,000"
-          change="-2.1%"
+          value={formatCurrency(0)}
+          change="+0%"
           changeType="decrease"
           subtitle="Equipment & supplies"
           icon={CurrencyDollarIcon}
         />
         <MetricCard
           title="Net Doctor Income"
-          value="₨145,000"
-          change="+12.3%"
+          value={formatCurrency(0)}
+          change="+0%"
           changeType="increase"
           subtitle="This month"
           icon={ChartBarIcon}
         />
         <MetricCard
           title="Patient Count"
-          value="156"
-          change="+18.7%"
+          value="0"
+          change="+0%"
           changeType="increase"
           subtitle="This month"
           icon={UsersIcon}
@@ -570,7 +579,7 @@ const DarkCorporateDashboard: React.FC = () => {
           height="300px"
         >
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={revenueData}>
+            <LineChart data={[]}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
               <XAxis dataKey="day" stroke="#9ca3af" fontSize={11} />
               <YAxis stroke="#9ca3af" fontSize={11} />
@@ -591,11 +600,7 @@ const DarkCorporateDashboard: React.FC = () => {
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
-                data={[
-                  { name: 'General Consultation', value: 45, color: '#3b82f6' },
-                  { name: 'Follow-up', value: 30, color: '#10b981' },
-                  { name: 'Specialist', value: 25, color: '#f59e0b' }
-                ]}
+                data={[]}
                 cx="50%"
                 cy="50%"
                 innerRadius={35}
@@ -603,11 +608,7 @@ const DarkCorporateDashboard: React.FC = () => {
                 paddingAngle={2}
                 dataKey="value"
               >
-                {[
-                  { name: 'General Consultation', value: 45, color: '#3b82f6' },
-                  { name: 'Follow-up', value: 30, color: '#10b981' },
-                  { name: 'Specialist', value: 25, color: '#f59e0b' }
-                ].map((entry, index) => (
+                {[].map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.color} />
                 ))}
               </Pie>
@@ -634,7 +635,7 @@ const DarkCorporateDashboard: React.FC = () => {
       
       <ChartCard title="Monthly Performance Comparison" subtitle="Combined Pharmacy + Doctor Revenue vs Expenses vs Profit" height="350px">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={monthlyData} margin={{ top: 10, right: 15, left: 10, bottom: 5 }}>
+          <BarChart data={[]} margin={{ top: 10, right: 15, left: 10, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
             <XAxis dataKey="month" stroke="#9ca3af" fontSize={11} />
             <YAxis stroke="#9ca3af" fontSize={11} />
@@ -648,7 +649,7 @@ const DarkCorporateDashboard: React.FC = () => {
       </ChartCard>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {kpiData.map((kpi, index) => (
+        {[].map((kpi, index) => (
           <div key={index} className="bg-gray-800 border border-gray-700 rounded-lg p-4 h-fit">
             <h4 className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2 truncate">{kpi.metric}</h4>
             <div className="flex items-baseline gap-2 mb-2">
@@ -674,7 +675,7 @@ const DarkCorporateDashboard: React.FC = () => {
       
       <DataTable
         title="Doctor Performance Analysis"
-        data={doctorPerformance}
+        data={[]}
         columns={[
           { key: 'name', label: 'Doctor Name' },
           { key: 'patients', label: 'Patients Treated' },

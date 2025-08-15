@@ -44,7 +44,7 @@ const DoctorAccountStatement: React.FC = () => {
   const [doctorFilter, setDoctorFilter] = useState<string>('all');
   const [selectedPeriod, setSelectedPeriod] = useState('90days');
 
-  const formatCurrency = (amount: number) => `₨${amount.toLocaleString()}`;
+  const formatCurrency = (amount: number) => `₹${amount.toLocaleString()}`;
 
   const generateDoctorTransactions = (): DoctorTransaction[] => {
     const transactions: DoctorTransaction[] = [];
@@ -104,7 +104,7 @@ const DoctorAccountStatement: React.FC = () => {
     return transactions.sort((a, b) => b.date.getTime() - a.date.getTime());
   };
 
-  const allTransactions = useMemo(() => generateDoctorTransactions(), [dateRange]);
+  const allTransactions = useMemo(() => [], [dateRange]);
 
   const filteredTransactions = useMemo(() => {
     return allTransactions.filter(transaction => {

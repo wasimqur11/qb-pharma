@@ -223,7 +223,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
             <div className="grid grid-cols-2 gap-4">
               {/* Amount */}
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Amount (PKR)</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Amount (INR)</label>
                 <div className="relative">
                   <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
                     <CurrencyDollarIcon className="h-4 w-4 text-gray-400" />

@@ -55,88 +55,9 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions = 
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
-  const generateMockTransactions = (): Transaction[] => {
-    const mockTransactions: Transaction[] = [];
-    const allStakeholders = [
-      ...mockPartners.map(p => ({ ...p, type: 'partner' as const })),
-      ...mockDoctors.map(d => ({ ...d, type: 'doctor' as const })),
-      ...mockEmployees.map(e => ({ ...e, type: 'employee' as const })),
-      ...mockBusinessPartners.map(s => ({ ...s, type: 'business_partner' as const })),
-      ...mockDistributors.map(d => ({ ...d, type: 'distributor' as const }))
-    ];
-
-    const transactionTypes: TransactionCategory[] = [
-      'pharmacy_sale',
-      'consultation_fee',
-      'distributor_payment',
-      'doctor_expense',
-      'business_partner_payment',
-      'employee_payment',
-      'clinic_expense'
-    ];
-
-    const descriptions = {
-      pharmacy_sale: ['Daily medicine sales', 'OTC medication sales', 'Prescription fulfillment'],
-      consultation_fee: ['Patient consultation', 'Follow-up appointment', 'Medical examination'],
-      distributor_payment: ['Invoice payment', 'Stock purchase', 'Outstanding balance'],
-      doctor_expense: ['Medical equipment', 'Professional development', 'Office supplies'],
-      business_partner_payment: ['Commission payment', 'Incentive bonus', 'Performance reward'],
-      employee_payment: ['Monthly salary', 'Overtime payment', 'Bonus payment'],
-      clinic_expense: ['Rent payment', 'Utility bills', 'Maintenance costs']
-    };
-
-    // Generate 50 mock transactions over the last 30 days
-    for (let i = 0; i < 50; i++) {
-      const category = transactionTypes[Math.floor(Math.random() * transactionTypes.length)];
-      const date = new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000);
-      
-      let stakeholder = null;
-      let stakeholderType: StakeholderType | undefined;
-      
-      if (category !== 'pharmacy_sale' && category !== 'clinic_expense') {
-        const typeMap = {
-          consultation_fee: 'doctor',
-          distributor_payment: 'distributor',
-          doctor_expense: 'doctor',
-          business_partner_payment: 'business_partner',
-          employee_payment: 'employee'
-        };
-        stakeholderType = typeMap[category] as StakeholderType;
-        const relevantStakeholders = allStakeholders.filter(s => s.type === stakeholderType);
-        if (relevantStakeholders.length > 0) {
-          stakeholder = relevantStakeholders[Math.floor(Math.random() * relevantStakeholders.length)];
-        }
-      }
-
-      const amount = category === 'pharmacy_sale' ? 
-        Math.floor(Math.random() * 5000) + 500 :
-        category === 'employee_payment' ?
-        Math.floor(Math.random() * 50000) + 20000 :
-        category === 'distributor_payment' ?
-        Math.floor(Math.random() * 200000) + 50000 :
-        Math.floor(Math.random() * 25000) + 1000;
-
-      const categoryDescriptions = descriptions[category];
-      const description = categoryDescriptions[Math.floor(Math.random() * categoryDescriptions.length)];
-
-      mockTransactions.push({
-        id: `transaction-${i}`,
-        category,
-        stakeholderId: stakeholder?.id,
-        stakeholderType,
-        amount,
-        description: stakeholder ? `${description} - ${stakeholder.name}` : description,
-        date,
-        createdBy: 'Admin User',
-        createdAt: date
-      });
-    }
-
-    return mockTransactions.sort((a, b) => b.date.getTime() - a.date.getTime());
-  };
 
   const allTransactions = useMemo(() => {
-    return transactions.length > 0 ? transactions : generateMockTransactions();
+    return transactions;
   }, [transactions]);
 
   const getAllStakeholders = () => {
@@ -203,7 +124,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions = 
     return sorted;
   }, [filteredTransactions, sortField, sortDirection]);
 
-  const formatCurrency = (amount: number) => `₨${amount.toLocaleString()}`;
+  const formatCurrency = (amount: number) => `₹${amount.toLocaleString()}`;
 
   const getStakeholderIcon = (type?: StakeholderType | 'partner') => {
     switch (type) {

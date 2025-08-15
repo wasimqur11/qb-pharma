@@ -102,7 +102,7 @@ const PaymentProcessor: React.FC<PaymentProcessorProps> = ({ isOpen, onClose, on
     return payments;
   };
 
-  const pendingPayments = useMemo(() => generatePendingPayments(), []);
+  const pendingPayments = useMemo(() => [], []);
 
   const filteredPayments = useMemo(() => {
     return pendingPayments.filter(payment => {
@@ -113,7 +113,7 @@ const PaymentProcessor: React.FC<PaymentProcessorProps> = ({ isOpen, onClose, on
     });
   }, [pendingPayments, searchTerm, stakeholderFilter]);
 
-  const formatCurrency = (amount: number) => `₨${amount.toLocaleString()}`;
+  const formatCurrency = (amount: number) => `₹${amount.toLocaleString()}`;
 
   const getStakeholderIcon = (type: StakeholderType | 'partner') => {
     switch (type) {

@@ -6,6 +6,7 @@ import {
 import { mockDashboardStats } from '../data/mockData';
 import { revenueData, expenseData, monthlyData, doctorPerformance, kpiData } from '../data/mockChartData';
 import type { DashboardStats, PayableBalance } from '../types';
+import qbLogo from '../assets/qblogo.png';
 import { 
   CurrencyDollarIcon, BanknotesIcon, ChartBarIcon, UserGroupIcon,
   BuildingOfficeIcon, UsersIcon, TruckIcon, PlusIcon, CreditCardIcon,
@@ -21,7 +22,7 @@ const CorporateDashboard: React.FC = () => {
   const stats: DashboardStats = mockDashboardStats;
 
   const formatCurrency = (amount: number) => {
-    return `₨${amount.toLocaleString()}`;
+    return `₹${amount.toLocaleString()}`;
   };
 
   const formatNumber = (num: number) => {
@@ -36,7 +37,7 @@ const CorporateDashboard: React.FC = () => {
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-              <BuildingOfficeIcon className="h-6 w-6 text-white" />
+              <img src={qbLogo} alt="QB Pharmacy" className="h-6 w-6 object-contain" />
             </div>
             <div>
               <h1 className="text-xl font-semibold text-gray-900">QB Pharmacy</h1>

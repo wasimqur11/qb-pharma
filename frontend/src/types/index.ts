@@ -45,6 +45,7 @@ export interface Distributor {
   phone: string;
   address: string;
   creditBalance: number;
+  initialBalanceDate?: string;
   createdAt: Date;
 }
 

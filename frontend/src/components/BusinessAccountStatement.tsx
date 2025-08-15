@@ -57,7 +57,7 @@ const BusinessAccountStatement: React.FC = () => {
   const [categoryFilter, setCategoryFilter] = useState<TransactionCategory | 'all'>('all');
   const [selectedPeriod, setSelectedPeriod] = useState('90days');
 
-  const formatCurrency = (amount: number) => `₨${amount.toLocaleString()}`;
+  const formatCurrency = (amount: number) => `₹${amount.toLocaleString()}`;
 
   const generateBusinessTransactions = (): BusinessTransaction[] => {
     const transactions: BusinessTransaction[] = [];
@@ -131,7 +131,7 @@ const BusinessAccountStatement: React.FC = () => {
     return transactions.sort((a, b) => b.date.getTime() - a.date.getTime());
   };
 
-  const allTransactions = useMemo(() => generateBusinessTransactions(), [dateRange]);
+  const allTransactions = useMemo(() => [], [dateRange]);
 
   const filteredTransactions = useMemo(() => {
     return allTransactions.filter(transaction => {

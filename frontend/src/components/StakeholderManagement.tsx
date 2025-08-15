@@ -25,6 +25,13 @@ import clsx from 'clsx';
 
 type StakeholderData = Partner | Doctor | BusinessPartner | Employee | Distributor;
 
+interface TableColumn {
+  key: string;
+  label: string;
+  width?: string;
+  render?: (value: any) => React.ReactNode;
+}
+
 const StakeholderManagement: React.FC = () => {
   const [activeTab, setActiveTab] = useState<StakeholderType>('doctor');
   const [searchTerm, setSearchTerm] = useState('');
@@ -89,8 +96,81 @@ const StakeholderManagement: React.FC = () => {
   };
 
   const handleBulkUpload = (uploadedData: any[]) => {
+    // Validation functions (same as in StakeholderForm)
+    const validateEmail = (email: string): boolean => {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      return emailRegex.test(email);
+    };
+
+    const validateIndianMobile = (phone: string): boolean => {
+      const cleanPhone = phone.replace(/[\s\-\+]/g, '');
+      const mobileRegex = /^(?:91)?[6-9]\d{9}$/;
+      return mobileRegex.test(cleanPhone);
+    };
+
+    const formatIndianMobile = (phone: string): string => {
+      const cleaned = phone.replace(/[^\d+]/g, '');
+      if (cleaned.startsWith('+91') && cleaned.length === 13) {
+        return `+91 ${cleaned.slice(3, 8)} ${cleaned.slice(8)}`;
+      } else if (cleaned.startsWith('91') && cleaned.length === 12) {
+        return `+91 ${cleaned.slice(2, 7)} ${cleaned.slice(7)}`;
+      } else if (cleaned.length === 10 && /^[6-9]/.test(cleaned)) {
+        return `+91 ${cleaned.slice(0, 5)} ${cleaned.slice(5)}`;
+      }
+      return phone;
+    };
+
+    // Validate email and phone formats
+    const invalidEmails: string[] = [];
+    const invalidPhones: string[] = [];
+    const duplicateNames: string[] = [];
+    const duplicateEmails: string[] = [];
+    
+    uploadedData.forEach(item => {
+      // Format validation
+      if (item.email && !validateEmail(item.email)) {
+        invalidEmails.push(item.email);
+      }
+      if (item.phone && !validateIndianMobile(item.phone)) {
+        invalidPhones.push(item.phone);
+      }
+
+      // Check against existing data
+      const nameExists = currentData.some(existing => 
+        existing.name.toLowerCase().trim() === item.name.toLowerCase().trim()
+      );
+      const emailExists = currentData.some(existing => 
+        existing.email.toLowerCase().trim() === item.email.toLowerCase().trim()
+      );
+      
+      if (nameExists) duplicateNames.push(item.name);
+      if (emailExists) duplicateEmails.push(item.email);
+    });
+    
+    if (invalidEmails.length > 0 || invalidPhones.length > 0 || duplicateNames.length > 0 || duplicateEmails.length > 0) {
+      let errorMessage = 'Upload failed due to validation errors:\n';
+      
+      if (invalidEmails.length > 0) {
+        errorMessage += `\nInvalid email addresses: ${invalidEmails.join(', ')}`;
+      }
+      if (invalidPhones.length > 0) {
+        errorMessage += `\nInvalid phone numbers: ${invalidPhones.join(', ')}`;
+        errorMessage += '\n(Must be Indian mobile numbers: 10 digits starting with 6,7,8,9)';
+      }
+      if (duplicateNames.length > 0) {
+        errorMessage += `\nNames already exist: ${duplicateNames.join(', ')}`;
+      }
+      if (duplicateEmails.length > 0) {
+        errorMessage += `\nEmails already exist: ${duplicateEmails.join(', ')}`;
+      }
+      errorMessage += '\n\nPlease correct these issues and try again.';
+      alert(errorMessage);
+      return;
+    }
+    
     const newItems = uploadedData.map(item => ({
       ...item,
+      phone: item.phone ? formatIndianMobile(item.phone) : item.phone,
       id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
       createdAt: new Date()
     }));
@@ -104,37 +184,46 @@ const StakeholderManagement: React.FC = () => {
     alert(`Successfully uploaded ${uploadedData.length} ${currentType?.label.toLowerCase()}`);
   };
 
-  const formatCurrency = (amount: number) => `₨${amount.toLocaleString()}`;
+  const formatCurrency = (amount: number) => `₹${amount.toLocaleString()}`;
 
-  const getTableColumns = (type: string) => {
+  const getTableColumns = (type: string): TableColumn[] => {
     switch (type) {
       case 'doctor':
         return [
-          { key: 'name', label: 'Name' },
-          { key: 'consultationFee', label: 'Consultation Fee', render: (value: number) => formatCurrency(value) },
-          { key: 'commissionRate', label: 'Commission %', render: (value: number) => `${value}%` },
-          { key: 'email', label: 'Email' },
+          { key: 'name', label: 'Doctor Name', width: 'w-48' },
+          { key: 'email', label: 'Email', width: 'w-56' },
+          { key: 'phone', label: 'Phone', width: 'w-40' },
+          { key: 'consultationFee', label: 'Consultation Fee', render: (value: number) => formatCurrency(value), width: 'w-32' },
+          { key: 'commissionRate', label: 'Commission %', render: (value: number) => `${value}%`, width: 'w-28' },
         ];
       case 'employee':
         return [
-          { key: 'name', label: 'Name' },
-          { key: 'department', label: 'Department' },
-          { key: 'salary', label: 'Salary', render: (value: number) => formatCurrency(value) },
-          { key: 'email', label: 'Email' },
+          { key: 'name', label: 'Employee Name', width: 'w-48' },
+          { key: 'email', label: 'Email', width: 'w-56' },
+          { key: 'phone', label: 'Phone', width: 'w-40' },
+          { key: 'department', label: 'Department', width: 'w-32' },
+          { key: 'salary', label: 'Monthly Salary', render: (value: number) => formatCurrency(value), width: 'w-32' },
         ];
       case 'business_partner':
         return [
-          { key: 'name', label: 'Name' },
-          { key: 'commissionRate', label: 'Commission %', render: (value: number) => `${value}%` },
-          { key: 'email', label: 'Email' },
-          { key: 'phone', label: 'Phone' },
+          { key: 'name', label: 'Partner Name', width: 'w-48' },
+          { key: 'email', label: 'Email', width: 'w-56' },
+          { key: 'phone', label: 'Phone', width: 'w-40' },
+          { key: 'commissionRate', label: 'Commission %', render: (value: number) => `${value}%`, width: 'w-28' },
         ];
       case 'distributor':
         return [
-          { key: 'name', label: 'Name' },
-          { key: 'contactPerson', label: 'Contact Person' },
-          { key: 'creditBalance', label: 'Credit Balance', render: (value: number) => formatCurrency(value) },
-          { key: 'email', label: 'Email' },
+          { key: 'name', label: 'Company Name', width: 'w-48' },
+          { key: 'contactPerson', label: 'Contact Person', width: 'w-40' },
+          { key: 'email', label: 'Email', width: 'w-56' },
+          { key: 'phone', label: 'Phone', width: 'w-40' },
+          { key: 'address', label: 'Address', width: 'w-64', render: (value: string) => (
+            <div className="truncate max-w-xs" title={value}>
+              {value}
+            </div>
+          )},
+          { key: 'creditBalance', label: 'Credit Balance', render: (value: number) => value ? formatCurrency(value) : 'NA', width: 'w-32' },
+          { key: 'initialBalanceDate', label: 'Balance Date', width: 'w-32', render: (value: string) => value ? new Date(value).toLocaleDateString() : 'NA' },
         ];
       default:
         return [];
@@ -147,11 +236,11 @@ const StakeholderManagement: React.FC = () => {
     return (
       <div className="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className={`w-full ${type === 'distributor' ? 'min-w-[1200px]' : 'min-w-[800px]'}`}>
             <thead className="bg-gray-750">
               <tr>
                 {columns.map(col => (
-                  <th key={col.key} className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  <th key={col.key} className={`px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider ${col.width || ''}`}>
                     {col.label}
                   </th>
                 ))}
@@ -164,7 +253,7 @@ const StakeholderManagement: React.FC = () => {
               {data.map((item) => (
                 <tr key={item.id} className="hover:bg-gray-750 transition-colors">
                   {columns.map(col => (
-                    <td key={col.key} className="px-4 py-3 whitespace-nowrap text-sm text-gray-300">
+                    <td key={col.key} className={`px-4 py-3 text-sm text-gray-300 ${col.key === 'address' ? '' : 'whitespace-nowrap'} ${col.width || ''}`}>
                       {col.render ? col.render((item as any)[col.key]) : (item as any)[col.key]}
                     </td>
                   ))}
@@ -330,6 +419,7 @@ const StakeholderManagement: React.FC = () => {
         onSubmit={handleStakeholderSubmit}
         type={activeTab}
         editData={editingItem}
+        existingStakeholders={currentData}
       />
 
       <BulkUpload

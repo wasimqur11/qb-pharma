@@ -6,6 +6,7 @@ import {
 import { mockDashboardStats } from '../data/mockData';
 import { revenueData, expenseData, monthlyData, doctorPerformance, kpiData } from '../data/mockChartData';
 import type { DashboardStats, PayableBalance } from '../types';
+import qbLogo from '../assets/qblogo.png';
 import { 
   CurrencyDollarIcon, BanknotesIcon, ChartBarIcon, UserGroupIcon,
   BuildingOfficeIcon, UsersIcon, TruckIcon, PlusIcon, CreditCardIcon,
@@ -20,15 +21,15 @@ const EnhancedDashboard: React.FC = () => {
   const stats: DashboardStats = mockDashboardStats;
 
   const formatCurrency = (amount: number) => {
-    return `₨${amount.toLocaleString()}`;
+    return `₹${amount.toLocaleString()}`;
   };
 
   const Sidebar: React.FC = () => (
     <div className="w-64 bg-white shadow-xl border-r border-gray-200 h-screen fixed left-0 top-0 z-40">
       <div className="p-6 border-b border-gray-200">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 shadow-lg">
-            <BuildingOfficeIcon className="h-6 w-6 text-white" />
+          <div className="p-2 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 shadow-lg flex items-center justify-center">
+            <img src={qbLogo} alt="QB Pharmacy" className="h-6 w-6 object-contain" />
           </div>
           <div>
             <h2 className="text-lg font-bold text-gray-900">QB Pharmacy</h2>

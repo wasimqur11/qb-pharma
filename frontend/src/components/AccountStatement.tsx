@@ -23,7 +23,7 @@ const AccountStatement: React.FC = () => {
   });
   const [searchTerm, setSearchTerm] = useState('');
 
-  const formatCurrency = (amount: number) => `₨${amount.toLocaleString()}`;
+  const formatCurrency = (amount: number) => `₹${amount.toLocaleString()}`;
 
   const getAllStakeholders = () => {
     const stakeholders = [
