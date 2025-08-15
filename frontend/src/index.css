@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Application-wide compact sizing for business efficiency */
+html {
+  font-size: 14px; /* Base font size reduced from 16px to 14px */
+}
