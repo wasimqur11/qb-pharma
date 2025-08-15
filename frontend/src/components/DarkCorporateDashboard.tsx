@@ -6,6 +6,7 @@ import {
 // No mock data imports - clean slate for real pharmacy
 import type { DashboardStats, PayableBalance, Transaction } from '../types';
 import { useTransactions } from '../contexts/TransactionContext';
+import { useAuth } from '../contexts/AuthContext';
 import qbLogo from '../assets/qblogo.png';
 import TransactionForm from './TransactionForm';
 import StakeholderManagement from './StakeholderManagement';
@@ -24,7 +25,8 @@ import {
   DocumentArrowUpIcon, ChartPieIcon, ArrowUpIcon, ArrowDownIcon,
   ClockIcon, CalendarIcon, BellIcon, Cog6ToothIcon, HomeIcon,
   DocumentTextIcon, UserIcon, ArrowTrendingUpIcon, EyeIcon,
-  Squares2X2Icon, ChevronDownIcon, MagnifyingGlassIcon, FunnelIcon
+  Squares2X2Icon, ChevronDownIcon, MagnifyingGlassIcon, FunnelIcon,
+  ArrowRightOnRectangleIcon
 } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 
@@ -39,6 +41,8 @@ const DarkCorporateDashboard: React.FC = () => {
     getDashboardStats,
     getDistributorPaymentsDue 
   } = useTransactions();
+  
+  const { user, logout } = useAuth();
   const [dateRange, setDateRange] = useState({
     from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days ago
     to: new Date().toISOString().split('T')[0]
@@ -243,15 +247,15 @@ const DarkCorporateDashboard: React.FC = () => {
           {/* Left Section - Brand */}
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 flex items-center justify-center">
-                <img src={qbLogo} alt="QB Pharmacy" className="h-8 w-8 object-contain" />
+              <div className="w-10 h-10 flex items-center justify-center">
+                <img src={qbLogo} alt="QB Pharmacy Management" className="h-10 w-10 object-contain" />
               </div>
               <div className="hidden sm:block">
-                <h1 className="text-base font-semibold text-white">QB Pharmacy</h1>
-                <p className="text-xs text-gray-400">Enterprise Management System</p>
+                <h1 className="text-base font-semibold text-white">QB Pharmacy Management</h1>
+                <p className="text-xs text-gray-400">Where Healthcare Meets Analytics</p>
               </div>
               <div className="block sm:hidden">
-                <h1 className="text-base font-semibold text-white">QB Pharmacy</h1>
+                <h1 className="text-base font-semibold text-white">QB Pharmacy Management</h1>
               </div>
             </div>
           </div>
@@ -263,6 +267,7 @@ const DarkCorporateDashboard: React.FC = () => {
               <button
                 onClick={() => setShowTransactionForm(true)}
                 className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium"
+                title="Add new financial transaction"
               >
                 <PlusIcon className="h-4 w-4" />
                 <span className="hidden xl:inline">Add Transaction</span>
@@ -272,6 +277,7 @@ const DarkCorporateDashboard: React.FC = () => {
               <button
                 onClick={() => setShowPaymentProcessor(true)}
                 className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm font-medium"
+                title="Process stakeholder payments"
               >
                 <CreditCardIcon className="h-4 w-4" />
                 <span className="hidden xl:inline">Process Payments</span>
@@ -304,26 +310,36 @@ const DarkCorporateDashboard: React.FC = () => {
               <input 
                 type="text" 
                 placeholder="Search..." 
+                title="Search transactions, stakeholders, and records"
                 className="pl-9 pr-3 py-2 bg-gray-800 border border-gray-600 rounded-md text-sm text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-40 lg:w-48 xl:w-56"
               />
             </div>
             
             {/* Notifications */}
-            <button className="relative p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-md transition-colors">
+            <button 
+              className="relative p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-md transition-colors"
+              title="View notifications and alerts (3 new)"
+            >
               <BellIcon className="h-4 w-4" />
               <span className="absolute -top-0.5 -right-0.5 h-3 w-3 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">3</span>
             </button>
             
             {/* User Menu */}
             <div className="flex items-center gap-2 pl-2 border-l border-gray-600">
-              <div className="w-7 h-7 rounded-full bg-gray-700 flex items-center justify-center">
-                <UserIcon className="h-4 w-4 text-gray-300" />
+              <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center">
+                <UserIcon className="h-4 w-4 text-white" />
               </div>
               <div className="hidden sm:block">
-                <p className="text-sm font-medium text-white">Admin</p>
-                <p className="text-xs text-gray-400">admin@qb.com</p>
+                <p className="text-sm font-medium text-white">{user?.name}</p>
+                <p className="text-xs text-gray-400">{user?.email}</p>
               </div>
-              <ChevronDownIcon className="h-3 w-3 text-gray-400" />
+              <button
+                onClick={logout}
+                className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded-md transition-colors"
+                title="Logout"
+              >
+                <ArrowRightOnRectangleIcon className="h-4 w-4" />
+              </button>
             </div>
           </div>
         </div>
@@ -334,13 +350,14 @@ const DarkCorporateDashboard: React.FC = () => {
         <nav className="flex items-center gap-1 -mb-px overflow-x-auto scrollbar-hide">
           {/* Primary Navigation */}
           {[
-            { id: 'pharmacy_dashboard', label: 'Pharmacy', icon: BuildingOfficeIcon, category: 'dashboard' },
-            { id: 'doctor_dashboard', label: 'Doctor', icon: UserGroupIcon, category: 'dashboard' },
-            { id: 'combined_analytics', label: 'Analytics', icon: ChartBarIcon, category: 'dashboard' },
+            { id: 'pharmacy_dashboard', label: 'Pharmacy', icon: BuildingOfficeIcon, category: 'dashboard', tooltip: 'Pharmacy business dashboard and analytics' },
+            { id: 'doctor_dashboard', label: 'Doctor', icon: UserGroupIcon, category: 'dashboard', tooltip: 'Doctor consultations and revenue analytics' },
+            { id: 'combined_analytics', label: 'Analytics', icon: ChartBarIcon, category: 'dashboard', tooltip: 'Combined business analytics and insights' },
           ].map(item => (
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id as any)}
+              title={item.tooltip}
               className={clsx(
                 'flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-all duration-200 whitespace-nowrap',
                 activeTab === item.id 
@@ -358,12 +375,13 @@ const DarkCorporateDashboard: React.FC = () => {
           
           {/* Management */}
           {[
-            { id: 'stakeholders', label: 'Stakeholders', icon: UsersIcon, category: 'management' },
-            { id: 'patients', label: 'Patients', icon: UserIcon, category: 'management' },
+            { id: 'stakeholders', label: 'Stakeholders', icon: UsersIcon, category: 'management', tooltip: 'Manage doctors, partners, employees, and distributors' },
+            { id: 'patients', label: 'Patients', icon: UserIcon, category: 'management', tooltip: 'Patient management and credit tracking' },
           ].map(item => (
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id as any)}
+              title={item.tooltip}
               className={clsx(
                 'flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-all duration-200 whitespace-nowrap',
                 activeTab === item.id 
@@ -381,12 +399,13 @@ const DarkCorporateDashboard: React.FC = () => {
           
           {/* Reports & Statements */}
           {[
-            { id: 'reports', label: 'Reports', icon: DocumentTextIcon, category: 'reports' },
-            { id: 'statements', label: 'Statements', icon: DocumentArrowUpIcon, category: 'reports' },
+            { id: 'reports', label: 'Reports', icon: DocumentTextIcon, category: 'reports', tooltip: 'Financial reports and business analytics' },
+            { id: 'statements', label: 'Statements', icon: DocumentArrowUpIcon, category: 'reports', tooltip: 'Account statements and transaction history' },
           ].map(item => (
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id as any)}
+              title={item.tooltip}
               className={clsx(
                 'flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-all duration-200 whitespace-nowrap',
                 activeTab === item.id 
@@ -404,11 +423,12 @@ const DarkCorporateDashboard: React.FC = () => {
           
           {/* Settings */}
           {[
-            { id: 'configuration', label: 'Settings', icon: Cog6ToothIcon, category: 'settings' },
+            { id: 'configuration', label: 'Settings', icon: Cog6ToothIcon, category: 'settings', tooltip: 'System configuration and department management' },
           ].map(item => (
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id as any)}
+              title={item.tooltip}
               className={clsx(
                 'flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-all duration-200 whitespace-nowrap',
                 activeTab === item.id 
@@ -429,14 +449,15 @@ const DarkCorporateDashboard: React.FC = () => {
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-400 mr-3">Statement Type:</span>
             {[
-              { id: 'statements', label: 'Account Statements', icon: DocumentArrowUpIcon },
-              { id: 'business_statement', label: 'Pharmacy Business', icon: BuildingOfficeIcon },
-              { id: 'doctor_statement', label: 'Doctor Practice', icon: UserGroupIcon },
-              { id: 'distributor_statement', label: 'Distributor Accounts', icon: TruckIcon },
+              { id: 'statements', label: 'Account Statements', icon: DocumentArrowUpIcon, tooltip: 'General stakeholder account statements' },
+              { id: 'business_statement', label: 'Pharmacy Business', icon: BuildingOfficeIcon, tooltip: 'Pharmacy business financial statement' },
+              { id: 'doctor_statement', label: 'Doctor Practice', icon: UserGroupIcon, tooltip: 'Doctor consultation and revenue statement' },
+              { id: 'distributor_statement', label: 'Distributor Accounts', icon: TruckIcon, tooltip: 'Distributor credit and payment statements' },
             ].map(item => (
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id as any)}
+                title={item.tooltip}
                 className={clsx(
                   'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200',
                   activeTab === item.id 

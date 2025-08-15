@@ -177,3 +177,24 @@ export interface ConfigurationState {
   isLoading: boolean;
   lastUpdated: Date | null;
 }
+
+// Authentication Types
+export type UserRole = 'super_admin' | 'admin' | 'manager' | 'user';
+
+export interface User {
+  id: string;
+  username: string;
+  role: UserRole;
+  name: string;
+  email: string;
+  isActive: boolean;
+  lastLogin?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface AuthState {
+  isAuthenticated: boolean;
+  user: User | null;
+  isLoading: boolean;
+}
