@@ -9,7 +9,8 @@ import {
   ArrowTrendingUpIcon,
   ArrowTrendingDownIcon
 } from '@heroicons/react/24/outline';
-import { mockDoctors } from '../data/mockData';
+import { useStakeholders } from '../contexts/StakeholderContext';
+import { useTransactions } from '../contexts/TransactionContext';
 import type { TransactionCategory } from '../types';
 import clsx from 'clsx';
 
@@ -35,6 +36,9 @@ interface DoctorSummary {
 }
 
 const DoctorAccountStatement: React.FC = () => {
+  const { doctors } = useStakeholders();
+  const { transactions, getTransactionsByType } = useTransactions();
+  
   const [dateRange, setDateRange] = useState({
     from: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     to: new Date().toISOString().split('T')[0]
@@ -80,7 +84,7 @@ const DoctorAccountStatement: React.FC = () => {
       
       for (let i = 0; i < dailyTransactions; i++) {
         const template = transactionTemplates[Math.floor(Math.random() * transactionTemplates.length)];
-        const doctor = mockDoctors[Math.floor(Math.random() * mockDoctors.length)];
+        const doctor = doctors[Math.floor(Math.random() * doctors.length)] || { id: 'demo', name: 'Demo Doctor' };
         const debitAmount = typeof template.debit === 'function' ? template.debit() : template.debit;
         const creditAmount = typeof template.credit === 'function' ? template.credit() : template.credit;
         
@@ -104,10 +108,39 @@ const DoctorAccountStatement: React.FC = () => {
     return transactions.sort((a, b) => b.date.getTime() - a.date.getTime());
   };
 
-  const allTransactions = useMemo(() => [], [dateRange]);
+  const allTransactions = useMemo(() => {
+    const startDate = new Date(dateRange.from);
+    const endDate = new Date(dateRange.to);
+    
+    return transactions
+      .filter(t => {
+        // Filter for doctor-specific transactions only
+        const isDoctorTransaction = ['consultation_fee', 'doctor_expense'].includes(t.category);
+        const transactionDate = new Date(t.date);
+        return isDoctorTransaction && transactionDate >= startDate && transactionDate <= endDate;
+      })
+      .map(t => {
+        const doctor = doctors.find(d => d.id === t.stakeholderId);
+        const isCredit = t.category === 'consultation_fee';
+        
+        return {
+          id: t.id,
+          date: t.date,
+          category: t.category as 'consultation_fee' | 'doctor_expense',
+          description: t.description,
+          doctorId: t.stakeholderId || 'unknown',
+          doctorName: doctor?.name || 'Unknown Doctor',
+          debit: isCredit ? 0 : t.amount,
+          credit: isCredit ? t.amount : 0,
+          balance: 0, // Will be calculated below
+          reference: `DOC${t.id.slice(-6)}`
+        };
+      })
+      .sort((a, b) => b.date.getTime() - a.date.getTime());
+  }, [dateRange, transactions, doctors]);
 
   const filteredTransactions = useMemo(() => {
-    return allTransactions.filter(transaction => {
+    const filtered = allTransactions.filter(transaction => {
       const matchesSearch = transaction.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           transaction.doctorName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           (transaction.reference && transaction.reference.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -115,6 +148,13 @@ const DoctorAccountStatement: React.FC = () => {
       const matchesDoctor = doctorFilter === 'all' || transaction.doctorId === doctorFilter;
       return matchesSearch && matchesCategory && matchesDoctor;
     });
+    
+    // Calculate running balances
+    let runningBalance = 15000; // Starting balance for doctor accounts
+    return filtered.reverse().map(t => {
+      runningBalance += t.credit - t.debit;
+      return { ...t, balance: runningBalance };
+    }).reverse();
   }, [allTransactions, searchTerm, categoryFilter, doctorFilter]);
 
   const doctorSummary = useMemo((): DoctorSummary => {
@@ -305,7 +345,7 @@ const DoctorAccountStatement: React.FC = () => {
               className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
             >
               <option value="all">All Doctors</option>
-              {mockDoctors.map(doctor => (
+              {doctors.map(doctor => (
                 <option key={doctor.id} value={doctor.id}>
                   {doctor.name}
                 </option>

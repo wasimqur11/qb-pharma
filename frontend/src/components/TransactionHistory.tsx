@@ -14,13 +14,8 @@ import {
   ArrowUpIcon,
   ArrowDownIcon
 } from '@heroicons/react/24/outline';
-import {
-  mockDoctors,
-  mockBusinessPartners,
-  mockEmployees,
-  mockDistributors,
-  mockPartners
-} from '../data/mockData';
+import { useStakeholders } from '../contexts/StakeholderContext';
+import { useTransactions } from '../contexts/TransactionContext';
 import type { Transaction, TransactionCategory, StakeholderType } from '../types';
 import clsx from 'clsx';
 
@@ -39,7 +34,10 @@ interface FilterState {
   searchTerm: string;
 }
 
-const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions = [] }) => {
+const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: propTransactions }) => {
+  const { transactions } = useTransactions();
+  const { doctors, businessPartners, employees, distributors, patients } = useStakeholders();
+  
   const [filters, setFilters] = useState<FilterState>({
     dateFrom: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     dateTo: new Date().toISOString().split('T')[0],
@@ -55,18 +53,18 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions = 
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
-
+  // Use context transactions if no prop transactions provided
   const allTransactions = useMemo(() => {
-    return transactions;
-  }, [transactions]);
+    return propTransactions || transactions;
+  }, [propTransactions, transactions]);
 
   const getAllStakeholders = () => {
     const stakeholders = [
-      ...mockPartners.map(p => ({ ...p, type: 'partner' as const })),
-      ...mockDoctors.map(d => ({ ...d, type: 'doctor' as const })),
-      ...mockEmployees.map(e => ({ ...e, type: 'employee' as const })),
-      ...mockBusinessPartners.map(s => ({ ...s, type: 'business_partner' as const })),
-      ...mockDistributors.map(d => ({ ...d, type: 'distributor' as const }))
+      ...businessPartners.map(p => ({ ...p, type: 'business_partner' as const })),
+      ...doctors.map(d => ({ ...d, type: 'doctor' as const })),
+      ...employees.map(e => ({ ...e, type: 'employee' as const })),
+      ...distributors.map(d => ({ ...d, type: 'distributor' as const })),
+      ...patients.map(p => ({ ...p, type: 'patient' as const }))
     ];
     
     if (filters.stakeholderType === 'all') return stakeholders;
@@ -130,8 +128,9 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions = 
     switch (type) {
       case 'doctor': return UserGroupIcon;
       case 'employee': return UsersIcon;
-      case 'business_partner': return UsersIcon;
+      case 'business_partner': return BuildingOfficeIcon;
       case 'distributor': return TruckIcon;
+      case 'patient': return UserGroupIcon;
       case 'partner': return BuildingOfficeIcon;
       default: return CurrencyDollarIcon;
     }
@@ -145,7 +144,9 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions = 
       doctor_expense: 'Doctor Expense',
       business_partner_payment: 'Business Partner Payment',
       employee_payment: 'Employee Payment',
-      clinic_expense: 'Clinic Expense'
+      clinic_expense: 'Clinic Expense',
+      patient_credit_sale: 'Patient Credit Sale',
+      patient_payment: 'Patient Payment'
     };
     return labels[category];
   };
@@ -158,7 +159,9 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions = 
       doctor_expense: 'text-red-400',
       business_partner_payment: 'text-purple-400',
       employee_payment: 'text-cyan-400',
-      clinic_expense: 'text-yellow-400'
+      clinic_expense: 'text-yellow-400',
+      patient_credit_sale: 'text-green-300',
+      patient_payment: 'text-green-500'
     };
     return colors[category];
   };
@@ -302,6 +305,8 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions = 
               <option value="business_partner_payment">Business Partner Payment</option>
               <option value="employee_payment">Employee Payment</option>
               <option value="clinic_expense">Clinic Expense</option>
+              <option value="patient_credit_sale">Patient Credit Sale</option>
+              <option value="patient_payment">Patient Payment</option>
             </select>
           </div>
 
@@ -318,7 +323,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions = 
               <option value="employee">Employees</option>
               <option value="business_partner">Business Partners</option>
               <option value="distributor">Distributors</option>
-              <option value="partner">Business Partners</option>
+              <option value="patient">Patients</option>
             </select>
           </div>
         </div>

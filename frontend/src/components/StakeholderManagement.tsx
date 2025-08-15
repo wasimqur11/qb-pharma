@@ -9,21 +9,16 @@ import {
   TrashIcon,
   MagnifyingGlassIcon,
   ChevronDownIcon,
-  DocumentArrowUpIcon
+  DocumentArrowUpIcon,
+  UserIcon
 } from '@heroicons/react/24/outline';
-import { 
-  mockPartners, 
-  mockDoctors, 
-  mockBusinessPartners, 
-  mockEmployees, 
-  mockDistributors 
-} from '../data/mockData';
-import type { Partner, Doctor, BusinessPartner, Employee, Distributor, StakeholderType } from '../types';
+import type { Partner, Doctor, BusinessPartner, Employee, Distributor, Patient, StakeholderType } from '../types';
+import { useStakeholders } from '../contexts/StakeholderContext';
 import StakeholderForm from './StakeholderForm';
 import BulkUpload from './BulkUpload';
 import clsx from 'clsx';
 
-type StakeholderData = Partner | Doctor | BusinessPartner | Employee | Distributor;
+type StakeholderData = Partner | Doctor | BusinessPartner | Employee | Distributor | Patient;
 
 interface TableColumn {
   key: string;
@@ -38,18 +33,41 @@ const StakeholderManagement: React.FC = () => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
-  const [stakeholderData, setStakeholderData] = useState({
-    doctor: mockDoctors,
-    employee: mockEmployees,
-    business_partner: mockBusinessPartners,
-    distributor: mockDistributors
-  });
+  
+  const {
+    doctors,
+    businessPartners,
+    employees,
+    distributors,
+    patients,
+    addDoctor,
+    updateDoctor,
+    deleteDoctor,
+    addBusinessPartner,
+    updateBusinessPartner,
+    deleteBusinessPartner,
+    addEmployee,
+    updateEmployee,
+    deleteEmployee,
+    addDistributor,
+    updateDistributor,
+    deleteDistributor
+  } = useStakeholders();
+
+  const stakeholderData = {
+    doctor: doctors,
+    employee: employees,
+    business_partner: businessPartners,
+    distributor: distributors,
+    patient: patients
+  };
 
   const stakeholderTypes = [
     { id: 'doctor', label: 'Doctors', icon: UserGroupIcon, color: 'text-green-400' },
     { id: 'business_partner', label: 'Business Partners', icon: UsersIcon, color: 'text-orange-400' },
     { id: 'employee', label: 'Employees', icon: UsersIcon, color: 'text-purple-400' },
-    { id: 'distributor', label: 'Distributors', icon: TruckIcon, color: 'text-cyan-400' }
+    { id: 'distributor', label: 'Distributors', icon: TruckIcon, color: 'text-cyan-400' },
+    { id: 'patient', label: 'Patients', icon: UserIcon, color: 'text-pink-400' }
   ];
 
   const currentType = stakeholderTypes.find(t => t.id === activeTab);
@@ -59,24 +77,74 @@ const StakeholderManagement: React.FC = () => {
   );
 
   const handleStakeholderSubmit = (data: any) => {
-    const newId = Date.now().toString();
-    const newItem = { ...data, id: newId, createdAt: new Date() };
-    
     if (editingItem) {
       // Update existing
-      setStakeholderData(prev => ({
-        ...prev,
-        [activeTab]: (prev as any)[activeTab].map((item: any) => 
-          item.id === editingItem.id ? { ...item, ...data } : item
-        )
-      }));
+      switch (activeTab) {
+        case 'doctor':
+          updateDoctor(editingItem.id, data);
+          break;
+        case 'business_partner':
+          updateBusinessPartner(editingItem.id, data);
+          break;
+        case 'employee':
+          updateEmployee(editingItem.id, data);
+          break;
+        case 'distributor':
+          updateDistributor(editingItem.id, data);
+          break;
+      }
       setEditingItem(null);
     } else {
       // Add new
-      setStakeholderData(prev => ({
-        ...prev,
-        [activeTab]: [...(prev as any)[activeTab], newItem]
-      }));
+      switch (activeTab) {
+        case 'doctor':
+          addDoctor({
+            name: data.name,
+            email: data.email,
+            phone: data.phone,
+            consultationFee: parseFloat(data.consultationFee),
+            commissionRate: parseFloat(data.commissionRate)
+          });
+          break;
+        case 'business_partner':
+          addBusinessPartner({
+            name: data.name,
+            email: data.email,
+            phone: data.phone,
+            ownershipPercentage: parseFloat(data.ownershipPercentage)
+          });
+          break;
+        case 'employee':
+          const employeeData = {
+            name: data.name,
+            email: data.email,
+            phone: data.phone,
+            department: data.department,
+            salary: parseFloat(data.salary),
+            salaryDueDate: data.salaryDueDate,
+            lastPaidDate: data.lastPaidDate || undefined,
+            salaryFrequency: data.salaryFrequency as 'monthly' | 'bi-weekly' | 'weekly'
+          };
+          console.log('Adding employee with data:', employeeData);
+          addEmployee(employeeData);
+          console.log('Employee added successfully');
+          break;
+        case 'distributor':
+          addDistributor({
+            name: data.name,
+            contactPerson: data.contactPerson,
+            email: data.email,
+            phone: data.phone,
+            address: data.address,
+            creditBalance: data.creditBalance ? parseFloat(data.creditBalance) : 0,
+            initialBalanceDate: data.initialBalanceDate,
+            paymentSchedule: data.paymentSchedule as 'weekly' | 'bi-weekly' | 'monthly',
+            paymentPercentage: parseFloat(data.paymentPercentage),
+            nextPaymentDue: data.nextPaymentDue,
+            lastPaymentDate: data.lastPaymentDate || undefined
+          });
+          break;
+      }
     }
     setShowAddForm(false);
   };
@@ -88,10 +156,20 @@ const StakeholderManagement: React.FC = () => {
 
   const handleDelete = (itemId: string) => {
     if (confirm('Are you sure you want to delete this record?')) {
-      setStakeholderData(prev => ({
-        ...prev,
-        [activeTab]: (prev as any)[activeTab].filter((item: any) => item.id !== itemId)
-      }));
+      switch (activeTab) {
+        case 'doctor':
+          deleteDoctor(itemId);
+          break;
+        case 'business_partner':
+          deleteBusinessPartner(itemId);
+          break;
+        case 'employee':
+          deleteEmployee(itemId);
+          break;
+        case 'distributor':
+          deleteDistributor(itemId);
+          break;
+      }
     }
   };
 
@@ -168,17 +246,32 @@ const StakeholderManagement: React.FC = () => {
       return;
     }
     
-    const newItems = uploadedData.map(item => ({
-      ...item,
-      phone: item.phone ? formatIndianMobile(item.phone) : item.phone,
-      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-      createdAt: new Date()
-    }));
-    
-    setStakeholderData(prev => ({
-      ...prev,
-      [activeTab]: [...(prev as any)[activeTab], ...newItems]
-    }));
+    // Process and add items using context
+    uploadedData.forEach(item => {
+      const processedItem = {
+        ...item,
+        phone: item.phone ? formatIndianMobile(item.phone) : item.phone
+      };
+
+      switch (activeTab) {
+        case 'distributor':
+          addDistributor({
+            name: processedItem.name,
+            contactPerson: processedItem.contactPerson,
+            email: processedItem.email,
+            phone: processedItem.phone,
+            address: processedItem.address,
+            creditBalance: processedItem.creditBalance ? parseFloat(processedItem.creditBalance) : 0,
+            initialBalanceDate: processedItem.initialBalanceDate,
+            paymentSchedule: processedItem.paymentSchedule || 'weekly',
+            paymentPercentage: processedItem.paymentPercentage ? parseFloat(processedItem.paymentPercentage) : 10,
+            nextPaymentDue: processedItem.nextPaymentDue || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Default to 7 days from now
+            lastPaymentDate: processedItem.lastPaymentDate || undefined
+          });
+          break;
+        // Add other stakeholder types if needed for bulk upload in future
+      }
+    });
     
     setShowBulkUpload(false);
     alert(`Successfully uploaded ${uploadedData.length} ${currentType?.label.toLowerCase()}`);
@@ -198,32 +291,53 @@ const StakeholderManagement: React.FC = () => {
         ];
       case 'employee':
         return [
-          { key: 'name', label: 'Employee Name', width: 'w-48' },
-          { key: 'email', label: 'Email', width: 'w-56' },
-          { key: 'phone', label: 'Phone', width: 'w-40' },
-          { key: 'department', label: 'Department', width: 'w-32' },
-          { key: 'salary', label: 'Monthly Salary', render: (value: number) => formatCurrency(value), width: 'w-32' },
+          { key: 'name', label: 'Employee Name', width: 'w-40' },
+          { key: 'email', label: 'Email', width: 'w-48' },
+          { key: 'phone', label: 'Phone', width: 'w-32' },
+          { key: 'department', label: 'Department', width: 'w-28' },
+          { key: 'salary', label: 'Monthly Salary', render: (value: number) => formatCurrency(value), width: 'w-28' },
+          { key: 'salaryDueDate', label: 'Next Due Date', render: (value: string) => new Date(value).toLocaleDateString(), width: 'w-28' },
+          { key: 'lastPaidDate', label: 'Last Paid', render: (value: string) => value ? new Date(value).toLocaleDateString() : 'NA', width: 'w-28' },
+          { key: 'salaryFrequency', label: 'Frequency', render: (value: string) => value.charAt(0).toUpperCase() + value.slice(1), width: 'w-24' },
         ];
       case 'business_partner':
         return [
           { key: 'name', label: 'Partner Name', width: 'w-48' },
           { key: 'email', label: 'Email', width: 'w-56' },
           { key: 'phone', label: 'Phone', width: 'w-40' },
-          { key: 'commissionRate', label: 'Commission %', render: (value: number) => `${value}%`, width: 'w-28' },
+          { key: 'ownershipPercentage', label: 'Ownership %', render: (value: number) => `${value}%`, width: 'w-28' },
         ];
       case 'distributor':
         return [
-          { key: 'name', label: 'Company Name', width: 'w-48' },
-          { key: 'contactPerson', label: 'Contact Person', width: 'w-40' },
-          { key: 'email', label: 'Email', width: 'w-56' },
-          { key: 'phone', label: 'Phone', width: 'w-40' },
-          { key: 'address', label: 'Address', width: 'w-64', render: (value: string) => (
+          { key: 'name', label: 'Company Name', width: 'w-40' },
+          { key: 'contactPerson', label: 'Contact Person', width: 'w-32' },
+          { key: 'email', label: 'Email', width: 'w-48' },
+          { key: 'phone', label: 'Phone', width: 'w-32' },
+          { key: 'address', label: 'Address', width: 'w-48', render: (value: string) => (
             <div className="truncate max-w-xs" title={value}>
               {value}
             </div>
           )},
-          { key: 'creditBalance', label: 'Credit Balance', render: (value: number) => value ? formatCurrency(value) : 'NA', width: 'w-32' },
-          { key: 'initialBalanceDate', label: 'Balance Date', width: 'w-32', render: (value: string) => value ? new Date(value).toLocaleDateString() : 'NA' },
+          { key: 'creditBalance', label: 'Credit Balance', render: (value: number) => value ? formatCurrency(value) : 'NA', width: 'w-28' },
+          { key: 'paymentSchedule', label: 'Pay Schedule', render: (value: string) => value.charAt(0).toUpperCase() + value.slice(1), width: 'w-24' },
+          { key: 'paymentPercentage', label: 'Pay %', render: (value: number) => `${value}%`, width: 'w-16' },
+          { key: 'nextPaymentDue', label: 'Next Due', render: (value: string) => new Date(value).toLocaleDateString(), width: 'w-24' },
+          { key: 'lastPaymentDate', label: 'Last Paid', render: (value: string) => value ? new Date(value).toLocaleDateString() : 'NA', width: 'w-24' },
+        ];
+      case 'patient':
+        return [
+          { key: 'name', label: 'Patient Name', width: 'w-48' },
+          { key: 'phone', label: 'Phone', width: 'w-40' },
+          { key: 'email', label: 'Email', width: 'w-56', render: (value: string) => value || 'NA' },
+          { key: 'creditLimit', label: 'Credit Limit', render: (value: number) => formatCurrency(value), width: 'w-32' },
+          { key: 'currentCredit', label: 'Current Credit', render: (value: number) => formatCurrency(value), width: 'w-32' },
+          { key: 'isActive', label: 'Status', width: 'w-24', render: (value: boolean) => (
+            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+              value ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+            }`}>
+              {value ? 'Active' : 'Inactive'}
+            </span>
+          )},
         ];
       default:
         return [];
@@ -236,7 +350,7 @@ const StakeholderManagement: React.FC = () => {
     return (
       <div className="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
-          <table className={`w-full ${type === 'distributor' ? 'min-w-[1200px]' : 'min-w-[800px]'}`}>
+          <table className={`w-full ${type === 'distributor' ? 'min-w-[1400px]' : 'min-w-[800px]'}`}>
             <thead className="bg-gray-750">
               <tr>
                 {columns.map(col => (

@@ -4,17 +4,15 @@ import {
   ArrowDownTrayIcon,
   MagnifyingGlassIcon
 } from '@heroicons/react/24/outline';
-import { 
-  mockDoctors, 
-  mockBusinessPartners, 
-  mockEmployees, 
-  mockDistributors,
-  mockPartners
-} from '../data/mockData';
+import { useStakeholders } from '../contexts/StakeholderContext';
+import { useTransactions } from '../contexts/TransactionContext';
 import type { StakeholderType, AccountStatementEntry } from '../types';
 import clsx from 'clsx';
 
 const AccountStatement: React.FC = () => {
+  const { doctors, businessPartners, employees, distributors, patients } = useStakeholders();
+  const { transactions, getStakeholderTransactions } = useTransactions();
+  
   const [selectedStakeholder, setSelectedStakeholder] = useState<string>('');
   const [stakeholderType, setStakeholderType] = useState<StakeholderType | 'all'>('doctor');
   const [dateRange, setDateRange] = useState({
@@ -27,70 +25,55 @@ const AccountStatement: React.FC = () => {
 
   const getAllStakeholders = () => {
     const stakeholders = [
-      ...mockDoctors.map(d => ({ ...d, type: 'doctor' as const, typeName: 'Doctor' })),
-      ...mockEmployees.map(e => ({ ...e, type: 'employee' as const, typeName: 'Employee' })),
-      ...mockBusinessPartners.map(s => ({ ...s, type: 'business_partner' as const, typeName: 'Business Partner' })),
-      ...mockDistributors.map(d => ({ ...d, type: 'distributor' as const, typeName: 'Distributor' }))
+      ...doctors.map(d => ({ ...d, type: 'doctor' as const, typeName: 'Doctor' })),
+      ...employees.map(e => ({ ...e, type: 'employee' as const, typeName: 'Employee' })),
+      ...businessPartners.map(s => ({ ...s, type: 'business_partner' as const, typeName: 'Business Partner' })),
+      ...distributors.map(d => ({ ...d, type: 'distributor' as const, typeName: 'Distributor' })),
+      ...patients.map(p => ({ ...p, type: 'patient' as const, typeName: 'Patient' }))
     ];
     if (stakeholderType === 'all') return stakeholders;
     return stakeholders.filter(s => s.type === stakeholderType);
   };
 
-  const generateMockStatements = (stakeholderId: string, type: StakeholderType): AccountStatementEntry[] => {
-    const statements: AccountStatementEntry[] = [];
-    let balance = 0;
+  const generateStatements = (stakeholderId: string, type: StakeholderType): AccountStatementEntry[] => {
+    const stakeholderTransactions = getStakeholderTransactions(stakeholderId);
     const startDate = new Date(dateRange.from);
     const endDate = new Date(dateRange.to);
     
-    // Generate sample transactions
-    const transactionTypes = {
-      doctor: [
-        { desc: 'Consultation fees received', debit: 0, credit: 15000 },
-        { desc: 'Medical supplies expense', debit: 3000, credit: 0 },
-        { desc: 'Equipment rental', debit: 2500, credit: 0 },
-        { desc: 'Consultation fees received', debit: 0, credit: 18000 },
-        { desc: 'Professional development', debit: 1500, credit: 0 }
-      ],
-      employee: [
-        { desc: 'Salary payment due', debit: 0, credit: 45000 },
-        { desc: 'Advance payment', debit: 10000, credit: 0 },
-        { desc: 'Bonus payment', debit: 0, credit: 5000 },
-        { desc: 'Overtime payment', debit: 0, credit: 8000 }
-      ],
-      business_partner: [
-        { desc: 'Business commission earned', debit: 0, credit: 25000 },
-        { desc: 'Commission payment made', debit: 18000, credit: 0 },
-        { desc: 'Partnership bonus', debit: 0, credit: 7000 },
-        { desc: 'Business expense refund', debit: 2500, credit: 0 }
-      ],
-      distributor: [
-        { desc: 'Inventory purchase', debit: 0, credit: 125000 },
-        { desc: 'Payment received', debit: 45000, credit: 0 },
-        { desc: 'New stock delivery', debit: 0, credit: 89000 },
-        { desc: 'Credit adjustment', debit: 15000, credit: 0 }
-      ]
-    };
-
-    const transactions = transactionTypes[type] || [];
+    // Filter transactions by date range
+    const filteredTransactions = stakeholderTransactions.filter(transaction => {
+      const transactionDate = new Date(transaction.date);
+      return transactionDate >= startDate && transactionDate <= endDate;
+    });
     
-    for (let i = 0; i < transactions.length; i++) {
-      const transaction = transactions[i];
-      const date = new Date(startDate.getTime() + (i * 7 * 24 * 60 * 60 * 1000));
+    // Sort by date
+    const sortedTransactions = filteredTransactions.sort((a, b) => 
+      new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+    
+    // Convert to statement entries with running balance
+    const statements: AccountStatementEntry[] = [];
+    let runningBalance = 0;
+    
+    sortedTransactions.forEach((transaction, index) => {
+      // Determine if this is a debit or credit based on transaction category
+      const isCredit = ['consultation_fee', 'pharmacy_sale', 'patient_payment'].includes(transaction.category);
+      const debit = isCredit ? 0 : transaction.amount;
+      const credit = isCredit ? transaction.amount : 0;
       
-      if (date <= endDate) {
-        balance += transaction.credit - transaction.debit;
-        statements.push({
-          id: `${i + 1}`,
-          date,
-          description: transaction.desc,
-          debit: transaction.debit,
-          credit: transaction.credit,
-          balance
-        });
-      }
-    }
-
-    return statements.sort((a, b) => a.date.getTime() - b.date.getTime());
+      runningBalance += credit - debit;
+      
+      statements.push({
+        id: transaction.id,
+        date: new Date(transaction.date),
+        description: transaction.description,
+        debit,
+        credit,
+        balance: runningBalance
+      });
+    });
+    
+    return statements;
   };
 
   const selectedStakeholderData = useMemo(() => {
@@ -101,8 +84,8 @@ const AccountStatement: React.FC = () => {
 
   const statementEntries = useMemo(() => {
     if (!selectedStakeholder || !selectedStakeholderData) return [];
-    return generateMockStatements(selectedStakeholder, selectedStakeholderData.type);
-  }, [selectedStakeholder, selectedStakeholderData, dateRange]);
+    return generateStatements(selectedStakeholder, selectedStakeholderData.type);
+  }, [selectedStakeholder, selectedStakeholderData, dateRange, transactions]);
 
   const filteredEntries = useMemo(() => {
     return statementEntries.filter(entry =>
@@ -160,6 +143,7 @@ const AccountStatement: React.FC = () => {
               <option value="employee">Employees</option>
               <option value="business_partner">Business Partners</option>
               <option value="distributor">Distributors</option>
+              <option value="patient">Patients</option>
             </select>
           </div>
 

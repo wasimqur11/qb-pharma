@@ -11,7 +11,7 @@ import {
   CalendarIcon
 } from '@heroicons/react/24/outline';
 import type { TransactionCategory, StakeholderType } from '../types';
-import { mockDoctors, mockBusinessPartners, mockEmployees, mockDistributors } from '../data/mockData';
+import { useStakeholders } from '../contexts/StakeholderContext';
 import clsx from 'clsx';
 
 interface TransactionFormData {
@@ -30,6 +30,7 @@ interface TransactionFormProps {
 }
 
 const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSubmit }) => {
+  const { doctors, businessPartners, employees, distributors, patients } = useStakeholders();
   const [formData, setFormData] = useState<TransactionFormData>({
     category: 'pharmacy_sale',
     amount: '',
@@ -65,6 +66,15 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
       description: 'Payments made to medicine distributors'
     },
     {
+      id: 'distributor_credit_purchase',
+      label: 'Distributor Credit Purchase',
+      icon: TruckIcon,
+      color: 'text-amber-400',
+      requiresStakeholder: true,
+      stakeholderType: 'distributor',
+      description: 'Taking medicines on credit from distributors'
+    },
+    {
       id: 'doctor_expense',
       label: 'Doctor Expense',
       icon: UserGroupIcon,
@@ -98,15 +108,34 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
       color: 'text-yellow-400',
       requiresStakeholder: false,
       description: 'General clinic operational expenses'
+    },
+    {
+      id: 'patient_credit_sale',
+      label: 'Patient Credit Sale',
+      icon: CreditCardIcon,
+      color: 'text-pink-400',
+      requiresStakeholder: true,
+      stakeholderType: 'patient',
+      description: 'Medicine sales on credit to patients'
+    },
+    {
+      id: 'patient_payment',
+      label: 'Patient Payment',
+      icon: CreditCardIcon,
+      color: 'text-green-400',
+      requiresStakeholder: true,
+      stakeholderType: 'patient',
+      description: 'Credit payments received from patients'
     }
   ];
 
   const getStakeholders = (type: StakeholderType) => {
     switch (type) {
-      case 'doctor': return mockDoctors;
-      case 'business_partner': return mockBusinessPartners;
-      case 'employee': return mockEmployees;
-      case 'distributor': return mockDistributors;
+      case 'doctor': return doctors;
+      case 'business_partner': return businessPartners;
+      case 'employee': return employees;
+      case 'distributor': return distributors;
+      case 'patient': return patients.filter(p => p.isActive); // Only active patients
       default: return [];
     }
   };

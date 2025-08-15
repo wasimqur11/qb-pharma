@@ -10,28 +10,43 @@ import {
   PhoneIcon,
   CurrencyDollarIcon,
   PercentBadgeIcon,
-  CalendarIcon
+  CalendarIcon,
+  UserIcon
 } from '@heroicons/react/24/outline';
 import type { StakeholderType } from '../types';
+import { useConfiguration } from '../contexts/ConfigurationContext';
 import clsx from 'clsx';
 
 interface StakeholderFormData {
   name: string;
   email: string;
   phone: string;
-  // Partner specific
-  ownershipPercentage?: string;
   // Doctor specific
   consultationFee?: string;
   commissionRate?: string;
+  // Business Partner specific
+  ownershipPercentage?: string;
   // Employee specific
   salary?: string;
   department?: string;
+  salaryDueDate?: string;
+  lastPaidDate?: string;
+  salaryFrequency?: string;
   // Distributor specific
   contactPerson?: string;
   address?: string;
   creditBalance?: string;
   initialBalanceDate?: string;
+  paymentSchedule?: string;
+  paymentPercentage?: string;
+  nextPaymentDue?: string;
+  lastPaymentDate?: string;
+  // Patient specific
+  dateOfBirth?: string;
+  emergencyContact?: string;
+  emergencyPhone?: string;
+  creditLimit?: string;
+  notes?: string;
 }
 
 interface StakeholderFormProps {
@@ -51,19 +66,35 @@ const StakeholderForm: React.FC<StakeholderFormProps> = ({
   editData,
   existingStakeholders = []
 }) => {
+  const { activeDepartments } = useConfiguration();
+  const departmentOptions = activeDepartments?.length > 0 
+    ? activeDepartments.map(dept => dept.name)
+    : ['Pharmacy', 'Reception', 'Assistant', 'Accounts', 'Cleaning', 'Security']; // Fallback
   const [formData, setFormData] = useState<StakeholderFormData>({
     name: editData?.name || '',
     email: editData?.email || '',
     phone: editData?.phone || '',
-    ownershipPercentage: editData?.ownershipPercentage?.toString() || '',
     consultationFee: editData?.consultationFee?.toString() || '',
     commissionRate: editData?.commissionRate?.toString() || '',
+    ownershipPercentage: editData?.ownershipPercentage?.toString() || '',
     salary: editData?.salary?.toString() || '',
     department: editData?.department || '',
+    salaryDueDate: editData?.salaryDueDate || '',
+    lastPaidDate: editData?.lastPaidDate || '',
+    salaryFrequency: editData?.salaryFrequency || 'monthly',
     contactPerson: editData?.contactPerson || '',
     address: editData?.address || '',
     creditBalance: editData?.creditBalance?.toString() || '',
-    initialBalanceDate: editData?.initialBalanceDate || ''
+    initialBalanceDate: editData?.initialBalanceDate || '',
+    paymentSchedule: editData?.paymentSchedule || 'weekly',
+    paymentPercentage: editData?.paymentPercentage?.toString() || '',
+    nextPaymentDue: editData?.nextPaymentDue || '',
+    lastPaymentDate: editData?.lastPaymentDate || '',
+    dateOfBirth: editData?.dateOfBirth || '',
+    emergencyContact: editData?.emergencyContact || '',
+    emergencyPhone: editData?.emergencyPhone || '',
+    creditLimit: editData?.creditLimit?.toString() || '',
+    notes: editData?.notes || ''
   });
 
   // Validation functions
@@ -138,8 +169,17 @@ const StakeholderForm: React.FC<StakeholderFormProps> = ({
             { key: 'email', label: 'Email', type: 'email', required: true, placeholder: 'employee@qbpharma.com' },
             { key: 'phone', label: 'Phone', type: 'tel', required: true, placeholder: '9876543210 or +91 98765 43210' },
             { key: 'department', label: 'Department', type: 'select', required: true, 
-              options: ['Pharmacy', 'Reception', 'Assistant', 'Accounts', 'Cleaning', 'Security'] },
-            { key: 'salary', label: 'Monthly Salary (INR)', type: 'number', required: true, min: 0 }
+              options: departmentOptions },
+            { key: 'salary', label: 'Monthly Salary (INR)', type: 'number', required: true, min: 0 },
+            { key: 'salaryDueDate', label: 'Next Salary Due Date', type: 'date', required: true },
+            { key: 'lastPaidDate', label: 'Last Paid Date', type: 'date', required: false, placeholder: 'Optional - when last salary was paid' },
+            { key: 'salaryFrequency', label: 'Salary Frequency', type: 'select', required: true,
+              options: [
+                { value: 'monthly', label: 'Monthly' },
+                { value: 'bi-weekly', label: 'Bi-weekly' },
+                { value: 'weekly', label: 'Weekly' }
+              ]
+            }
           ]
         };
       case 'business_partner':
@@ -150,7 +190,7 @@ const StakeholderForm: React.FC<StakeholderFormProps> = ({
             { key: 'name', label: 'Partner Name', type: 'text', required: true },
             { key: 'email', label: 'Email', type: 'email', required: true, placeholder: 'partner@business.com' },
             { key: 'phone', label: 'Phone', type: 'tel', required: true, placeholder: '9876543210 or +91 98765 43210' },
-            { key: 'commissionRate', label: 'Commission Rate (%)', type: 'number', required: true, min: 0, max: 100 }
+            { key: 'ownershipPercentage', label: 'Ownership Percentage (%)', type: 'number', required: true, min: 0, max: 100 }
           ]
         };
       case 'distributor':
@@ -164,7 +204,33 @@ const StakeholderForm: React.FC<StakeholderFormProps> = ({
             { key: 'phone', label: 'Phone', type: 'tel', required: true, placeholder: '9876543210 or +91 98765 43210' },
             { key: 'address', label: 'Address', type: 'textarea', required: true },
             { key: 'creditBalance', label: 'Initial Credit Balance (INR)', type: 'number', required: false, min: 0, placeholder: 'Optional - for existing balance' },
-            { key: 'initialBalanceDate', label: 'Balance As Of Date', type: 'date', required: false, placeholder: 'Optional - when balance was recorded' }
+            { key: 'initialBalanceDate', label: 'Balance As Of Date', type: 'date', required: false, placeholder: 'Optional - when balance was recorded' },
+            { key: 'paymentSchedule', label: 'Payment Schedule', type: 'select', required: true,
+              options: [
+                { value: 'weekly', label: 'Weekly' },
+                { value: 'bi-weekly', label: 'Bi-weekly' },
+                { value: 'monthly', label: 'Monthly' }
+              ]
+            },
+            { key: 'paymentPercentage', label: 'Payment Percentage (%)', type: 'number', required: true, min: 1, max: 100, placeholder: 'e.g., 10 for 10%' },
+            { key: 'nextPaymentDue', label: 'Next Payment Due Date', type: 'date', required: true },
+            { key: 'lastPaymentDate', label: 'Last Payment Date', type: 'date', required: false, placeholder: 'Optional - when last paid' }
+          ]
+        };
+      case 'patient':
+        return {
+          title: 'Patient',
+          icon: UserIcon,
+          fields: [
+            { key: 'name', label: 'Patient Name', type: 'text', required: true },
+            { key: 'phone', label: 'Phone', type: 'tel', required: true, placeholder: '9876543210 or +91 98765 43210' },
+            { key: 'email', label: 'Email', type: 'email', required: false, placeholder: 'patient@example.com' },
+            { key: 'dateOfBirth', label: 'Date of Birth', type: 'date', required: false },
+            { key: 'address', label: 'Address', type: 'textarea', required: false },
+            { key: 'emergencyContact', label: 'Emergency Contact', type: 'text', required: false },
+            { key: 'emergencyPhone', label: 'Emergency Phone', type: 'tel', required: false, placeholder: 'Emergency contact number' },
+            { key: 'creditLimit', label: 'Credit Limit (INR)', type: 'number', required: true, min: 0, placeholder: 'Maximum credit amount' },
+            { key: 'notes', label: 'Notes', type: 'textarea', required: false, placeholder: 'Additional notes' }
           ]
         };
       default:
@@ -187,6 +253,8 @@ const StakeholderForm: React.FC<StakeholderFormProps> = ({
     if (emptyRequiredFields.length > 0) {
       const fieldNames = emptyRequiredFields.map(field => field.label).join(', ');
       alert(`Please fill in all required fields: ${fieldNames}`);
+      console.log('Empty required fields:', emptyRequiredFields);
+      console.log('Current form data:', formData);
       return;
     }
     
@@ -208,14 +276,29 @@ const StakeholderForm: React.FC<StakeholderFormProps> = ({
       return;
     }
     
+    // Patient-specific validation
+    if (type === 'patient' && formData.creditLimit) {
+      const creditLimit = parseFloat(formData.creditLimit);
+      if (isNaN(creditLimit) || creditLimit < 0) {
+        alert('Please enter a valid credit limit (0 or greater)');
+        return;
+      }
+    }
+    
+    // Emergency phone validation for patients (if provided)
+    if (type === 'patient' && formData.emergencyPhone && !validateIndianMobile(formData.emergencyPhone)) {
+      alert('Please enter a valid emergency contact number');
+      return;
+    }
+    
     // Duplicate validation - check for existing name and email
     const nameExists = existingStakeholders.some(stakeholder => 
       stakeholder.name.toLowerCase().trim() === formData.name.toLowerCase().trim() && 
       (!editData || stakeholder.id !== editData.id)
     );
     
-    const emailExists = existingStakeholders.some(stakeholder => 
-      stakeholder.email.toLowerCase().trim() === formData.email.toLowerCase().trim() && 
+    const emailExists = formData.email && existingStakeholders.some(stakeholder => 
+      stakeholder.email && stakeholder.email.toLowerCase().trim() === formData.email.toLowerCase().trim() && 
       (!editData || stakeholder.id !== editData.id)
     );
     
@@ -235,20 +318,33 @@ const StakeholderForm: React.FC<StakeholderFormProps> = ({
       phone: formData.phone ? formatIndianMobile(formData.phone) : formData.phone
     };
     
+    console.log(`Submitting ${config.title} data:`, submissionData);
     onSubmit(submissionData);
     setFormData({
       name: '',
       email: '',
       phone: '',
-      ownershipPercentage: '',
       consultationFee: '',
       commissionRate: '',
+      ownershipPercentage: '',
       salary: '',
       department: '',
+      salaryDueDate: '',
+      lastPaidDate: '',
+      salaryFrequency: 'monthly',
       contactPerson: '',
       address: '',
       creditBalance: '',
-      initialBalanceDate: ''
+      initialBalanceDate: '',
+      paymentSchedule: 'weekly',
+      paymentPercentage: '',
+      nextPaymentDue: '',
+      lastPaymentDate: '',
+      dateOfBirth: '',
+      emergencyContact: '',
+      emergencyPhone: '',
+      creditLimit: '',
+      notes: ''
     });
   };
 
@@ -301,8 +397,12 @@ const StakeholderForm: React.FC<StakeholderFormProps> = ({
                       required={field.required}
                     >
                       <option value="">Select {field.label}</option>
-                      {(field as any).options?.map((option: string) => (
-                        <option key={option} value={option}>{option}</option>
+                      {(field as any).options?.map((option: string | { value: string; label: string }) => (
+                        typeof option === 'string' ? (
+                          <option key={option} value={option}>{option}</option>
+                        ) : (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        )
                       ))}
                     </select>
                   ) : field.type === 'textarea' ? (

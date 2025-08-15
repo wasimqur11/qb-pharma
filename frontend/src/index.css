@@ -6,3 +6,13 @@
 html {
   font-size: 14px; /* Base font size reduced from 16px to 14px */
 }
+
+/* Hide scrollbar but keep functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}

@@ -13,8 +13,9 @@ import {
   TruckIcon,
   BanknotesIcon
 } from '@heroicons/react/24/outline';
+import { useStakeholders } from '../contexts/StakeholderContext';
+import { useTransactions } from '../contexts/TransactionContext';
 import type { TransactionCategory } from '../types';
-import { mockPartners } from '../data/mockData';
 import clsx from 'clsx';
 
 interface BusinessTransaction {
@@ -49,6 +50,9 @@ interface PartnerProfitSummary {
 }
 
 const BusinessAccountStatement: React.FC = () => {
+  const { businessPartners } = useStakeholders();
+  const { transactions, getTotalRevenue, getCashPosition } = useTransactions();
+  
   const [dateRange, setDateRange] = useState({
     from: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 90 days ago
     to: new Date().toISOString().split('T')[0]
@@ -131,16 +135,59 @@ const BusinessAccountStatement: React.FC = () => {
     return transactions.sort((a, b) => b.date.getTime() - a.date.getTime());
   };
 
-  const allTransactions = useMemo(() => [], [dateRange]);
+  const allTransactions = useMemo(() => {
+    const startDate = new Date(dateRange.from);
+    const endDate = new Date(dateRange.to);
+    
+    return transactions
+      .filter(t => {
+        // Filter for pharmacy business transactions only
+        const isPharmacyTransaction = [
+          'pharmacy_sale', 'distributor_payment', 'business_partner_payment',
+          'employee_payment', 'clinic_expense', 'partner_profit', 'patient_payment', 'patient_credit_sale'
+        ].includes(t.category);
+        
+        const transactionDate = new Date(t.date);
+        return isPharmacyTransaction && transactionDate >= startDate && transactionDate <= endDate;
+      })
+      .map(t => {
+        const stakeholderName = t.stakeholderId ? 
+          (businessPartners.find(bp => bp.id === t.stakeholderId)?.name || 'Unknown Stakeholder') : 
+          undefined;
+        
+        const isCredit = ['pharmacy_sale', 'patient_payment', 'patient_credit_sale'].includes(t.category);
+        
+        return {
+          id: t.id,
+          date: t.date,
+          category: t.category,
+          description: t.description,
+          stakeholderName,
+          stakeholderType: t.stakeholderType,
+          debit: isCredit ? 0 : t.amount,
+          credit: isCredit ? t.amount : 0,
+          balance: 0, // Will be calculated below
+          reference: `TXN${t.id.slice(-6)}`
+        };
+      })
+      .sort((a, b) => b.date.getTime() - a.date.getTime());
+  }, [dateRange, transactions, businessPartners]);
 
   const filteredTransactions = useMemo(() => {
-    return allTransactions.filter(transaction => {
+    const filtered = allTransactions.filter(transaction => {
       const matchesSearch = transaction.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           (transaction.stakeholderName && transaction.stakeholderName.toLowerCase().includes(searchTerm.toLowerCase())) ||
                           (transaction.reference && transaction.reference.toLowerCase().includes(searchTerm.toLowerCase()));
       const matchesCategory = categoryFilter === 'all' || transaction.category === categoryFilter;
       return matchesSearch && matchesCategory;
     });
+    
+    // Calculate running balances
+    let runningBalance = 100000; // Starting balance
+    return filtered.reverse().map(t => {
+      runningBalance += t.credit - t.debit;
+      return { ...t, balance: runningBalance };
+    }).reverse();
   }, [allTransactions, searchTerm, categoryFilter]);
 
   const businessSummary = useMemo((): BusinessSummary => {
@@ -162,9 +209,17 @@ const BusinessAccountStatement: React.FC = () => {
   }, [filteredTransactions]);
 
   const partnerProfitSummary = useMemo((): PartnerProfitSummary[] => {
-    const currentBalance = filteredTransactions[0]?.balance || 0;
+    // Calculate running balance for filtered transactions
+    let runningBalance = 100000; // Starting balance
+    const transactionsWithBalance = filteredTransactions.map(t => {
+      const newBalance = runningBalance + t.credit - t.debit;
+      runningBalance = newBalance;
+      return { ...t, balance: newBalance };
+    }).reverse();
     
-    return mockPartners.map(partner => {
+    const currentBalance = transactionsWithBalance[transactionsWithBalance.length - 1]?.balance || 100000;
+    
+    return businessPartners.map(partner => {
       // Calculate partner's share of current business balance
       const shareOfCurrentBalance = (currentBalance * partner.ownershipPercentage) / 100;
       

@@ -13,13 +13,8 @@ import {
   CurrencyDollarIcon,
   DocumentTextIcon
 } from '@heroicons/react/24/outline';
-import {
-  mockDoctors,
-  mockBusinessPartners,
-  mockEmployees,
-  mockDistributors,
-  mockPartners
-} from '../data/mockData';
+import { useStakeholders } from '../contexts/StakeholderContext';
+import { useTransactions } from '../contexts/TransactionContext';
 import type { StakeholderType } from '../types';
 import clsx from 'clsx';
 
@@ -33,7 +28,7 @@ interface PaymentItem {
   id: string;
   stakeholderId: string;
   stakeholderName: string;
-  stakeholderType: StakeholderType | 'partner';
+  stakeholderType: StakeholderType;
   amount: number;
   description: string;
   selected: boolean;
@@ -48,53 +43,75 @@ interface PaymentBatch {
 }
 
 const PaymentProcessor: React.FC<PaymentProcessorProps> = ({ isOpen, onClose, onProcessPayments }) => {
+  const { doctors, businessPartners, employees, distributors } = useStakeholders();
+  const { getDoctorPayables, getBusinessPartnerPayables, getEmployeeSalaryDue, getDistributorCredits } = useTransactions();
+  
   const [activeTab, setActiveTab] = useState<'pending' | 'batch' | 'process'>('pending');
   const [selectedPayments, setSelectedPayments] = useState<PaymentItem[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<'bank_transfer' | 'cash' | 'check'>('bank_transfer');
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [reference, setReference] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [stakeholderFilter, setStakeholderFilter] = useState<StakeholderType | 'partner' | 'all'>('all');
+  const [stakeholderFilter, setStakeholderFilter] = useState<StakeholderType | 'all'>('all');
   const [isProcessing, setIsProcessing] = useState(false);
 
   const generatePendingPayments = (): PaymentItem[] => {
     const payments: PaymentItem[] = [];
     
-    // Generate mock pending payments for all stakeholder types
-    const allStakeholders = [
-      ...mockPartners.map(p => ({ ...p, type: 'partner' as const })),
-      ...mockDoctors.map(d => ({ ...d, type: 'doctor' as const })),
-      ...mockEmployees.map(e => ({ ...e, type: 'employee' as const })),
-      ...mockBusinessPartners.map(s => ({ ...s, type: 'business_partner' as const })),
-      ...mockDistributors.map(d => ({ ...d, type: 'distributor' as const }))
-    ];
-
-    allStakeholders.forEach((stakeholder, index) => {
-      const amount = stakeholder.type === 'employee' 
-        ? (stakeholder as any).salary 
-        : stakeholder.type === 'doctor'
-        ? Math.floor(Math.random() * 50000) + 10000
-        : stakeholder.type === 'business_partner'
-        ? Math.floor(Math.random() * 30000) + 5000
-        : stakeholder.type === 'distributor'
-        ? Math.floor(Math.random() * 200000) + 50000
-        : Math.floor(Math.random() * 100000) + 20000;
-
-      const descriptions = {
-        doctor: 'Outstanding consultation fees',
-        employee: 'Monthly salary payment',
-        business_partner: 'Commission payment',
-        distributor: 'Outstanding invoice payment',
-        partner: 'Profit distribution'
-      };
-
+    // Get real payables data from contexts
+    const doctorPayables = getDoctorPayables();
+    const businessPartnerPayables = getBusinessPartnerPayables();
+    const employeePayables = getEmployeeSalaryDue();
+    const distributorCredits = getDistributorCredits();
+    
+    // Convert doctor payables to payment items
+    doctorPayables.forEach(payable => {
       payments.push({
-        id: `payment-${index}`,
-        stakeholderId: stakeholder.id,
-        stakeholderName: stakeholder.name,
-        stakeholderType: stakeholder.type,
-        amount,
-        description: descriptions[stakeholder.type],
+        id: `doctor-${payable.stakeholderId}`,
+        stakeholderId: payable.stakeholderId,
+        stakeholderName: payable.stakeholderName,
+        stakeholderType: 'doctor',
+        amount: payable.netPayable,
+        description: 'Outstanding consultation fees',
+        selected: false
+      });
+    });
+    
+    // Convert business partner payables to payment items
+    businessPartnerPayables.forEach(payable => {
+      payments.push({
+        id: `partner-${payable.stakeholderId}`,
+        stakeholderId: payable.stakeholderId,
+        stakeholderName: payable.stakeholderName,
+        stakeholderType: 'business_partner',
+        amount: payable.netPayable,
+        description: 'Commission payment due',
+        selected: false
+      });
+    });
+    
+    // Convert employee payables to payment items
+    employeePayables.forEach(payable => {
+      payments.push({
+        id: `employee-${payable.stakeholderId}`,
+        stakeholderId: payable.stakeholderId,
+        stakeholderName: payable.stakeholderName,
+        stakeholderType: 'employee',
+        amount: payable.netPayable,
+        description: 'Salary payment due',
+        selected: false
+      });
+    });
+    
+    // Convert distributor credits to payment items (amounts we owe them)
+    distributorCredits.forEach(credit => {
+      payments.push({
+        id: `distributor-${credit.id}`,
+        stakeholderId: credit.id,
+        stakeholderName: credit.name,
+        stakeholderType: 'distributor',
+        amount: credit.creditBalance,
+        description: 'Outstanding invoice payment',
         selected: false
       });
     });
@@ -102,7 +119,9 @@ const PaymentProcessor: React.FC<PaymentProcessorProps> = ({ isOpen, onClose, on
     return payments;
   };
 
-  const pendingPayments = useMemo(() => [], []);
+  const pendingPayments = useMemo(() => generatePendingPayments(), [
+    getDoctorPayables, getBusinessPartnerPayables, getEmployeeSalaryDue, getDistributorCredits
+  ]);
 
   const filteredPayments = useMemo(() => {
     return pendingPayments.filter(payment => {
@@ -115,24 +134,24 @@ const PaymentProcessor: React.FC<PaymentProcessorProps> = ({ isOpen, onClose, on
 
   const formatCurrency = (amount: number) => `₹${amount.toLocaleString()}`;
 
-  const getStakeholderIcon = (type: StakeholderType | 'partner') => {
+  const getStakeholderIcon = (type: StakeholderType) => {
     switch (type) {
       case 'doctor': return UserGroupIcon;
       case 'employee': return UsersIcon;
-      case 'business_partner': return UsersIcon;
+      case 'business_partner': return BuildingOfficeIcon;
       case 'distributor': return TruckIcon;
-      case 'partner': return BuildingOfficeIcon;
+      case 'patient': return UserGroupIcon;
       default: return UserGroupIcon;
     }
   };
 
-  const getStakeholderColor = (type: StakeholderType | 'partner') => {
+  const getStakeholderColor = (type: StakeholderType) => {
     switch (type) {
       case 'doctor': return 'text-green-400';
       case 'employee': return 'text-purple-400';
-      case 'business_partner': return 'text-orange-400';
+      case 'business_partner': return 'text-blue-400';
       case 'distributor': return 'text-cyan-400';
-      case 'partner': return 'text-blue-400';
+      case 'patient': return 'text-orange-400';
       default: return 'text-gray-400';
     }
   };

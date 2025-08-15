@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 // No mock data imports - clean slate for real pharmacy
 import type { DashboardStats, PayableBalance, Transaction } from '../types';
+import { useTransactions } from '../contexts/TransactionContext';
 import qbLogo from '../assets/qblogo.png';
 import TransactionForm from './TransactionForm';
 import StakeholderManagement from './StakeholderManagement';
@@ -13,6 +14,10 @@ import PaymentProcessor from './PaymentProcessor';
 import TransactionHistory from './TransactionHistory';
 import BusinessAccountStatement from './BusinessAccountStatement';
 import DoctorAccountStatement from './DoctorAccountStatement';
+import DistributorAccountStatement from './DistributorAccountStatement';
+import DepartmentManagement from './DepartmentManagement';
+import PatientManagement from './PatientManagement';
+import ConfigurationManagement from './ConfigurationManagement';
 import { 
   CurrencyDollarIcon, BanknotesIcon, ChartBarIcon, UserGroupIcon,
   BuildingOfficeIcon, UsersIcon, TruckIcon, PlusIcon, CreditCardIcon,
@@ -24,25 +29,24 @@ import {
 import clsx from 'clsx';
 
 const DarkCorporateDashboard: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'pharmacy_dashboard' | 'doctor_dashboard' | 'combined_analytics' | 'reports' | 'stakeholders' | 'statements' | 'business_statement' | 'doctor_statement'>('pharmacy_dashboard');
+  const [activeTab, setActiveTab] = useState<'pharmacy_dashboard' | 'doctor_dashboard' | 'combined_analytics' | 'reports' | 'stakeholders' | 'patients' | 'statements' | 'business_statement' | 'doctor_statement' | 'distributor_statement' | 'configuration'>('pharmacy_dashboard');
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   const [showPaymentProcessor, setShowPaymentProcessor] = useState(false);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  
+  const { 
+    transactions, 
+    addTransaction, 
+    getDashboardStats,
+    getDistributorPaymentsDue 
+  } = useTransactions();
   const [dateRange, setDateRange] = useState({
     from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days ago
     to: new Date().toISOString().split('T')[0]
   });
   const [selectedPeriod, setSelectedPeriod] = useState('30days');
-  // Empty stats for fresh pharmacy setup
-  const stats: DashboardStats = {
-    todayRevenue: 0,
-    cashPosition: 0,
-    monthlyProfit: 0,
-    doctorPayables: [],
-    businessPartnerPayables: [],
-    employeeSalaryDue: [],
-    distributorCredits: []
-  };
+  
+  // Get real-time dashboard stats from transaction context
+  const stats: DashboardStats = getDashboardStats();
 
   const formatCurrency = (amount: number) => {
     return `₹${amount.toLocaleString()}`;
@@ -55,23 +59,20 @@ const DarkCorporateDashboard: React.FC = () => {
   };
 
   const handleTransactionSubmit = (data: any) => {
-    const newTransaction: Transaction = {
-      id: Date.now().toString(),
+    addTransaction({
       category: data.category,
       stakeholderId: data.stakeholderId,
       stakeholderType: data.stakeholderType,
       amount: parseFloat(data.amount),
       description: data.description,
       date: new Date(data.date),
-      createdBy: 'Admin User',
-      createdAt: new Date()
-    };
+      createdBy: 'Admin User'
+    });
 
-    setTransactions(prev => [newTransaction, ...prev]);
     setShowTransactionForm(false);
     
     // Show success message
-    alert(`Transaction added successfully: ${formatCurrency(newTransaction.amount)} for ${data.description}`);
+    alert(`Transaction added successfully: ${formatCurrency(parseFloat(data.amount))} for ${data.description}`);
   };
 
   const handlePaymentProcessed = (batch: any) => {
@@ -206,22 +207,18 @@ const DarkCorporateDashboard: React.FC = () => {
 
       {/* Navigation Tabs */}
       <div className="px-4 pb-0 border-b border-gray-800">
-        <nav className="flex items-center gap-1 -mb-px">
+        <nav className="flex items-center gap-1 -mb-px overflow-x-auto scrollbar-hide">
+          {/* Primary Navigation */}
           {[
-            { id: 'pharmacy_dashboard', label: 'Pharmacy Business', icon: BuildingOfficeIcon },
-            { id: 'doctor_dashboard', label: 'Doctor Dashboard', icon: UserGroupIcon },
-            { id: 'combined_analytics', label: 'Combined Analytics', icon: ChartBarIcon },
-            { id: 'reports', label: 'Reports', icon: DocumentTextIcon },
-            { id: 'stakeholders', label: 'Stakeholders', icon: UsersIcon },
-            { id: 'statements', label: 'Statements', icon: DocumentArrowUpIcon },
-            { id: 'business_statement', label: 'Pharmacy Statement', icon: BuildingOfficeIcon },
-            { id: 'doctor_statement', label: 'Doctor Statement', icon: UserGroupIcon },
+            { id: 'pharmacy_dashboard', label: 'Pharmacy', icon: BuildingOfficeIcon, category: 'dashboard' },
+            { id: 'doctor_dashboard', label: 'Doctor', icon: UserGroupIcon, category: 'dashboard' },
+            { id: 'combined_analytics', label: 'Analytics', icon: ChartBarIcon, category: 'dashboard' },
           ].map(item => (
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id as any)}
               className={clsx(
-                'flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-all duration-200',
+                'flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-all duration-200 whitespace-nowrap',
                 activeTab === item.id 
                   ? 'border-blue-500 text-blue-400 bg-blue-500/10' 
                   : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600 hover:bg-gray-800/50'
@@ -231,8 +228,105 @@ const DarkCorporateDashboard: React.FC = () => {
               <span className="hidden sm:inline">{item.label}</span>
             </button>
           ))}
+          
+          {/* Separator */}
+          <div className="mx-2 h-6 w-px bg-gray-700"></div>
+          
+          {/* Management */}
+          {[
+            { id: 'stakeholders', label: 'Stakeholders', icon: UsersIcon, category: 'management' },
+            { id: 'patients', label: 'Patients', icon: UserIcon, category: 'management' },
+          ].map(item => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id as any)}
+              className={clsx(
+                'flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-all duration-200 whitespace-nowrap',
+                activeTab === item.id 
+                  ? 'border-green-500 text-green-400 bg-green-500/10' 
+                  : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600 hover:bg-gray-800/50'
+              )}
+            >
+              <item.icon className="h-4 w-4" />
+              <span className="hidden sm:inline">{item.label}</span>
+            </button>
+          ))}
+          
+          {/* Separator */}
+          <div className="mx-2 h-6 w-px bg-gray-700"></div>
+          
+          {/* Reports & Statements */}
+          {[
+            { id: 'reports', label: 'Reports', icon: DocumentTextIcon, category: 'reports' },
+            { id: 'statements', label: 'Statements', icon: DocumentArrowUpIcon, category: 'reports' },
+          ].map(item => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id as any)}
+              className={clsx(
+                'flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-all duration-200 whitespace-nowrap',
+                activeTab === item.id 
+                  ? 'border-purple-500 text-purple-400 bg-purple-500/10' 
+                  : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600 hover:bg-gray-800/50'
+              )}
+            >
+              <item.icon className="h-4 w-4" />
+              <span className="hidden sm:inline">{item.label}</span>
+            </button>
+          ))}
+          
+          {/* Separator */}
+          <div className="mx-2 h-6 w-px bg-gray-700"></div>
+          
+          {/* Settings */}
+          {[
+            { id: 'configuration', label: 'Settings', icon: Cog6ToothIcon, category: 'settings' },
+          ].map(item => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id as any)}
+              className={clsx(
+                'flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-all duration-200 whitespace-nowrap',
+                activeTab === item.id 
+                  ? 'border-orange-500 text-orange-400 bg-orange-500/10' 
+                  : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600 hover:bg-gray-800/50'
+              )}
+            >
+              <item.icon className="h-4 w-4" />
+              <span className="hidden sm:inline">{item.label}</span>
+            </button>
+          ))}
         </nav>
       </div>
+      
+      {/* Sub-navigation for Statements */}
+      {(activeTab === 'statements' || activeTab === 'business_statement' || activeTab === 'doctor_statement' || activeTab === 'distributor_statement') && (
+        <div className="px-4 py-2 bg-gray-850 border-b border-gray-800">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400 mr-3">Statement Type:</span>
+            {[
+              { id: 'statements', label: 'Account Statements', icon: DocumentArrowUpIcon },
+              { id: 'business_statement', label: 'Pharmacy Business', icon: BuildingOfficeIcon },
+              { id: 'doctor_statement', label: 'Doctor Practice', icon: UserGroupIcon },
+              { id: 'distributor_statement', label: 'Distributor Accounts', icon: TruckIcon },
+            ].map(item => (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id as any)}
+                className={clsx(
+                  'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200',
+                  activeTab === item.id 
+                    ? 'bg-purple-600 text-white' 
+                    : 'text-gray-400 hover:text-gray-300 hover:bg-gray-700'
+                )}
+              >
+                <item.icon className="h-3 w-3" />
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -354,6 +448,54 @@ const DarkCorporateDashboard: React.FC = () => {
     </div>
   );
 
+  const DistributorPaymentsDue: React.FC = () => {
+    const paymentsDue = getDistributorPaymentsDue();
+    
+    return (
+      <div className="bg-gray-800 border border-gray-700 rounded-lg h-fit">
+        <div className="px-4 py-3 border-b border-gray-700 flex items-center gap-2">
+          <BellIcon className="h-4 w-4 text-orange-400" />
+          <h3 className="text-sm font-semibold text-white">Distributor Payments Due</h3>
+          {paymentsDue.length > 0 && (
+            <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full">
+              {paymentsDue.length}
+            </span>
+          )}
+        </div>
+        <div className="p-4">
+          <div className="space-y-3">
+            {paymentsDue.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-2">No payments due today</p>
+            ) : (
+              paymentsDue.slice(0, 4).map((payment, idx) => {
+                const isOverdue = new Date(payment.dueDate) < new Date();
+                return (
+                  <div key={idx} className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium text-white truncate">{payment.name}</p>
+                      <span className={`text-sm font-bold ${isOverdue ? 'text-red-400' : 'text-orange-400'}`}>
+                        {formatCurrency(payment.amountDue)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-gray-400">
+                      <span>Due: {new Date(payment.dueDate).toLocaleDateString()}</span>
+                      {isOverdue && <span className="text-red-400 font-medium">OVERDUE</span>}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+            {paymentsDue.length > 4 && (
+              <div className="pt-2 text-center border-t border-gray-700">
+                <p className="text-xs text-gray-400">+{paymentsDue.length - 4} more payments due</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const darkTooltipStyle = {
     backgroundColor: '#1f2937',
     border: '1px solid #374151',
@@ -426,34 +568,34 @@ const DarkCorporateDashboard: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
           title="Pharmacy Sales"
-          value={formatCurrency(stats.cashPosition)}
+          value={formatCurrency(stats.todayPharmacyRevenue)}
           change="+0%"
           changeType="increase"
           subtitle="Today's pharmacy revenue"
           icon={CurrencyDollarIcon}
         />
         <MetricCard
-          title="Business Cash"
-          value={formatCurrency(stats.cashPosition)}
+          title="Total Pharmacy Revenue"
+          value={formatCurrency(stats.pharmacyRevenue)}
           change="+0%"
           changeType="increase"
-          subtitle="Available business funds"
+          subtitle="All-time pharmacy sales"
           icon={BanknotesIcon}
         />
         <MetricCard
-          title="Business Profit"
-          value={formatCurrency(stats.todayRevenue)}
+          title="Pharmacy Cash Position"
+          value={formatCurrency(stats.pharmacyCashPosition)}
           change="+0%"
           changeType="increase"
-          subtitle="Pharmacy business profit"
+          subtitle="Pharmacy business funds"
           icon={ChartBarIcon}
         />
         <MetricCard
-          title="Owner Profit Due"
-          value={formatCurrency(stats.monthlyProfit)}
+          title="Pharmacy Monthly Profit"
+          value={formatCurrency(stats.pharmacyMonthlyProfit)}
           change="+0%"
           changeType="increase"
-          subtitle="Total owed to business owners"
+          subtitle="This month's pharmacy profit"
           icon={UserGroupIcon}
         />
       </div>
@@ -512,9 +654,10 @@ const DarkCorporateDashboard: React.FC = () => {
       </div>
 
       {/* Pharmacy Business Data Tables */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4">
         <PayablesTable payables={stats.employeeSalaryDue} title="Employee Salary Due" />
         <PayablesTable payables={stats.businessPartnerPayables} title="Business Partner Commission Due" />
+        <DistributorPaymentsDue />
         <DataTable
           title="Distributor Credit Balances"
           data={stats.distributorCredits}
@@ -539,34 +682,34 @@ const DarkCorporateDashboard: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
           title="Today's Consultations"
-          value={formatCurrency(0)}
+          value={formatCurrency(stats.todayDoctorRevenue)}
           change="+0%"
           changeType="increase"
-          subtitle="12 patients treated"
+          subtitle="Today's consultation revenue"
           icon={UserGroupIcon}
         />
         <MetricCard
-          title="Doctor Expenses"
-          value={formatCurrency(0)}
+          title="Total Doctor Revenue"
+          value={formatCurrency(stats.doctorRevenue)}
           change="+0%"
-          changeType="decrease"
-          subtitle="Equipment & supplies"
+          changeType="increase"
+          subtitle="All-time consultation fees"
           icon={CurrencyDollarIcon}
         />
         <MetricCard
-          title="Net Doctor Income"
-          value={formatCurrency(0)}
+          title="Doctor Payables Due"
+          value={formatCurrency(stats.doctorPayables.reduce((sum, p) => sum + p.netPayable, 0))}
           change="+0%"
           changeType="increase"
-          subtitle="This month"
+          subtitle="Outstanding doctor payments"
           icon={ChartBarIcon}
         />
         <MetricCard
-          title="Patient Count"
-          value="0"
+          title="Active Doctors"
+          value={stats.doctorPayables.length.toString()}
           change="+0%"
           changeType="increase"
-          subtitle="This month"
+          subtitle="Doctors with transactions"
           icon={UsersIcon}
         />
       </div>
@@ -669,39 +812,163 @@ const DarkCorporateDashboard: React.FC = () => {
     </div>
   );
 
-  const renderReports = () => (
-    <div className="space-y-6">
-      <TransactionHistory transactions={transactions} />
-      
-      <DataTable
-        title="Doctor Performance Analysis"
-        data={[]}
-        columns={[
-          { key: 'name', label: 'Doctor Name' },
-          { key: 'patients', label: 'Patients Treated' },
-          { key: 'revenue', label: 'Revenue Generated', render: (value) => <span className="text-green-400">{formatCurrency(value)}</span> },
-          { 
-            key: 'efficiency', 
-            label: 'Efficiency Rating',
-            render: (value) => (
-              <div className="flex items-center gap-2">
-                <div className="w-16 bg-gray-700 rounded-full h-2">
-                  <div 
-                    className={clsx(
-                      'h-2 rounded-full transition-all duration-300',
-                      value >= 90 ? 'bg-green-500' : value >= 80 ? 'bg-yellow-500' : 'bg-red-500'
-                    )}
-                    style={{ width: `${value}%` }}
-                  ></div>
+  const renderReports = () => {
+    // Calculate doctor performance data from real transactions
+    const doctorPerformance = stats.doctorPayables.map(doctor => ({
+      name: doctor.stakeholderName,
+      revenue: doctor.totalEarned,
+      payablesDue: doctor.netPayable,
+      transactionCount: transactions.filter(t => t.stakeholderId === doctor.stakeholderId).length,
+      lastActivity: transactions
+        .filter(t => t.stakeholderId === doctor.stakeholderId)
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]?.date
+    }));
+
+    // Calculate business performance summary
+    const businessSummary = {
+      pharmacyRevenue: stats.pharmacyRevenue,
+      doctorRevenue: stats.doctorRevenue,
+      totalRevenue: stats.pharmacyRevenue + stats.doctorRevenue,
+      pharmacyProfit: stats.pharmacyMonthlyProfit,
+      totalPayables: [...stats.doctorPayables, ...stats.businessPartnerPayables, ...stats.employeeSalaryDue]
+        .reduce((sum, p) => sum + p.netPayable, 0),
+      distributorCredits: stats.distributorCredits.reduce((sum, d) => sum + d.creditBalance, 0)
+    };
+
+    return (
+      <div className="space-y-6">
+        {/* Business Performance Summary */}
+        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Business Performance Summary</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-gray-750 rounded-lg p-4">
+              <p className="text-sm text-gray-400">Total Revenue</p>
+              <p className="text-2xl font-bold text-green-400">{formatCurrency(businessSummary.totalRevenue)}</p>
+              <p className="text-xs text-gray-500 mt-1">All-time earnings</p>
+            </div>
+            <div className="bg-gray-750 rounded-lg p-4">
+              <p className="text-sm text-gray-400">Pharmacy Revenue</p>
+              <p className="text-2xl font-bold text-blue-400">{formatCurrency(businessSummary.pharmacyRevenue)}</p>
+              <p className="text-xs text-gray-500 mt-1">Pharmacy sales only</p>
+            </div>
+            <div className="bg-gray-750 rounded-lg p-4">
+              <p className="text-sm text-gray-400">Doctor Revenue</p>
+              <p className="text-2xl font-bold text-purple-400">{formatCurrency(businessSummary.doctorRevenue)}</p>
+              <p className="text-xs text-gray-500 mt-1">Consultation fees</p>
+            </div>
+            <div className="bg-gray-750 rounded-lg p-4">
+              <p className="text-sm text-gray-400">Outstanding Payables</p>
+              <p className="text-2xl font-bold text-red-400">{formatCurrency(businessSummary.totalPayables)}</p>
+              <p className="text-xs text-gray-500 mt-1">Amount owed</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Doctor Performance Analysis */}
+        <div className="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-700">
+            <h3 className="text-lg font-semibold text-white">Doctor Performance Analysis</h3>
+            <p className="text-sm text-gray-400">Revenue and activity analysis per doctor</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-750">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Doctor Name</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Revenue Generated</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Payables Due</th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">Transactions</th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">Last Activity</th>
+                </tr>
+              </thead>
+              <tbody className="bg-gray-800 divide-y divide-gray-700">
+                {doctorPerformance.length > 0 ? (
+                  doctorPerformance.map((doctor, index) => (
+                    <tr key={index} className="hover:bg-gray-750 transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-white">{doctor.name}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        <span className="text-sm font-semibold text-green-400">{formatCurrency(doctor.revenue)}</span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        <span className="text-sm font-semibold text-red-400">{formatCurrency(doctor.payablesDue)}</span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-center">
+                        <span className="text-sm text-gray-300">{doctor.transactionCount}</span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-center">
+                        <span className="text-sm text-gray-300">
+                          {doctor.lastActivity ? new Date(doctor.lastActivity).toLocaleDateString() : 'No activity'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-8 text-center text-gray-400">
+                      No doctor transactions found
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Transaction History */}
+        <TransactionHistory transactions={transactions} />
+
+        {/* Payables Summary */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+            <h4 className="text-md font-semibold text-white mb-4">Doctor Payables</h4>
+            <div className="space-y-3">
+              {stats.doctorPayables.slice(0, 5).map((payable, idx) => (
+                <div key={idx} className="flex justify-between items-center">
+                  <span className="text-sm text-gray-300">{payable.stakeholderName}</span>
+                  <span className="text-sm font-semibold text-red-400">{formatCurrency(payable.netPayable)}</span>
                 </div>
-                <span className="text-sm font-medium text-white">{value}%</span>
-              </div>
-            )
-          },
-        ]}
-      />
-    </div>
-  );
+              ))}
+              {stats.doctorPayables.length === 0 && (
+                <p className="text-sm text-gray-500">No doctor payables</p>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+            <h4 className="text-md font-semibold text-white mb-4">Employee Salaries Due</h4>
+            <div className="space-y-3">
+              {stats.employeeSalaryDue.slice(0, 5).map((payable, idx) => (
+                <div key={idx} className="flex justify-between items-center">
+                  <span className="text-sm text-gray-300">{payable.stakeholderName}</span>
+                  <span className="text-sm font-semibold text-yellow-400">{formatCurrency(payable.netPayable)}</span>
+                </div>
+              ))}
+              {stats.employeeSalaryDue.length === 0 && (
+                <p className="text-sm text-gray-500">No employee salaries due</p>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+            <h4 className="text-md font-semibold text-white mb-4">Distributor Credits</h4>
+            <div className="space-y-3">
+              {stats.distributorCredits.slice(0, 5).map((credit, idx) => (
+                <div key={idx} className="flex justify-between items-center">
+                  <span className="text-sm text-gray-300">{credit.name}</span>
+                  <span className="text-sm font-semibold text-orange-400">{formatCurrency(credit.creditBalance)}</span>
+                </div>
+              ))}
+              {stats.distributorCredits.length === 0 && (
+                <p className="text-sm text-gray-500">No distributor credits</p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-gray-900">
@@ -729,9 +996,12 @@ const DarkCorporateDashboard: React.FC = () => {
         {activeTab === 'combined_analytics' && renderCombinedAnalytics()}
         {activeTab === 'reports' && renderReports()}
         {activeTab === 'stakeholders' && <StakeholderManagement />}
+        {activeTab === 'patients' && <PatientManagement />}
         {activeTab === 'statements' && <AccountStatement />}
         {activeTab === 'business_statement' && <BusinessAccountStatement />}
         {activeTab === 'doctor_statement' && <DoctorAccountStatement />}
+        {activeTab === 'distributor_statement' && <DistributorAccountStatement />}
+        {activeTab === 'configuration' && <ConfigurationManagement />}
       </main>
 
       <TransactionForm
