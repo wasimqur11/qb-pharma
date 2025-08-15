@@ -93,6 +93,15 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
       description: 'Commission payments to sales partners'
     },
     {
+      id: 'partner_profit',
+      label: 'Partner Profit Distribution',
+      icon: UsersIcon,
+      color: 'text-pink-400',
+      requiresStakeholder: true,
+      stakeholderType: 'business_partner',
+      description: 'Quarterly/periodic profit distributions to business partners'
+    },
+    {
       id: 'employee_payment',
       label: 'Employee Payment',
       icon: UsersIcon,

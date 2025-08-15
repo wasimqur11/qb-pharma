@@ -33,6 +33,7 @@ interface TransactionContextType {
   getBusinessPartnerPayables: () => PayableBalance[];
   getEmployeeSalaryDue: () => PayableBalance[];
   getDistributorCredits: () => { id: string; name: string; creditBalance: number }[];
+  getPatientCredits: () => { id: string; name: string; creditBalance: number }[];
   
   // Utilities
   getTransactionById: (id: string) => Transaction | undefined;
@@ -60,7 +61,7 @@ interface TransactionProviderProps {
 export const TransactionProvider: React.FC<TransactionProviderProps> = ({ children }) => {
   // Start with empty transactions - stakeholders are pre-loaded for testing
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const { doctors, businessPartners, employees, distributors, updateEmployeeSalaryDueDate, updateDistributor } = useStakeholders();
+  const { doctors, businessPartners, employees, distributors, patients, updateEmployeeSalaryDueDate, updateDistributor, updatePatient } = useStakeholders();
 
   // Operations
   const addTransaction = (transactionData: Omit<Transaction, 'id' | 'createdAt'>) => {
@@ -78,10 +79,31 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     
     // Auto-update distributor credit balance if this is a credit purchase
     if (newTransaction.category === 'distributor_credit_purchase' && newTransaction.stakeholderId) {
-      const distributor = distributors.find(d => d.id === newTransaction.stakeholderId);
-      if (distributor) {
+      // Use callback to get current distributor state to avoid stale closure
+      const currentDistributor = distributors.find(d => d.id === newTransaction.stakeholderId);
+      if (currentDistributor) {
         updateDistributor(newTransaction.stakeholderId, {
-          creditBalance: distributor.creditBalance + newTransaction.amount
+          creditBalance: currentDistributor.creditBalance + newTransaction.amount
+        });
+      }
+    }
+
+    // Auto-update patient credit balance if this is a credit sale
+    if (newTransaction.category === 'patient_credit_sale' && newTransaction.stakeholderId) {
+      const currentPatient = patients.find(p => p.id === newTransaction.stakeholderId);
+      if (currentPatient) {
+        updatePatient(newTransaction.stakeholderId, {
+          currentCredit: currentPatient.currentCredit + newTransaction.amount
+        });
+      }
+    }
+
+    // Auto-update patient credit balance if this is a payment (reduce their outstanding credit)
+    if (newTransaction.category === 'patient_payment' && newTransaction.stakeholderId) {
+      const currentPatient = patients.find(p => p.id === newTransaction.stakeholderId);
+      if (currentPatient) {
+        updatePatient(newTransaction.stakeholderId, {
+          currentCredit: Math.max(0, currentPatient.currentCredit - newTransaction.amount)
         });
       }
     }
@@ -100,7 +122,7 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
   // Analytics - Separated by Business Type
   const getPharmacyRevenue = () => {
     return transactions
-      .filter(t => ['pharmacy_sale', 'patient_payment', 'patient_credit_sale'].includes(t.category))
+      .filter(t => ['pharmacy_sale', 'patient_payment'].includes(t.category))
       .reduce((sum, t) => sum + t.amount, 0);
   };
 
@@ -118,7 +140,7 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     const today = new Date().toDateString();
     return transactions
       .filter(t => 
-        ['pharmacy_sale', 'patient_payment', 'patient_credit_sale'].includes(t.category) &&
+        ['pharmacy_sale', 'patient_payment'].includes(t.category) &&
         t.date.toDateString() === today
       )
       .reduce((sum, t) => sum + t.amount, 0);
@@ -156,7 +178,7 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     
     const monthlyPharmacyRevenue = transactions
       .filter(t => 
-        ['pharmacy_sale', 'patient_payment', 'patient_credit_sale'].includes(t.category) &&
+        ['pharmacy_sale', 'patient_payment'].includes(t.category) &&
         t.date >= firstDayOfMonth
       )
       .reduce((sum, t) => sum + t.amount, 0);
@@ -177,7 +199,7 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     
     const monthlyRevenue = transactions
       .filter(t => 
-        ['pharmacy_sale', 'consultation_fee', 'patient_payment', 'patient_credit_sale'].includes(t.category) &&
+        ['pharmacy_sale', 'consultation_fee', 'patient_payment'].includes(t.category) &&
         t.date >= firstDayOfMonth
       )
       .reduce((sum, t) => sum + t.amount, 0);
@@ -318,6 +340,14 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     })).filter(dist => dist.creditBalance > 0);
   };
 
+  const getPatientCredits = () => {
+    return patients.map(patient => ({
+      id: patient.id,
+      name: patient.name,
+      creditBalance: patient.currentCredit
+    })).filter(patient => patient.creditBalance > 0);
+  };
+
   const getDashboardStats = (): DashboardStats => {
     return {
       // Combined metrics (all businesses)
@@ -397,11 +427,11 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     
     setTransactions(prev => [newTransaction, ...prev]);
     
-    // Update distributor's credit balance
-    const distributor = distributors.find(d => d.id === distributorId);
-    if (distributor) {
+    // Update distributor's credit balance using current state
+    const currentDistributor = distributors.find(d => d.id === distributorId);
+    if (currentDistributor) {
       updateDistributor(distributorId, {
-        creditBalance: distributor.creditBalance + amount
+        creditBalance: currentDistributor.creditBalance + amount
       });
     }
   };
@@ -437,6 +467,7 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     getBusinessPartnerPayables,
     getEmployeeSalaryDue,
     getDistributorCredits,
+    getPatientCredits,
     
     // Utilities
     getTransactionById,

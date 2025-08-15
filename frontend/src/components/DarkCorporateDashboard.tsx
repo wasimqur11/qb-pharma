@@ -58,6 +58,130 @@ const DarkCorporateDashboard: React.FC = () => {
     return num.toString();
   };
 
+  // Generate chart data from real transactions
+  const getRevenueChartData = () => {
+    const days = 7;
+    const data = [];
+    
+    for (let i = days - 1; i >= 0; i--) {
+      const date = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
+      const dayTransactions = transactions.filter(t => 
+        t.date.toDateString() === date.toDateString() &&
+        ['pharmacy_sale', 'consultation_fee', 'patient_payment'].includes(t.category)
+      );
+      
+      const revenue = dayTransactions.reduce((sum, t) => sum + t.amount, 0);
+      
+      data.push({
+        name: date.toLocaleDateString('en-US', { weekday: 'short' }),
+        total: revenue
+      });
+    }
+    
+    return data;
+  };
+
+  const getExpenseBreakdownData = () => {
+    const expenseCategories = {
+      'Distributor Payments': transactions.filter(t => t.category === 'distributor_payment').reduce((sum, t) => sum + t.amount, 0),
+      'Employee Payments': transactions.filter(t => t.category === 'employee_payment').reduce((sum, t) => sum + t.amount, 0),
+      'Partner Payments': transactions.filter(t => t.category === 'business_partner_payment').reduce((sum, t) => sum + t.amount, 0),
+      'Clinic Expenses': transactions.filter(t => t.category === 'clinic_expense').reduce((sum, t) => sum + t.amount, 0),
+      'Doctor Expenses': transactions.filter(t => t.category === 'doctor_expense').reduce((sum, t) => sum + t.amount, 0)
+    };
+
+    return Object.entries(expenseCategories)
+      .filter(([_, value]) => value > 0)
+      .map(([name, value]) => ({
+        name,
+        value,
+        fill: name === 'Distributor Payments' ? '#f59e0b' :
+              name === 'Employee Payments' ? '#10b981' :
+              name === 'Partner Payments' ? '#8b5cf6' :
+              name === 'Clinic Expenses' ? '#ef4444' : '#3b82f6'
+      }));
+  };
+
+  const getDoctorPerformanceData = () => {
+    // Generate doctor performance data based on consultation transactions
+    const consultationTransactions = transactions.filter(t => t.category === 'consultation_fee');
+    
+    const doctorStats = consultationTransactions.reduce((acc, t) => {
+      if (t.stakeholderId) {
+        if (!acc[t.stakeholderId]) {
+          acc[t.stakeholderId] = { consultations: 0, revenue: 0 };
+        }
+        acc[t.stakeholderId].consultations += 1;
+        acc[t.stakeholderId].revenue += t.amount;
+      }
+      return acc;
+    }, {} as Record<string, { consultations: number; revenue: number }>);
+
+    return Object.entries(doctorStats).slice(0, 5).map(([id, data]) => ({
+      name: `Doctor ${id.slice(0, 8)}`,
+      consultations: data.consultations,
+      revenue: data.revenue
+    }));
+  };
+
+  const getMonthlyTrendData = () => {
+    const months = 6;
+    const data = [];
+    
+    for (let i = months - 1; i >= 0; i--) {
+      const date = new Date();
+      date.setMonth(date.getMonth() - i);
+      date.setDate(1);
+      
+      const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
+      const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+      
+      const monthTransactions = transactions.filter(t => {
+        const transactionDate = new Date(t.date);
+        return transactionDate >= monthStart && transactionDate <= monthEnd;
+      });
+      
+      const revenue = monthTransactions
+        .filter(t => ['pharmacy_sale', 'consultation_fee', 'patient_payment'].includes(t.category))
+        .reduce((sum, t) => sum + t.amount, 0);
+        
+      const expenses = monthTransactions
+        .filter(t => ['distributor_payment', 'employee_payment', 'clinic_expense', 'business_partner_payment', 'doctor_expense'].includes(t.category))
+        .reduce((sum, t) => sum + t.amount, 0);
+      
+      data.push({
+        month: date.toLocaleDateString('en-US', { month: 'short' }),
+        revenue,
+        expenses,
+        profit: revenue - expenses
+      });
+    }
+    
+    return data;
+  };
+
+  const getDoctorConsultationData = () => {
+    const days = 7;
+    const data = [];
+    
+    for (let i = days - 1; i >= 0; i--) {
+      const date = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
+      const dayTransactions = transactions.filter(t => 
+        t.date.toDateString() === date.toDateString() &&
+        t.category === 'consultation_fee'
+      );
+      
+      const revenue = dayTransactions.reduce((sum, t) => sum + t.amount, 0);
+      
+      data.push({
+        name: date.toLocaleDateString('en-US', { weekday: 'short' }),
+        total: revenue
+      });
+    }
+    
+    return data;
+  };
+
   const handleTransactionSubmit = (data: any) => {
     addTransaction({
       category: data.category,
@@ -608,9 +732,9 @@ const DarkCorporateDashboard: React.FC = () => {
           height="300px"
         >
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={[]}>
+            <LineChart data={getRevenueChartData()}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis dataKey="day" stroke="#9ca3af" fontSize={11} />
+              <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} />
               <YAxis stroke="#9ca3af" fontSize={11} />
               <Tooltip 
                 contentStyle={darkTooltipStyle}
@@ -631,7 +755,7 @@ const DarkCorporateDashboard: React.FC = () => {
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
-                data={[]}
+                data={getExpenseBreakdownData()}
                 cx="50%"
                 cy="50%"
                 innerRadius={35}
@@ -639,8 +763,8 @@ const DarkCorporateDashboard: React.FC = () => {
                 paddingAngle={2}
                 dataKey="value"
               >
-                {[].map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
+                {getExpenseBreakdownData().map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.fill} />
                 ))}
               </Pie>
               <Tooltip 
@@ -722,9 +846,9 @@ const DarkCorporateDashboard: React.FC = () => {
           height="300px"
         >
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={[]}>
+            <LineChart data={getDoctorConsultationData()}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis dataKey="day" stroke="#9ca3af" fontSize={11} />
+              <XAxis dataKey="name" stroke="#9ca3af" fontSize={11} />
               <YAxis stroke="#9ca3af" fontSize={11} />
               <Tooltip contentStyle={darkTooltipStyle} />
               <Line 
@@ -743,7 +867,11 @@ const DarkCorporateDashboard: React.FC = () => {
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
-                data={[]}
+                data={getDoctorPerformanceData().map((item, index) => ({ 
+                  name: item.name, 
+                  value: item.revenue,
+                  fill: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'][index % 5]
+                }))}
                 cx="50%"
                 cy="50%"
                 innerRadius={35}
@@ -751,8 +879,8 @@ const DarkCorporateDashboard: React.FC = () => {
                 paddingAngle={2}
                 dataKey="value"
               >
-                {[].map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
+                {getDoctorPerformanceData().map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'][index % 5]} />
                 ))}
               </Pie>
               <Tooltip 
@@ -778,7 +906,7 @@ const DarkCorporateDashboard: React.FC = () => {
       
       <ChartCard title="Monthly Performance Comparison" subtitle="Combined Pharmacy + Doctor Revenue vs Expenses vs Profit" height="350px">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={[]} margin={{ top: 10, right: 15, left: 10, bottom: 5 }}>
+          <BarChart data={getMonthlyTrendData()} margin={{ top: 10, right: 15, left: 10, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
             <XAxis dataKey="month" stroke="#9ca3af" fontSize={11} />
             <YAxis stroke="#9ca3af" fontSize={11} />

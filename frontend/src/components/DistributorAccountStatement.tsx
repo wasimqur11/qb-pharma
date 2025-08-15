@@ -56,8 +56,80 @@ const DistributorAccountStatement: React.FC = () => {
     let runningBalance = 0;
     let currentCreditBalance = distributor.creditBalance;
     
-    // Add opening balance entry if there are transactions
-    if (sortedTransactions.length > 0) {
+    // Calculate the starting credit balance for the selected date range
+    let startingCreditBalance = 0;
+    const allTransactions = getStakeholderTransactions(distributorId);
+    
+    // Calculate the proper starting credit balance for the selected date range
+    if (distributor.initialBalanceDate) {
+      const initialBalanceDate = new Date(distributor.initialBalanceDate);
+      
+      // If initial balance date is within the selected range, show it as first entry
+      // This should always show regardless of whether there are other transactions
+      if (initialBalanceDate >= startDate && initialBalanceDate <= new Date(dateRange.to)) {
+        statements.push({
+          id: 'initial-balance',
+          date: initialBalanceDate,
+          description: 'Initial Credit Balance',
+          debit: 0,
+          credit: 0,
+          balance: 0,
+          creditBalanceChange: distributor.creditBalance,
+          newCreditBalance: distributor.creditBalance
+        });
+        startingCreditBalance = distributor.creditBalance;
+      } else if (initialBalanceDate < startDate) {
+        // Initial balance is before our date range, calculate balance at start of range
+        startingCreditBalance = distributor.creditBalance;
+        
+        // Adjust for transactions that happened after initial balance but before the date range
+        const transactionsBeforeRange = allTransactions.filter(t => {
+          const transactionDate = new Date(t.date);
+          return transactionDate > initialBalanceDate && transactionDate < startDate;
+        });
+        
+        transactionsBeforeRange.forEach(transaction => {
+          if (transaction.category === 'distributor_credit_purchase') {
+            startingCreditBalance += transaction.amount;
+          } else if (transaction.category === 'distributor_payment') {
+            startingCreditBalance = Math.max(0, startingCreditBalance - transaction.amount);
+          }
+        });
+      } else {
+        // Initial balance is after our date range, calculate from zero
+        startingCreditBalance = 0;
+        const transactionsBeforeRange = allTransactions.filter(t => {
+          const transactionDate = new Date(t.date);
+          return transactionDate < startDate;
+        });
+        
+        transactionsBeforeRange.forEach(transaction => {
+          if (transaction.category === 'distributor_credit_purchase') {
+            startingCreditBalance += transaction.amount;
+          } else if (transaction.category === 'distributor_payment') {
+            startingCreditBalance = Math.max(0, startingCreditBalance - transaction.amount);
+          }
+        });
+      }
+    } else {
+      // No initial balance date, calculate from all transactions before the date range
+      startingCreditBalance = 0;
+      const transactionsBeforeRange = allTransactions.filter(t => {
+        const transactionDate = new Date(t.date);
+        return transactionDate < startDate;
+      });
+      
+      transactionsBeforeRange.forEach(transaction => {
+        if (transaction.category === 'distributor_credit_purchase') {
+          startingCreditBalance += transaction.amount;
+        } else if (transaction.category === 'distributor_payment') {
+          startingCreditBalance = Math.max(0, startingCreditBalance - transaction.amount);
+        }
+      });
+    }
+    
+    // Add opening balance entry if we have transactions, no initial balance entry was added, and we have a starting balance
+    if (sortedTransactions.length > 0 && statements.length === 0 && startingCreditBalance > 0) {
       statements.push({
         id: 'opening-balance',
         date: startDate,
@@ -65,9 +137,12 @@ const DistributorAccountStatement: React.FC = () => {
         debit: 0,
         credit: 0,
         balance: 0,
-        newCreditBalance: currentCreditBalance
+        creditBalanceChange: 0,
+        newCreditBalance: startingCreditBalance
       });
     }
+    
+    currentCreditBalance = startingCreditBalance;
     
     sortedTransactions.forEach((transaction) => {
       let debit = 0;
@@ -99,7 +174,8 @@ const DistributorAccountStatement: React.FC = () => {
       });
     });
     
-    return statements;
+    // Sort all statements by date to ensure proper chronological order
+    return statements.sort((a, b) => a.date.getTime() - b.date.getTime());
   };
 
   const selectedDistributorData = useMemo(() => {
@@ -119,10 +195,21 @@ const DistributorAccountStatement: React.FC = () => {
 
     // Apply transaction type filters
     if (!showCreditTransactions) {
-      entries = entries.filter(entry => !entry.creditBalanceChange || entry.creditBalanceChange <= 0);
+      // Filter out credit purchases but keep initial balance and opening balance entries
+      entries = entries.filter(entry => 
+        !entry.creditBalanceChange || 
+        entry.creditBalanceChange <= 0 || 
+        entry.id === 'initial-balance' || 
+        entry.id === 'opening-balance'
+      );
     }
     if (!showPayments) {
-      entries = entries.filter(entry => entry.debit === 0);
+      // Filter out payment entries but keep initial balance and opening balance entries
+      entries = entries.filter(entry => 
+        entry.debit === 0 || 
+        entry.id === 'initial-balance' || 
+        entry.id === 'opening-balance'
+      );
     }
 
     return entries;

@@ -310,24 +310,28 @@ export const StakeholderProvider: React.FC<StakeholderProviderProps> = ({ childr
 
   // Helper function to update salary due date after payment
   const updateEmployeeSalaryDueDate = (employeeId: string) => {
-    const employee = employees.find(emp => emp.id === employeeId);
-    if (!employee) return;
+    setEmployees(prevEmployees => {
+      return prevEmployees.map(employee => {
+        if (employee.id !== employeeId) return employee;
 
-    const currentDueDate = new Date(employee.salaryDueDate);
-    const nextDueDate = new Date(currentDueDate);
+        const currentDueDate = new Date(employee.salaryDueDate);
+        const nextDueDate = new Date(currentDueDate);
 
-    // Calculate next due date based on frequency
-    if (employee.salaryFrequency === 'monthly') {
-      nextDueDate.setMonth(nextDueDate.getMonth() + 1);
-    } else if (employee.salaryFrequency === 'bi-weekly') {
-      nextDueDate.setDate(nextDueDate.getDate() + 14);
-    } else if (employee.salaryFrequency === 'weekly') {
-      nextDueDate.setDate(nextDueDate.getDate() + 7);
-    }
+        // Calculate next due date based on frequency
+        if (employee.salaryFrequency === 'monthly') {
+          nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+        } else if (employee.salaryFrequency === 'bi-weekly') {
+          nextDueDate.setDate(nextDueDate.getDate() + 14);
+        } else if (employee.salaryFrequency === 'weekly') {
+          nextDueDate.setDate(nextDueDate.getDate() + 7);
+        }
 
-    updateEmployee(employeeId, {
-      salaryDueDate: nextDueDate.toISOString().split('T')[0],
-      lastPaidDate: new Date().toISOString().split('T')[0]
+        return {
+          ...employee,
+          salaryDueDate: nextDueDate.toISOString().split('T')[0],
+          lastPaidDate: new Date().toISOString().split('T')[0]
+        };
+      });
     });
   };
 
