@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer 
@@ -55,6 +55,25 @@ const DarkCorporateDashboard: React.FC = () => {
     to: new Date().toISOString().split('T')[0]
   });
   const [selectedPeriod, setSelectedPeriod] = useState('30days');
+  
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Ctrl+Enter to open Add Transaction form
+      if (event.ctrlKey && event.key === 'Enter') {
+        event.preventDefault();
+        setShowTransactionForm(true);
+      }
+    };
+
+    // Add event listener
+    window.addEventListener('keydown', handleKeyDown);
+
+    // Cleanup event listener on component unmount
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
   
   // Get period-filtered stats based on selected date range
   const fromDate = new Date(dateRange.from);
@@ -309,11 +328,12 @@ const DarkCorporateDashboard: React.FC = () => {
               <button
                 onClick={() => setShowTransactionForm(true)}
                 className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium"
-                title="Add new financial transaction"
+                title="Add new financial transaction (Ctrl+Enter)"
               >
                 <PlusIcon className="h-4 w-4" />
                 <span className="hidden xl:inline">Add Transaction</span>
                 <span className="xl:hidden">Add</span>
+                <span className="hidden 2xl:inline text-xs text-blue-200 ml-1">(Ctrl+Enter)</span>
               </button>
               
               <button
@@ -332,7 +352,7 @@ const DarkCorporateDashboard: React.FC = () => {
               <button
                 onClick={() => setShowTransactionForm(true)}
                 className="p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                title="Add Transaction"
+                title="Add Transaction (Ctrl+Enter)"
               >
                 <PlusIcon className="h-4 w-4" />
               </button>
@@ -790,51 +810,74 @@ const DarkCorporateDashboard: React.FC = () => {
         {/* Business Performance Summary */}
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
           <h3 className="text-lg font-semibold text-white mb-4">Business Performance Summary</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-4">
-            <div className="bg-gray-750 rounded-lg p-4">
-              <p className="text-sm text-gray-400">Total Revenue</p>
-              <p className="text-2xl font-bold text-green-400">{formatCurrency(businessSummary.totalRevenue)}</p>
-              <p className="text-xs text-gray-500 mt-1">All-time earnings</p>
+          <div className="flex flex-col lg:flex-row gap-4">
+            {/* Left Side - Total Cash in Hand (spans full height) */}
+            <div className="lg:w-64 xl:w-80">
+              <div className="bg-gradient-to-br from-gray-750 to-gray-800 rounded-lg p-6 h-full flex flex-col justify-center border-l-4 border-green-500 border-r-2 border-r-green-500/30 shadow-lg hover:shadow-xl transition-shadow duration-200">
+                <div className="text-center">
+                  <div className="mb-3">
+                    <p className="text-sm text-gray-300 font-semibold uppercase tracking-wider mb-1">Total Cash in Hand</p>
+                    <div className="w-12 h-0.5 bg-green-500 mx-auto rounded-full"></div>
+                  </div>
+                  <p className="text-4xl lg:text-5xl font-bold text-green-400 mb-3 tracking-tight">
+                    {formatCurrency(businessSummary.totalCashInHand)}
+                  </p>
+                  <p className="text-xs text-gray-400 font-medium">Combined cash position</p>
+                  <div className="mt-5 pt-4 border-t border-gray-600/50">
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-gray-400">Pharmacy:</span>
+                        <span className="text-cyan-400 text-xs font-semibold">
+                          {formatCurrency(businessSummary.pharmacyCash)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-gray-400">Doctor:</span>
+                        <span className="text-orange-400 text-xs font-semibold">
+                          {formatCurrency(businessSummary.doctorCash)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="bg-gray-750 rounded-lg p-4">
-              <p className="text-sm text-gray-400">Pharmacy Revenue</p>
-              <p className="text-2xl font-bold text-blue-400">{formatCurrency(businessSummary.pharmacyRevenue)}</p>
-              <p className="text-xs text-gray-500 mt-1">Pharmacy sales only</p>
-            </div>
-            <div className="bg-gray-750 rounded-lg p-4">
-              <p className="text-sm text-gray-400">Doctor Revenue</p>
-              <p className="text-2xl font-bold text-purple-400">{formatCurrency(businessSummary.doctorRevenue)}</p>
-              <p className="text-xs text-gray-500 mt-1">Consultation fees</p>
-            </div>
-            <div className="bg-gray-750 rounded-lg p-4">
-              <p className="text-sm text-gray-400">Pharmacy Expenses</p>
-              <p className="text-2xl font-bold text-red-300">{formatCurrency(businessSummary.pharmacyExpenses)}</p>
-              <p className="text-xs text-gray-500 mt-1">Pharmacy-related costs</p>
-            </div>
-            <div className="bg-gray-750 rounded-lg p-4">
-              <p className="text-sm text-gray-400">Clinical Expenses</p>
-              <p className="text-2xl font-bold text-red-500">{formatCurrency(businessSummary.doctorExpenses)}</p>
-              <p className="text-xs text-gray-500 mt-1">Doctor-related costs</p>
-            </div>
-            <div className="bg-gray-750 rounded-lg p-4">
-              <p className="text-sm text-gray-400">Total Expenses</p>
-              <p className="text-2xl font-bold text-red-400">{formatCurrency(businessSummary.totalExpenses)}</p>
-              <p className="text-xs text-gray-500 mt-1">All expenses combined</p>
-            </div>
-            <div className="bg-gray-750 rounded-lg p-4">
-              <p className="text-sm text-gray-400">Pharmacy Cash</p>
-              <p className="text-2xl font-bold text-cyan-400">{formatCurrency(businessSummary.pharmacyCash)}</p>
-              <p className="text-xs text-gray-500 mt-1">Pharmacy net position</p>
-            </div>
-            <div className="bg-gray-750 rounded-lg p-4">
-              <p className="text-sm text-gray-400">Clinical Cash</p>
-              <p className="text-2xl font-bold text-orange-400">{formatCurrency(businessSummary.doctorCash)}</p>
-              <p className="text-xs text-gray-500 mt-1">Doctor services net</p>
-            </div>
-            <div className="bg-gray-750 rounded-lg p-4 border-l-4 border-green-500">
-              <p className="text-sm text-gray-400">Total Cash in Hand</p>
-              <p className="text-2xl font-bold text-green-400">{formatCurrency(businessSummary.totalCashInHand)}</p>
-              <p className="text-xs text-gray-500 mt-1">Combined cash position</p>
+            
+            {/* Right Grid - 6 cards in 3x2 layout */}
+            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* First Row */}
+              <div className="bg-gray-750 rounded-lg p-4">
+                <p className="text-sm text-gray-400">Total Revenue</p>
+                <p className="text-2xl font-bold text-green-400">{formatCurrency(businessSummary.totalRevenue)}</p>
+                <p className="text-xs text-gray-500 mt-1">All-time earnings</p>
+              </div>
+              <div className="bg-gray-750 rounded-lg p-4">
+                <p className="text-sm text-gray-400">Pharmacy Revenue</p>
+                <p className="text-2xl font-bold text-blue-400">{formatCurrency(businessSummary.pharmacyRevenue)}</p>
+                <p className="text-xs text-gray-500 mt-1">Pharmacy sales only</p>
+              </div>
+              <div className="bg-gray-750 rounded-lg p-4">
+                <p className="text-sm text-gray-400">Doctor Revenue</p>
+                <p className="text-2xl font-bold text-purple-400">{formatCurrency(businessSummary.doctorRevenue)}</p>
+                <p className="text-xs text-gray-500 mt-1">Consultation fees</p>
+              </div>
+              
+              {/* Second Row */}
+              <div className="bg-gray-750 rounded-lg p-4">
+                <p className="text-sm text-gray-400">Total Expenses</p>
+                <p className="text-2xl font-bold text-red-400">{formatCurrency(businessSummary.totalExpenses)}</p>
+                <p className="text-xs text-gray-500 mt-1">All expenses combined</p>
+              </div>
+              <div className="bg-gray-750 rounded-lg p-4">
+                <p className="text-sm text-gray-400">Pharmacy Expenses</p>
+                <p className="text-2xl font-bold text-red-300">{formatCurrency(businessSummary.pharmacyExpenses)}</p>
+                <p className="text-xs text-gray-500 mt-1">Pharmacy-related costs</p>
+              </div>
+              <div className="bg-gray-750 rounded-lg p-4">
+                <p className="text-sm text-gray-400">Doctor's Expenses</p>
+                <p className="text-2xl font-bold text-red-500">{formatCurrency(businessSummary.doctorExpenses)}</p>
+                <p className="text-xs text-gray-500 mt-1">Doctor-related costs</p>
+              </div>
             </div>
           </div>
         </div>
@@ -1221,51 +1264,74 @@ const DarkCorporateDashboard: React.FC = () => {
         {/* Business Performance Summary */}
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
           <h3 className="text-lg font-semibold text-white mb-4">Business Performance Summary</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-4">
-            <div className="bg-gray-750 rounded-lg p-4">
-              <p className="text-sm text-gray-400">Total Revenue</p>
-              <p className="text-2xl font-bold text-green-400">{formatCurrency(businessSummary.totalRevenue)}</p>
-              <p className="text-xs text-gray-500 mt-1">All-time earnings</p>
+          <div className="flex flex-col lg:flex-row gap-4">
+            {/* Left Side - Total Cash in Hand (spans full height) */}
+            <div className="lg:w-64 xl:w-80">
+              <div className="bg-gradient-to-br from-gray-750 to-gray-800 rounded-lg p-6 h-full flex flex-col justify-center border-l-4 border-green-500 border-r-2 border-r-green-500/30 shadow-lg hover:shadow-xl transition-shadow duration-200">
+                <div className="text-center">
+                  <div className="mb-3">
+                    <p className="text-sm text-gray-300 font-semibold uppercase tracking-wider mb-1">Total Cash in Hand</p>
+                    <div className="w-12 h-0.5 bg-green-500 mx-auto rounded-full"></div>
+                  </div>
+                  <p className="text-4xl lg:text-5xl font-bold text-green-400 mb-3 tracking-tight">
+                    {formatCurrency(businessSummary.totalCashInHand)}
+                  </p>
+                  <p className="text-xs text-gray-400 font-medium">Combined cash position</p>
+                  <div className="mt-5 pt-4 border-t border-gray-600/50">
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-gray-400">Pharmacy:</span>
+                        <span className="text-cyan-400 text-xs font-semibold">
+                          {formatCurrency(businessSummary.pharmacyCash)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-gray-400">Doctor:</span>
+                        <span className="text-orange-400 text-xs font-semibold">
+                          {formatCurrency(businessSummary.doctorCash)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="bg-gray-750 rounded-lg p-4">
-              <p className="text-sm text-gray-400">Pharmacy Revenue</p>
-              <p className="text-2xl font-bold text-blue-400">{formatCurrency(businessSummary.pharmacyRevenue)}</p>
-              <p className="text-xs text-gray-500 mt-1">Pharmacy sales only</p>
-            </div>
-            <div className="bg-gray-750 rounded-lg p-4">
-              <p className="text-sm text-gray-400">Doctor Revenue</p>
-              <p className="text-2xl font-bold text-purple-400">{formatCurrency(businessSummary.doctorRevenue)}</p>
-              <p className="text-xs text-gray-500 mt-1">Consultation fees</p>
-            </div>
-            <div className="bg-gray-750 rounded-lg p-4">
-              <p className="text-sm text-gray-400">Pharmacy Expenses</p>
-              <p className="text-2xl font-bold text-red-300">{formatCurrency(businessSummary.pharmacyExpenses)}</p>
-              <p className="text-xs text-gray-500 mt-1">Pharmacy-related costs</p>
-            </div>
-            <div className="bg-gray-750 rounded-lg p-4">
-              <p className="text-sm text-gray-400">Clinical Expenses</p>
-              <p className="text-2xl font-bold text-red-500">{formatCurrency(businessSummary.doctorExpenses)}</p>
-              <p className="text-xs text-gray-500 mt-1">Doctor-related costs</p>
-            </div>
-            <div className="bg-gray-750 rounded-lg p-4">
-              <p className="text-sm text-gray-400">Total Expenses</p>
-              <p className="text-2xl font-bold text-red-400">{formatCurrency(businessSummary.totalExpenses)}</p>
-              <p className="text-xs text-gray-500 mt-1">All expenses combined</p>
-            </div>
-            <div className="bg-gray-750 rounded-lg p-4">
-              <p className="text-sm text-gray-400">Pharmacy Cash</p>
-              <p className="text-2xl font-bold text-cyan-400">{formatCurrency(businessSummary.pharmacyCash)}</p>
-              <p className="text-xs text-gray-500 mt-1">Pharmacy net position</p>
-            </div>
-            <div className="bg-gray-750 rounded-lg p-4">
-              <p className="text-sm text-gray-400">Clinical Cash</p>
-              <p className="text-2xl font-bold text-orange-400">{formatCurrency(businessSummary.doctorCash)}</p>
-              <p className="text-xs text-gray-500 mt-1">Doctor services net</p>
-            </div>
-            <div className="bg-gray-750 rounded-lg p-4 border-l-4 border-green-500">
-              <p className="text-sm text-gray-400">Total Cash in Hand</p>
-              <p className="text-2xl font-bold text-green-400">{formatCurrency(businessSummary.totalCashInHand)}</p>
-              <p className="text-xs text-gray-500 mt-1">Combined cash position</p>
+            
+            {/* Right Grid - 6 cards in 3x2 layout */}
+            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* First Row */}
+              <div className="bg-gray-750 rounded-lg p-4">
+                <p className="text-sm text-gray-400">Total Revenue</p>
+                <p className="text-2xl font-bold text-green-400">{formatCurrency(businessSummary.totalRevenue)}</p>
+                <p className="text-xs text-gray-500 mt-1">All-time earnings</p>
+              </div>
+              <div className="bg-gray-750 rounded-lg p-4">
+                <p className="text-sm text-gray-400">Pharmacy Revenue</p>
+                <p className="text-2xl font-bold text-blue-400">{formatCurrency(businessSummary.pharmacyRevenue)}</p>
+                <p className="text-xs text-gray-500 mt-1">Pharmacy sales only</p>
+              </div>
+              <div className="bg-gray-750 rounded-lg p-4">
+                <p className="text-sm text-gray-400">Doctor Revenue</p>
+                <p className="text-2xl font-bold text-purple-400">{formatCurrency(businessSummary.doctorRevenue)}</p>
+                <p className="text-xs text-gray-500 mt-1">Consultation fees</p>
+              </div>
+              
+              {/* Second Row */}
+              <div className="bg-gray-750 rounded-lg p-4">
+                <p className="text-sm text-gray-400">Total Expenses</p>
+                <p className="text-2xl font-bold text-red-400">{formatCurrency(businessSummary.totalExpenses)}</p>
+                <p className="text-xs text-gray-500 mt-1">All expenses combined</p>
+              </div>
+              <div className="bg-gray-750 rounded-lg p-4">
+                <p className="text-sm text-gray-400">Pharmacy Expenses</p>
+                <p className="text-2xl font-bold text-red-300">{formatCurrency(businessSummary.pharmacyExpenses)}</p>
+                <p className="text-xs text-gray-500 mt-1">Pharmacy-related costs</p>
+              </div>
+              <div className="bg-gray-750 rounded-lg p-4">
+                <p className="text-sm text-gray-400">Doctor's Expenses</p>
+                <p className="text-2xl font-bold text-red-500">{formatCurrency(businessSummary.doctorExpenses)}</p>
+                <p className="text-xs text-gray-500 mt-1">Doctor-related costs</p>
+              </div>
             </div>
           </div>
         </div>

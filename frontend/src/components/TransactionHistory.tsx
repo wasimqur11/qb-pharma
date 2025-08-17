@@ -13,7 +13,11 @@ import {
   EyeIcon,
   ArrowUpIcon,
   ArrowDownIcon,
-  PencilIcon
+  PencilIcon,
+  ArrowTrendingUpIcon,
+  ArrowTrendingDownIcon,
+  ChartBarIcon,
+  CalculatorIcon
 } from '@heroicons/react/24/outline';
 import { useStakeholders } from '../contexts/StakeholderContext';
 import { useTransactions } from '../contexts/TransactionContext';
@@ -267,15 +271,29 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
     alert(`Export Started: Exporting ${sortedTransactions.length} transactions to CSV. Download will begin shortly.`);
   };
 
-  const summaryStats = useMemo(() => {
-    const totalAmount = sortedTransactions.reduce((sum, t) => sum + t.amount, 0);
-    const avgAmount = sortedTransactions.length > 0 ? totalAmount / sortedTransactions.length : 0;
-    const categoryCounts = sortedTransactions.reduce((acc, t) => {
-      acc[t.category] = (acc[t.category] || 0) + 1;
-      return acc;
-    }, {} as Record<TransactionCategory, number>);
+  const businessMetrics = useMemo(() => {
+    // Categorize transactions properly
+    const revenueCategories: TransactionCategory[] = ['pharmacy_sale', 'consultation_fee', 'patient_payment'];
+    const expenseCategories: TransactionCategory[] = ['distributor_payment', 'doctor_expense', 'employee_payment', 'clinic_expense'];
     
-    return { totalAmount, avgAmount, categoryCounts, count: sortedTransactions.length };
+    const totalRevenue = sortedTransactions
+      .filter(t => revenueCategories.includes(t.category))
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    const totalExpenses = sortedTransactions
+      .filter(t => expenseCategories.includes(t.category))
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    const netProfit = totalRevenue - totalExpenses;
+    const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+    
+    return { 
+      totalRevenue, 
+      totalExpenses, 
+      netProfit, 
+      profitMargin,
+      transactionCount: sortedTransactions.length 
+    };
   }, [sortedTransactions]);
 
   return (
@@ -295,36 +313,52 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
         </button>
       </div>
 
-      {/* Summary Stats */}
+      {/* Business Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
-            <ClockIcon className="h-4 w-4 text-gray-400" />
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Total Transactions</p>
+            <ArrowTrendingUpIcon className="h-4 w-4 text-green-400" />
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Total Revenue</p>
           </div>
-          <p className="text-2xl font-bold text-white">{summaryStats.count}</p>
+          <p className="text-2xl font-bold text-green-400">{formatCurrency(businessMetrics.totalRevenue)}</p>
+          <p className="text-xs text-gray-500 mt-1">Sales + Consultations + Payments</p>
         </div>
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
-            <CurrencyDollarIcon className="h-4 w-4 text-gray-400" />
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Total Amount</p>
+            <ArrowTrendingDownIcon className="h-4 w-4 text-red-400" />
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Total Expenses</p>
           </div>
-          <p className="text-2xl font-bold text-green-400">{formatCurrency(summaryStats.totalAmount)}</p>
+          <p className="text-2xl font-bold text-red-400">{formatCurrency(businessMetrics.totalExpenses)}</p>
+          <p className="text-xs text-gray-500 mt-1">Payments + Salaries + Clinic Costs</p>
         </div>
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
-            <CurrencyDollarIcon className="h-4 w-4 text-gray-400" />
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Average Amount</p>
+            <ChartBarIcon className="h-4 w-4 text-blue-400" />
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Net Profit</p>
           </div>
-          <p className="text-2xl font-bold text-blue-400">{formatCurrency(summaryStats.avgAmount)}</p>
+          <p className={clsx(
+            "text-2xl font-bold",
+            businessMetrics.netProfit >= 0 ? "text-blue-400" : "text-red-400"
+          )}>
+            {formatCurrency(Math.abs(businessMetrics.netProfit))}
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            {businessMetrics.netProfit >= 0 ? "Profit" : "Loss"} for selected period
+          </p>
         </div>
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
-            <FunnelIcon className="h-4 w-4 text-gray-400" />
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Date Range</p>
+            <CalculatorIcon className="h-4 w-4 text-purple-400" />
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Profit Margin</p>
           </div>
-          <p className="text-sm font-bold text-white">
-            {new Date(filters.dateFrom).toLocaleDateString()} - {new Date(filters.dateTo).toLocaleDateString()}
+          <p className={clsx(
+            "text-2xl font-bold",
+            businessMetrics.profitMargin >= 0 ? "text-purple-400" : "text-red-400"
+          )}>
+            {businessMetrics.profitMargin.toFixed(1)}%
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            {businessMetrics.transactionCount} transactions analyzed
           </p>
         </div>
       </div>
