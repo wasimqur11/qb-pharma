@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  PlusIcon, 
+  PencilIcon, 
   XMarkIcon,
   CurrencyDollarIcon,
   UserGroupIcon,
@@ -10,42 +10,59 @@ import {
   BuildingOfficeIcon,
   CalendarIcon
 } from '@heroicons/react/24/outline';
-import type { TransactionCategory, StakeholderType } from '../types';
+import type { Transaction, TransactionCategory, StakeholderType } from '../types';
 import { useStakeholders } from '../contexts/StakeholderContext';
 import { useTransactions } from '../contexts/TransactionContext';
 // import { useToast } from '../contexts/ToastContext';
 import { TRANSACTION_TYPES } from '../constants/transactionTypes';
 import clsx from 'clsx';
 
-interface TransactionFormData {
-  category: TransactionCategory;
-  stakeholderId?: string;
-  stakeholderType?: StakeholderType;
-  amount: string;
-  description: string;
-  billNo?: string;
-  date: string;
-}
-
-interface TransactionFormProps {
+interface EditTransactionFormProps {
   isOpen: boolean;
+  transaction: Transaction | null;
   onClose: () => void;
-  onSubmit: (data: TransactionFormData) => void;
+  onSubmit: (transactionId: string, updatedData: Partial<Transaction>) => void;
 }
 
-const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSubmit }) => {
+const EditTransactionForm: React.FC<EditTransactionFormProps> = ({ 
+  isOpen, 
+  transaction, 
+  onClose, 
+  onSubmit 
+}) => {
   const { doctors, businessPartners, employees, distributors, patients } = useStakeholders();
   const { transactions } = useTransactions();
   // const { showError } = useToast();
-  const [formData, setFormData] = useState<TransactionFormData>({
-    category: 'pharmacy_sale',
+  
+  const [formData, setFormData] = useState({
+    category: '' as TransactionCategory,
+    stakeholderId: '',
+    stakeholderType: '' as StakeholderType,
     amount: '',
     description: '',
     billNo: '',
-    date: new Date().toISOString().split('T')[0]
+    date: ''
   });
 
+  const [originalData, setOriginalData] = useState<Transaction | null>(null);
+
   const transactionTypes = TRANSACTION_TYPES;
+
+  // Initialize form when transaction changes
+  useEffect(() => {
+    if (transaction) {
+      setOriginalData(transaction);
+      setFormData({
+        category: transaction.category,
+        stakeholderId: transaction.stakeholderId || '',
+        stakeholderType: transaction.stakeholderType || '' as StakeholderType,
+        amount: transaction.amount.toString(),
+        description: transaction.description,
+        billNo: (transaction as any).billNo || '',
+        date: transaction.date.toISOString().split('T')[0]
+      });
+    }
+  }, [transaction]);
 
   const getStakeholders = (type: StakeholderType) => {
     switch (type) {
@@ -53,7 +70,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
       case 'business_partner': return businessPartners;
       case 'employee': return employees;
       case 'distributor': return distributors;
-      case 'patient': return patients.filter(p => p.isActive); // Only active patients
+      case 'patient': return patients.filter(p => p.isActive);
       default: return [];
     }
   };
@@ -61,8 +78,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
   const selectedType = transactionTypes.find(t => t.id === formData.category);
   const stakeholders = selectedType?.stakeholderType ? getStakeholders(selectedType.stakeholderType as StakeholderType) : [];
 
-  // Check if daily entry already exists for specific transaction types
-  const checkDailyEntryLimit = (category: TransactionCategory, date: string): boolean => {
+  // Check if editing this transaction would violate daily entry limits
+  const checkDailyEntryLimit = (category: TransactionCategory, date: string, currentTransactionId: string): boolean => {
     const dailyLimitCategories = ['pharmacy_sale', 'consultation_fee'];
     
     if (!dailyLimitCategories.includes(category)) {
@@ -72,14 +89,18 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
     const selectedDate = new Date(date).toDateString();
     const existingEntry = transactions.find(t => 
       t.category === category && 
-      t.date.toDateString() === selectedDate
+      t.date.toDateString() === selectedDate &&
+      t.id !== currentTransactionId // Exclude current transaction being edited
     );
 
-    return !existingEntry; // Return true if no existing entry (allowed), false if entry exists (not allowed)
+    return !existingEntry;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!transaction) return;
+
     if (selectedType?.requiresStakeholder && !formData.stakeholderId) {
       alert('Missing Stakeholder: Please select a stakeholder for this transaction type.');
       return;
@@ -89,43 +110,42 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
       return;
     }
 
-    // Check daily entry limit for specific transaction types
-    if (!checkDailyEntryLimit(formData.category, formData.date)) {
+    // Check daily entry limit for specific transaction types (excluding current transaction)
+    if (!checkDailyEntryLimit(formData.category, formData.date, transaction.id)) {
       const categoryLabel = selectedType?.label || formData.category;
       const selectedDate = new Date(formData.date).toLocaleDateString();
-      alert(`Daily Limit Exceeded: Only one ${categoryLabel} entry is allowed per day. An entry already exists for ${selectedDate}.`);
+      alert(`Daily Limit Conflict: Only one ${categoryLabel} entry is allowed per day. Another entry already exists for ${selectedDate}.`);
       return;
     }
 
-    onSubmit({
-      ...formData,
-      stakeholderType: selectedType?.stakeholderType as StakeholderType
-    });
-    
-    // Reset form
-    setFormData({
-      category: 'pharmacy_sale',
-      amount: '',
-      description: '',
-      billNo: '',
-      date: new Date().toISOString().split('T')[0]
-    });
+    const updatedData: Partial<Transaction> = {
+      category: formData.category,
+      stakeholderId: formData.stakeholderId || undefined,
+      stakeholderType: formData.stakeholderType || undefined,
+      amount: parseFloat(formData.amount),
+      description: formData.description,
+      date: new Date(formData.date),
+      ...(formData.billNo && { billNo: formData.billNo })
+    };
+
+    onSubmit(transaction.id, updatedData);
+    onClose();
   };
 
   const handleCategoryChange = (category: TransactionCategory) => {
     setFormData(prev => ({
       ...prev,
       category,
-      stakeholderId: undefined,
-      stakeholderType: undefined
+      stakeholderId: '',
+      stakeholderType: '' as StakeholderType
     }));
   };
 
   // Get daily entry status for current selection
-  const dailyEntryExists = !checkDailyEntryLimit(formData.category, formData.date);
+  const dailyEntryExists = transaction ? !checkDailyEntryLimit(formData.category, formData.date, transaction.id) : false;
   const isDailyLimitCategory = ['pharmacy_sale', 'consultation_fee'].includes(formData.category);
 
-  if (!isOpen) return null;
+  if (!isOpen || !transaction) return null;
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -133,12 +153,12 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-700 bg-gray-750">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-600 rounded-lg shadow-lg">
-              <PlusIcon className="h-4 w-4 text-white" />
+            <div className="p-2 bg-green-600 rounded-lg shadow-lg">
+              <PencilIcon className="h-4 w-4 text-white" />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-white">Add Transaction</h2>
-              <p className="text-xs text-gray-400">Record new financial transaction</p>
+              <h2 className="text-base font-semibold text-white">Edit Transaction</h2>
+              <p className="text-xs text-gray-400">Modify transaction details</p>
             </div>
           </div>
           <button 
@@ -158,7 +178,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
                 <select
                   value={formData.category}
                   onChange={(e) => handleCategoryChange(e.target.value as TransactionCategory)}
-                  className="w-full px-3 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors appearance-none cursor-pointer"
+                  className="w-full px-3 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors appearance-none cursor-pointer"
                   required
                 >
                   {transactionTypes.map(type => (
@@ -183,9 +203,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
                     <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                   </svg>
                   <div>
-                    <p className="text-sm font-medium text-amber-300">Daily Entry Already Exists</p>
+                    <p className="text-sm font-medium text-amber-300">Daily Entry Conflict</p>
                     <p className="text-xs text-amber-400">
-                      A {selectedType?.label} entry already exists for {new Date(formData.date).toLocaleDateString()}. 
+                      Another {selectedType?.label} entry exists for {new Date(formData.date).toLocaleDateString()}. 
                       Only one entry per day is allowed for this transaction type.
                     </p>
                   </div>
@@ -202,7 +222,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
                 <select
                   value={formData.stakeholderId || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, stakeholderId: e.target.value }))}
-                  className="w-full px-3 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  className="w-full px-3 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors"
                   required
                 >
                   <option value="">Choose {selectedType.stakeholderType?.replace('_', ' ')}</option>
@@ -227,7 +247,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
                     type="number"
                     value={formData.amount}
                     onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
-                    className="w-full pl-10 pr-3 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    className="w-full pl-10 pr-3 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors"
                     placeholder="0.00"
                     min="0"
                     step="0.01"
@@ -247,7 +267,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
                     type="date"
                     value={formData.date}
                     onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
-                    className="w-full pl-10 pr-3 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    className="w-full pl-10 pr-3 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors"
                     required
                   />
                 </div>
@@ -260,7 +280,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
               <textarea
                 value={formData.description}
                 onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                className="w-full px-3 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none transition-colors"
+                className="w-full px-3 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 resize-none transition-colors"
                 rows={3}
                 placeholder="Enter transaction details..."
                 required
@@ -275,7 +295,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
                   type="text"
                   value={formData.billNo || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, billNo: e.target.value }))}
-                  className="w-full px-3 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  className="w-full px-3 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors"
                   placeholder="Enter bill/invoice number..."
                 />
               </div>
@@ -301,10 +321,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
                 "flex-1 px-4 py-2 rounded-lg transition-colors font-medium text-sm",
                 isDailyLimitCategory && dailyEntryExists
                   ? "bg-gray-600 text-gray-400 cursor-not-allowed"
-                  : "bg-blue-600 text-white hover:bg-blue-700"
+                  : "bg-green-600 text-white hover:bg-green-700"
               )}
             >
-              {isDailyLimitCategory && dailyEntryExists ? "Entry Already Exists" : "Add Transaction"}
+              {isDailyLimitCategory && dailyEntryExists ? "Cannot Save - Conflict" : "Save Changes"}
             </button>
           </div>
         </div>
@@ -313,4 +333,4 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
   );
 };
 
-export default TransactionForm;
+export default EditTransactionForm;

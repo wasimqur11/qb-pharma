@@ -17,15 +17,19 @@ interface TransactionContextType {
   getTransactionsByType: (category: string) => Transaction[];
   getTotalRevenue: () => number;
   getTodayRevenue: () => number;
+  getTotalExpenses: () => number;
   getMonthlyProfit: () => number;
   getCashPosition: () => number;
   
   // Business-specific analytics
   getPharmacyRevenue: () => number;
   getDoctorRevenue: () => number;
+  getPharmacyExpenses: () => number;
+  getDoctorExpenses: () => number;
   getTodayPharmacyRevenue: () => number;
   getTodayDoctorRevenue: () => number;
   getPharmacyCashPosition: () => number;
+  getDoctorCashPosition: () => number;
   getPharmacyMonthlyProfit: () => number;
   
   // Payables
@@ -38,10 +42,23 @@ interface TransactionContextType {
   // Utilities
   getTransactionById: (id: string) => Transaction | undefined;
   getStakeholderTransactions: (stakeholderId: string) => Transaction[];
+  getPeriodFilteredStats: (fromDate: Date, toDate: Date) => {
+    pharmacyRevenue: number;
+    doctorRevenue: number;
+    totalRevenue: number;
+    pharmacyExpenses: number;
+    doctorExpenses: number;
+    totalExpenses: number;
+    pharmacyCashPosition: number;
+    doctorCashPosition: number;
+    cashPosition: number;
+    transactionCount: number;
+  };
   
   // Distributor-specific functions
   getDistributorPaymentsDue: () => { id: string; name: string; amountDue: number; dueDate: string }[];
   addDistributorCreditPurchase: (distributorId: string, amount: number, description: string) => void;
+  calculateDistributorCurrentBalance: (distributorId: string) => number;
 }
 
 const TransactionContext = createContext<TransactionContextType | undefined>(undefined);
@@ -77,13 +94,16 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
       updateEmployeeSalaryDueDate(newTransaction.stakeholderId);
     }
     
-    // Auto-update distributor credit balance if this is a credit purchase
-    if (newTransaction.category === 'distributor_credit_purchase' && newTransaction.stakeholderId) {
+    // Auto-update distributor credit balance if this is a credit purchase or credit note
+    if ((newTransaction.category === 'distributor_credit_purchase' || newTransaction.category === 'distributor_credit_note') && newTransaction.stakeholderId) {
       // Use callback to get current distributor state to avoid stale closure
       const currentDistributor = distributors.find(d => d.id === newTransaction.stakeholderId);
       if (currentDistributor) {
+        const balanceChange = newTransaction.category === 'distributor_credit_purchase' 
+          ? newTransaction.amount  // Add for credit purchase
+          : -newTransaction.amount; // Subtract for credit note (return)
         updateDistributor(newTransaction.stakeholderId, {
-          creditBalance: currentDistributor.creditBalance + newTransaction.amount
+          creditBalance: Math.max(0, currentDistributor.creditBalance + balanceChange)
         });
       }
     }
@@ -132,6 +152,12 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
       .reduce((sum, t) => sum + t.amount, 0);
   };
 
+  const getDoctorExpenses = () => {
+    return transactions
+      .filter(t => t.category === 'doctor_expense')
+      .reduce((sum, t) => sum + t.amount, 0);
+  };
+
   const getTotalRevenue = () => {
     return getPharmacyRevenue() + getDoctorRevenue();
   };
@@ -162,13 +188,13 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
 
   const getPharmacyExpenses = () => {
     return transactions
-      .filter(t => ['distributor_payment', 'employee_payment', 'clinic_expense', 'business_partner_payment'].includes(t.category))
+      .filter(t => ['distributor_payment', 'employee_payment', 'clinic_expense'].includes(t.category))
       .reduce((sum, t) => sum + t.amount, 0);
   };
 
   const getTotalExpenses = () => {
     return transactions
-      .filter(t => ['distributor_payment', 'doctor_expense', 'employee_payment', 'clinic_expense', 'business_partner_payment'].includes(t.category))
+      .filter(t => ['distributor_payment', 'doctor_expense', 'employee_payment', 'clinic_expense', 'sales_profit_distribution'].includes(t.category))
       .reduce((sum, t) => sum + t.amount, 0);
   };
 
@@ -185,7 +211,7 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     
     const monthlyPharmacyExpenses = transactions
       .filter(t => 
-        ['distributor_payment', 'employee_payment', 'clinic_expense', 'business_partner_payment'].includes(t.category) &&
+        ['distributor_payment', 'employee_payment', 'clinic_expense'].includes(t.category) &&
         t.date >= firstDayOfMonth
       )
       .reduce((sum, t) => sum + t.amount, 0);
@@ -206,7 +232,7 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     
     const monthlyExpenses = transactions
       .filter(t => 
-        ['distributor_payment', 'doctor_expense', 'employee_payment', 'clinic_expense', 'business_partner_payment'].includes(t.category) &&
+        ['distributor_payment', 'doctor_expense', 'employee_payment', 'clinic_expense', 'sales_profit_distribution'].includes(t.category) &&
         t.date >= firstDayOfMonth
       )
       .reduce((sum, t) => sum + t.amount, 0);
@@ -216,6 +242,10 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
 
   const getPharmacyCashPosition = () => {
     return getPharmacyRevenue() - getPharmacyExpenses();
+  };
+
+  const getDoctorCashPosition = () => {
+    return getDoctorRevenue() - getDoctorExpenses();
   };
 
   const getCashPosition = () => {
@@ -267,7 +297,7 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
       const totalEarned = (totalProfit * partner.ownershipPercentage) / 100;
       
       const totalPaid = partnerTransactions
-        .filter(t => t.category === 'business_partner_payment')
+        .filter(t => t.category === 'sales_profit_distribution')
         .reduce((sum, t) => sum + t.amount, 0);
       
       const netPayable = totalEarned - totalPaid;
@@ -332,12 +362,25 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     }).filter(payable => payable.netPayable > 0);
   };
 
+  // Calculate current distributor credit balance from transactions
+  const calculateDistributorCurrentBalance = (distributorId: string): number => {
+    const distributor = distributors.find(d => d.id === distributorId);
+    if (!distributor) return 0;
+    
+    // Since the distributor's creditBalance is automatically maintained by addTransaction(),
+    // we can simply return the stored balance to avoid double-counting transactions
+    return distributor.creditBalance;
+  };
+
   const getDistributorCredits = () => {
-    return distributors.map(distributor => ({
-      id: distributor.id,
-      name: distributor.name,
-      creditBalance: distributor.creditBalance
-    })).filter(dist => dist.creditBalance > 0);
+    return distributors.map(distributor => {
+      const calculatedBalance = calculateDistributorCurrentBalance(distributor.id);
+      return {
+        id: distributor.id,
+        name: distributor.name,
+        creditBalance: calculatedBalance
+      };
+    }).filter(dist => dist.creditBalance > 0);
   };
 
   const getPatientCredits = () => {
@@ -352,18 +395,22 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     return {
       // Combined metrics (all businesses)
       todayRevenue: getTodayRevenue(),
+      totalExpenses: getTotalExpenses(),
       cashPosition: getCashPosition(),
       monthlyProfit: getMonthlyProfit(),
       
       // Pharmacy-specific metrics (pharmacy business only)
       pharmacyRevenue: getPharmacyRevenue(),
       todayPharmacyRevenue: getTodayPharmacyRevenue(),
+      pharmacyExpenses: getPharmacyExpenses(),
       pharmacyCashPosition: getPharmacyCashPosition(),
       pharmacyMonthlyProfit: getPharmacyMonthlyProfit(),
       
       // Doctor-specific metrics (doctor accounts only)
       doctorRevenue: getDoctorRevenue(),
       todayDoctorRevenue: getTodayDoctorRevenue(),
+      doctorExpenses: getDoctorExpenses(),
+      doctorCashPosition: getDoctorCashPosition(),
       
       // Payables
       doctorPayables: getDoctorPayables(),
@@ -383,6 +430,60 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     return transactions.filter(t => t.category === category);
   };
 
+  // Period-filtered analytics functions
+  const getPeriodFilteredStats = (fromDate: Date, toDate: Date) => {
+    const periodTransactions = getTransactionsByDateRange(fromDate, toDate);
+    
+    const getPharmacyRevenueForPeriod = () => {
+      return periodTransactions
+        .filter(t => ['pharmacy_sale', 'patient_payment'].includes(t.category))
+        .reduce((sum, t) => sum + t.amount, 0);
+    };
+
+    const getDoctorRevenueForPeriod = () => {
+      return periodTransactions
+        .filter(t => t.category === 'consultation_fee')
+        .reduce((sum, t) => sum + t.amount, 0);
+    };
+
+    const getPharmacyExpensesForPeriod = () => {
+      return periodTransactions
+        .filter(t => ['distributor_payment', 'employee_payment', 'clinic_expense'].includes(t.category))
+        .reduce((sum, t) => sum + t.amount, 0);
+    };
+
+    const getDoctorExpensesForPeriod = () => {
+      return periodTransactions
+        .filter(t => t.category === 'doctor_expense')
+        .reduce((sum, t) => sum + t.amount, 0);
+    };
+
+    const getTotalExpensesForPeriod = () => {
+      return periodTransactions
+        .filter(t => ['distributor_payment', 'doctor_expense', 'employee_payment', 'clinic_expense', 'sales_profit_distribution'].includes(t.category))
+        .reduce((sum, t) => sum + t.amount, 0);
+    };
+
+    const pharmacyRevenue = getPharmacyRevenueForPeriod();
+    const doctorRevenue = getDoctorRevenueForPeriod();
+    const pharmacyExpenses = getPharmacyExpensesForPeriod();
+    const doctorExpenses = getDoctorExpensesForPeriod();
+    const totalExpenses = getTotalExpensesForPeriod();
+
+    return {
+      pharmacyRevenue,
+      doctorRevenue,
+      totalRevenue: pharmacyRevenue + doctorRevenue,
+      pharmacyExpenses,
+      doctorExpenses,
+      totalExpenses,
+      pharmacyCashPosition: pharmacyRevenue - pharmacyExpenses,
+      doctorCashPosition: doctorRevenue - doctorExpenses,
+      cashPosition: (pharmacyRevenue + doctorRevenue) - totalExpenses,
+      transactionCount: periodTransactions.length
+    };
+  };
+
   const getTransactionById = (id: string) => {
     return transactions.find(t => t.id === id);
   };
@@ -398,10 +499,12 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     return distributors
       .filter(distributor => {
         const dueDate = new Date(distributor.nextPaymentDue);
-        return dueDate <= today && distributor.creditBalance > 0;
+        const currentBalance = calculateDistributorCurrentBalance(distributor.id);
+        return dueDate <= today && currentBalance > 0;
       })
       .map(distributor => {
-        const amountDue = (distributor.creditBalance * distributor.paymentPercentage) / 100;
+        const currentBalance = calculateDistributorCurrentBalance(distributor.id);
+        const amountDue = (currentBalance * distributor.paymentPercentage) / 100;
         return {
           id: distributor.id,
           name: distributor.name,
@@ -451,15 +554,19 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     getTransactionsByType,
     getTotalRevenue,
     getTodayRevenue,
+    getTotalExpenses,
     getMonthlyProfit,
     getCashPosition,
     
     // Business-specific analytics
     getPharmacyRevenue,
     getDoctorRevenue,
+    getPharmacyExpenses,
+    getDoctorExpenses,
     getTodayPharmacyRevenue,
     getTodayDoctorRevenue,
     getPharmacyCashPosition,
+    getDoctorCashPosition,
     getPharmacyMonthlyProfit,
     
     // Payables
@@ -472,10 +579,12 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     // Utilities
     getTransactionById,
     getStakeholderTransactions,
+    getPeriodFilteredStats,
     
     // Distributor-specific functions
     getDistributorPaymentsDue,
-    addDistributorCreditPurchase
+    addDistributorCreditPurchase,
+    calculateDistributorCurrentBalance
   };
 
   return (

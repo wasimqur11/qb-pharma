@@ -7,8 +7,10 @@ import {
 import type { DashboardStats, PayableBalance, Transaction } from '../types';
 import { useTransactions } from '../contexts/TransactionContext';
 import { useAuth } from '../contexts/AuthContext';
+// import { useToast } from '../contexts/ToastContext';
 import qbLogo from '../assets/qblogo.png';
 import TransactionForm from './TransactionForm';
+import EditTransactionForm from './EditTransactionForm';
 import StakeholderManagement from './StakeholderManagement';
 import AccountStatement from './AccountStatement';
 import PaymentProcessor from './PaymentProcessor';
@@ -31,26 +33,51 @@ import {
 import clsx from 'clsx';
 
 const DarkCorporateDashboard: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'pharmacy_dashboard' | 'doctor_dashboard' | 'combined_analytics' | 'reports' | 'stakeholders' | 'patients' | 'statements' | 'business_statement' | 'doctor_statement' | 'distributor_statement' | 'configuration'>('pharmacy_dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'reports' | 'stakeholders' | 'patients' | 'statements' | 'business_statement' | 'doctor_statement' | 'distributor_statement' | 'configuration'>('dashboard');
   const [showTransactionForm, setShowTransactionForm] = useState(false);
+  const [showEditTransactionForm, setShowEditTransactionForm] = useState(false);
+  const [selectedTransactionForEdit, setSelectedTransactionForEdit] = useState<Transaction | null>(null);
   const [showPaymentProcessor, setShowPaymentProcessor] = useState(false);
   
   const { 
     transactions, 
-    addTransaction, 
+    addTransaction,
+    updateTransaction,
     getDashboardStats,
-    getDistributorPaymentsDue 
+    getDistributorPaymentsDue,
+    getPeriodFilteredStats
   } = useTransactions();
   
   const { user, logout } = useAuth();
+  // const { showSuccess } = useToast();
   const [dateRange, setDateRange] = useState({
     from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days ago
     to: new Date().toISOString().split('T')[0]
   });
   const [selectedPeriod, setSelectedPeriod] = useState('30days');
   
-  // Get real-time dashboard stats from transaction context
-  const stats: DashboardStats = getDashboardStats();
+  // Get period-filtered stats based on selected date range
+  const fromDate = new Date(dateRange.from);
+  const toDate = new Date(dateRange.to);
+  const periodStats = getPeriodFilteredStats(fromDate, toDate);
+  
+  // Merge with all-time stats for non-filtered data (like payables)
+  const allTimeStats = getDashboardStats();
+  const stats: DashboardStats = {
+    ...allTimeStats,
+    // Override with period-filtered data
+    todayRevenue: periodStats.totalRevenue, // Using period revenue as "current period revenue"
+    totalExpenses: periodStats.totalExpenses,
+    cashPosition: periodStats.cashPosition,
+    pharmacyRevenue: periodStats.pharmacyRevenue,
+    todayPharmacyRevenue: periodStats.pharmacyRevenue,
+    pharmacyExpenses: periodStats.pharmacyExpenses,
+    pharmacyCashPosition: periodStats.pharmacyCashPosition,
+    doctorRevenue: periodStats.doctorRevenue,
+    todayDoctorRevenue: periodStats.doctorRevenue,
+    doctorExpenses: periodStats.doctorExpenses,
+    doctorCashPosition: periodStats.doctorCashPosition
+  };
 
   const formatCurrency = (amount: number) => {
     return `₹${amount.toLocaleString()}`;
@@ -193,6 +220,7 @@ const DarkCorporateDashboard: React.FC = () => {
       stakeholderType: data.stakeholderType,
       amount: parseFloat(data.amount),
       description: data.description,
+      billNo: data.billNo,
       date: new Date(data.date),
       createdBy: 'Admin User'
     });
@@ -200,7 +228,21 @@ const DarkCorporateDashboard: React.FC = () => {
     setShowTransactionForm(false);
     
     // Show success message
-    alert(`Transaction added successfully: ${formatCurrency(parseFloat(data.amount))} for ${data.description}`);
+    alert(`Transaction Added: ${formatCurrency(parseFloat(data.amount))} transaction for ${data.description} has been recorded successfully.`);
+  };
+
+  const handleEditTransaction = (transaction: Transaction) => {
+    setSelectedTransactionForEdit(transaction);
+    setShowEditTransactionForm(true);
+  };
+
+  const handleEditTransactionSubmit = (transactionId: string, updatedData: Partial<Transaction>) => {
+    updateTransaction(transactionId, updatedData);
+    setShowEditTransactionForm(false);
+    setSelectedTransactionForEdit(null);
+    
+    // Show success message
+    alert('Transaction Updated: The transaction has been updated successfully.');
   };
 
   const handlePaymentProcessed = (batch: any) => {
@@ -350,9 +392,7 @@ const DarkCorporateDashboard: React.FC = () => {
         <nav className="flex items-center gap-1 -mb-px overflow-x-auto scrollbar-hide">
           {/* Primary Navigation */}
           {[
-            { id: 'pharmacy_dashboard', label: 'Pharmacy', icon: BuildingOfficeIcon, category: 'dashboard', tooltip: 'Pharmacy business dashboard and analytics' },
-            { id: 'doctor_dashboard', label: 'Doctor', icon: UserGroupIcon, category: 'dashboard', tooltip: 'Doctor consultations and revenue analytics' },
-            { id: 'combined_analytics', label: 'Analytics', icon: ChartBarIcon, category: 'dashboard', tooltip: 'Combined business analytics and insights' },
+            { id: 'dashboard', label: 'Dashboard', icon: Squares2X2Icon, category: 'dashboard', tooltip: 'Comprehensive business dashboard and analytics' },
           ].map(item => (
             <button
               key={item.id}
@@ -399,7 +439,7 @@ const DarkCorporateDashboard: React.FC = () => {
           
           {/* Reports & Statements */}
           {[
-            { id: 'reports', label: 'Reports', icon: DocumentTextIcon, category: 'reports', tooltip: 'Financial reports and business analytics' },
+            { id: 'reports', label: 'Master Business Report', icon: DocumentTextIcon, category: 'reports', tooltip: 'Comprehensive business analytics and transaction reports' },
             { id: 'statements', label: 'Statements', icon: DocumentArrowUpIcon, category: 'reports', tooltip: 'Account statements and transaction history' },
           ].map(item => (
             <button
@@ -705,6 +745,194 @@ const DarkCorporateDashboard: React.FC = () => {
     </div>
   );
 
+  // Unified Dashboard combining Pharmacy and Doctor metrics
+  const renderUnifiedDashboard = () => {
+    // Calculate business summary for unified dashboard
+    const businessSummary = {
+      totalRevenue: stats.pharmacyRevenue + stats.doctorRevenue,
+      pharmacyRevenue: stats.pharmacyRevenue,
+      doctorRevenue: stats.doctorRevenue,
+      totalExpenses: stats.totalExpenses,
+      pharmacyExpenses: stats.pharmacyExpenses,
+      doctorExpenses: stats.doctorExpenses,
+      totalCashInHand: stats.cashPosition,
+      pharmacyCash: stats.pharmacyCashPosition,
+      doctorCash: stats.doctorCashPosition
+    };
+
+    // Generate combined revenue chart data (pharmacy + doctor revenue)
+    const getUnifiedRevenueChartData = () => {
+      const days = 7;
+      const data = [];
+      
+      for (let i = days - 1; i >= 0; i--) {
+        const date = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
+        const dayTransactions = transactions.filter(t => 
+          t.date.toDateString() === date.toDateString() &&
+          ['pharmacy_sale', 'consultation_fee', 'patient_payment'].includes(t.category)
+        );
+        
+        const revenue = dayTransactions.reduce((sum, t) => sum + t.amount, 0);
+        
+        data.push({
+          date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          revenue
+        });
+      }
+      
+      return data;
+    };
+
+    return (
+      <div className="space-y-6">
+        <DateFilter />
+        
+        {/* Business Performance Summary */}
+        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Business Performance Summary</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-4">
+            <div className="bg-gray-750 rounded-lg p-4">
+              <p className="text-sm text-gray-400">Total Revenue</p>
+              <p className="text-2xl font-bold text-green-400">{formatCurrency(businessSummary.totalRevenue)}</p>
+              <p className="text-xs text-gray-500 mt-1">All-time earnings</p>
+            </div>
+            <div className="bg-gray-750 rounded-lg p-4">
+              <p className="text-sm text-gray-400">Pharmacy Revenue</p>
+              <p className="text-2xl font-bold text-blue-400">{formatCurrency(businessSummary.pharmacyRevenue)}</p>
+              <p className="text-xs text-gray-500 mt-1">Pharmacy sales only</p>
+            </div>
+            <div className="bg-gray-750 rounded-lg p-4">
+              <p className="text-sm text-gray-400">Doctor Revenue</p>
+              <p className="text-2xl font-bold text-purple-400">{formatCurrency(businessSummary.doctorRevenue)}</p>
+              <p className="text-xs text-gray-500 mt-1">Consultation fees</p>
+            </div>
+            <div className="bg-gray-750 rounded-lg p-4">
+              <p className="text-sm text-gray-400">Pharmacy Expenses</p>
+              <p className="text-2xl font-bold text-red-300">{formatCurrency(businessSummary.pharmacyExpenses)}</p>
+              <p className="text-xs text-gray-500 mt-1">Pharmacy-related costs</p>
+            </div>
+            <div className="bg-gray-750 rounded-lg p-4">
+              <p className="text-sm text-gray-400">Clinical Expenses</p>
+              <p className="text-2xl font-bold text-red-500">{formatCurrency(businessSummary.doctorExpenses)}</p>
+              <p className="text-xs text-gray-500 mt-1">Doctor-related costs</p>
+            </div>
+            <div className="bg-gray-750 rounded-lg p-4">
+              <p className="text-sm text-gray-400">Total Expenses</p>
+              <p className="text-2xl font-bold text-red-400">{formatCurrency(businessSummary.totalExpenses)}</p>
+              <p className="text-xs text-gray-500 mt-1">All expenses combined</p>
+            </div>
+            <div className="bg-gray-750 rounded-lg p-4">
+              <p className="text-sm text-gray-400">Pharmacy Cash</p>
+              <p className="text-2xl font-bold text-cyan-400">{formatCurrency(businessSummary.pharmacyCash)}</p>
+              <p className="text-xs text-gray-500 mt-1">Pharmacy net position</p>
+            </div>
+            <div className="bg-gray-750 rounded-lg p-4">
+              <p className="text-sm text-gray-400">Clinical Cash</p>
+              <p className="text-2xl font-bold text-orange-400">{formatCurrency(businessSummary.doctorCash)}</p>
+              <p className="text-xs text-gray-500 mt-1">Doctor services net</p>
+            </div>
+            <div className="bg-gray-750 rounded-lg p-4 border-l-4 border-green-500">
+              <p className="text-sm text-gray-400">Total Cash in Hand</p>
+              <p className="text-2xl font-bold text-green-400">{formatCurrency(businessSummary.totalCashInHand)}</p>
+              <p className="text-xs text-gray-500 mt-1">Combined cash position</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Key Metrics */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <MetricCard
+            title="Today's Total Revenue"
+            value={formatCurrency(stats.todayRevenue)}
+            change="+0%"
+            changeType="increase"
+            subtitle="Combined Pharmacy + Doctor"
+            icon={CurrencyDollarIcon}
+          />
+          <MetricCard
+            title="Today's Pharmacy Sales"
+            value={formatCurrency(stats.todayPharmacyRevenue)}
+            change="+0%"
+            changeType="increase"
+            subtitle="Pharmacy revenue only"
+            icon={BanknotesIcon}
+          />
+          <MetricCard
+            title="Today's Doctor Revenue"
+            value={formatCurrency(stats.todayDoctorRevenue)}
+            change="+0%"
+            changeType="increase"
+            subtitle="Consultation fees"
+            icon={UserGroupIcon}
+          />
+          <MetricCard
+            title="Monthly Profit"
+            value={formatCurrency(stats.monthlyProfit)}
+            change="+0%"
+            changeType="increase"
+            subtitle="This month's profit"
+            icon={ChartBarIcon}
+          />
+        </div>
+
+        {/* Charts Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <ChartCard title="Revenue Trend" subtitle="Combined Pharmacy + Doctor Revenue" height="300px">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={getUnifiedRevenueChartData()}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                <XAxis dataKey="date" stroke="#9ca3af" fontSize={11} />
+                <YAxis stroke="#9ca3af" fontSize={11} />
+                <Tooltip formatter={(value) => formatCurrency(value as number)} contentStyle={darkTooltipStyle} />
+                <Line type="monotone" dataKey="revenue" stroke="#3b82f6" strokeWidth={2} dot={{ fill: '#3b82f6', strokeWidth: 2, r: 3 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </ChartCard>
+          
+          <ChartCard title="Monthly Performance" subtitle="Revenue vs Expenses vs Profit" height="300px">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={getMonthlyTrendData()} margin={{ top: 10, right: 15, left: 10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                <XAxis dataKey="month" stroke="#9ca3af" fontSize={11} />
+                <YAxis stroke="#9ca3af" fontSize={11} />
+                <Tooltip formatter={(value) => formatCurrency(value as number)} contentStyle={darkTooltipStyle} />
+                <Legend wrapperStyle={{ fontSize: '10px' }} />
+                <Bar dataKey="revenue" fill="#3b82f6" name="Revenue" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="expenses" fill="#ef4444" name="Expenses" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="profit" fill="#10b981" name="Profit" radius={[2, 2, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartCard>
+        </div>
+
+        {/* Payables and Outstanding Items */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4">
+          <PayablesTable payables={stats.employeeSalaryDue} title="Employee Salary Due" />
+          <PayablesTable payables={stats.businessPartnerPayables} title="Business Partner Outstanding" />
+          <PayablesTable payables={stats.doctorPayables} title="Doctor Outstanding Payments" />
+          <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
+            <h4 className="text-sm font-semibold text-white mb-3">Distributor Credits</h4>
+            {stats.distributorCredits.length > 0 ? (
+              <div className="space-y-2">
+                {stats.distributorCredits.slice(0, 3).map(credit => (
+                  <div key={credit.id} className="flex justify-between items-center py-1">
+                    <span className="text-xs text-gray-300 truncate">{credit.name}</span>
+                    <span className="text-xs font-medium text-orange-400">{formatCurrency(credit.creditBalance)}</span>
+                  </div>
+                ))}
+                {stats.distributorCredits.length > 3 && (
+                  <p className="text-xs text-gray-500">+{stats.distributorCredits.length - 3} more</p>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-500">No outstanding credits</p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderPharmacyDashboard = () => (
     <div className="space-y-5">
       <DateFilter />
@@ -978,9 +1206,13 @@ const DarkCorporateDashboard: React.FC = () => {
       pharmacyRevenue: stats.pharmacyRevenue,
       doctorRevenue: stats.doctorRevenue,
       totalRevenue: stats.pharmacyRevenue + stats.doctorRevenue,
+      totalExpenses: stats.totalExpenses,
+      pharmacyExpenses: stats.pharmacyExpenses,
+      doctorExpenses: stats.doctorExpenses,
       pharmacyProfit: stats.pharmacyMonthlyProfit,
-      totalPayables: [...stats.doctorPayables, ...stats.businessPartnerPayables, ...stats.employeeSalaryDue]
-        .reduce((sum, p) => sum + p.netPayable, 0),
+      totalCashInHand: stats.cashPosition,
+      pharmacyCash: stats.pharmacyCashPosition,
+      doctorCash: stats.doctorCashPosition,
       distributorCredits: stats.distributorCredits.reduce((sum, d) => sum + d.creditBalance, 0)
     };
 
@@ -989,7 +1221,7 @@ const DarkCorporateDashboard: React.FC = () => {
         {/* Business Performance Summary */}
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
           <h3 className="text-lg font-semibold text-white mb-4">Business Performance Summary</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-4">
             <div className="bg-gray-750 rounded-lg p-4">
               <p className="text-sm text-gray-400">Total Revenue</p>
               <p className="text-2xl font-bold text-green-400">{formatCurrency(businessSummary.totalRevenue)}</p>
@@ -1006,9 +1238,34 @@ const DarkCorporateDashboard: React.FC = () => {
               <p className="text-xs text-gray-500 mt-1">Consultation fees</p>
             </div>
             <div className="bg-gray-750 rounded-lg p-4">
-              <p className="text-sm text-gray-400">Outstanding Payables</p>
-              <p className="text-2xl font-bold text-red-400">{formatCurrency(businessSummary.totalPayables)}</p>
-              <p className="text-xs text-gray-500 mt-1">Amount owed</p>
+              <p className="text-sm text-gray-400">Pharmacy Expenses</p>
+              <p className="text-2xl font-bold text-red-300">{formatCurrency(businessSummary.pharmacyExpenses)}</p>
+              <p className="text-xs text-gray-500 mt-1">Pharmacy-related costs</p>
+            </div>
+            <div className="bg-gray-750 rounded-lg p-4">
+              <p className="text-sm text-gray-400">Clinical Expenses</p>
+              <p className="text-2xl font-bold text-red-500">{formatCurrency(businessSummary.doctorExpenses)}</p>
+              <p className="text-xs text-gray-500 mt-1">Doctor-related costs</p>
+            </div>
+            <div className="bg-gray-750 rounded-lg p-4">
+              <p className="text-sm text-gray-400">Total Expenses</p>
+              <p className="text-2xl font-bold text-red-400">{formatCurrency(businessSummary.totalExpenses)}</p>
+              <p className="text-xs text-gray-500 mt-1">All expenses combined</p>
+            </div>
+            <div className="bg-gray-750 rounded-lg p-4">
+              <p className="text-sm text-gray-400">Pharmacy Cash</p>
+              <p className="text-2xl font-bold text-cyan-400">{formatCurrency(businessSummary.pharmacyCash)}</p>
+              <p className="text-xs text-gray-500 mt-1">Pharmacy net position</p>
+            </div>
+            <div className="bg-gray-750 rounded-lg p-4">
+              <p className="text-sm text-gray-400">Clinical Cash</p>
+              <p className="text-2xl font-bold text-orange-400">{formatCurrency(businessSummary.doctorCash)}</p>
+              <p className="text-xs text-gray-500 mt-1">Doctor services net</p>
+            </div>
+            <div className="bg-gray-750 rounded-lg p-4 border-l-4 border-green-500">
+              <p className="text-sm text-gray-400">Total Cash in Hand</p>
+              <p className="text-2xl font-bold text-green-400">{formatCurrency(businessSummary.totalCashInHand)}</p>
+              <p className="text-xs text-gray-500 mt-1">Combined cash position</p>
             </div>
           </div>
         </div>
@@ -1066,7 +1323,7 @@ const DarkCorporateDashboard: React.FC = () => {
         </div>
 
         {/* Transaction History */}
-        <TransactionHistory transactions={transactions} />
+        <TransactionHistory transactions={transactions} onEditTransaction={handleEditTransaction} />
 
         {/* Payables Summary */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1140,9 +1397,7 @@ const DarkCorporateDashboard: React.FC = () => {
           </div>
         </div>
 
-        {activeTab === 'pharmacy_dashboard' && renderPharmacyDashboard()}
-        {activeTab === 'doctor_dashboard' && renderDoctorDashboard()}
-        {activeTab === 'combined_analytics' && renderCombinedAnalytics()}
+        {activeTab === 'dashboard' && renderUnifiedDashboard()}
         {activeTab === 'reports' && renderReports()}
         {activeTab === 'stakeholders' && <StakeholderManagement />}
         {activeTab === 'patients' && <PatientManagement />}
@@ -1157,6 +1412,16 @@ const DarkCorporateDashboard: React.FC = () => {
         isOpen={showTransactionForm}
         onClose={() => setShowTransactionForm(false)}
         onSubmit={handleTransactionSubmit}
+      />
+
+      <EditTransactionForm
+        isOpen={showEditTransactionForm}
+        transaction={selectedTransactionForEdit}
+        onClose={() => {
+          setShowEditTransactionForm(false);
+          setSelectedTransactionForEdit(null);
+        }}
+        onSubmit={handleEditTransactionSubmit}
       />
 
       <PaymentProcessor

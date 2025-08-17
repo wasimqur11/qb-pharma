@@ -181,6 +181,15 @@ const DoctorAccountStatement: React.FC = () => {
     return category === 'consultation_fee' ? 'Consultation Fee' : 'Doctor Expense';
   };
 
+  // Helper function to determine cash flow impact
+  const getCashFlowImpact = (category: 'consultation_fee' | 'doctor_expense'): { type: 'Revenue' | 'Expense', color: string } => {
+    if (category === 'consultation_fee') {
+      return { type: 'Revenue', color: 'text-green-400' };
+    } else {
+      return { type: 'Expense', color: 'text-red-400' };
+    }
+  };
+
   const handlePeriodChange = (period: string) => {
     setSelectedPeriod(period);
     const today = new Date();
@@ -411,6 +420,7 @@ const DoctorAccountStatement: React.FC = () => {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Date</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Reference</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Type</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">Cash Flow Impact</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Description</th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Debit</th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Credit</th>
@@ -434,6 +444,20 @@ const DoctorAccountStatement: React.FC = () => {
                           {getCategoryLabel(transaction.category)}
                         </span>
                       </div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-center">
+                      {(() => {
+                        const impact = getCashFlowImpact(transaction.category);
+                        return (
+                          <span className={clsx('text-xs font-semibold px-2 py-1 rounded-full', 
+                            impact.type === 'Revenue' ? 'bg-green-900/50 text-green-400' :
+                            impact.type === 'Expense' ? 'bg-red-900/50 text-red-400' :
+                            'bg-gray-900/50 text-gray-400'
+                          )}>
+                            {impact.type}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-300 max-w-xs">
                       <div>
@@ -467,7 +491,7 @@ const DoctorAccountStatement: React.FC = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
+                  <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
                     No doctor transactions found for the selected criteria
                   </td>
                 </tr>

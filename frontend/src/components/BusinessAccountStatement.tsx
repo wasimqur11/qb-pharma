@@ -15,6 +15,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { useStakeholders } from '../contexts/StakeholderContext';
 import { useTransactions } from '../contexts/TransactionContext';
+import { getTransactionTypeLabel, getTransactionTypeColor } from '../constants/transactionTypes';
 import type { TransactionCategory } from '../types';
 import clsx from 'clsx';
 
@@ -143,8 +144,8 @@ const BusinessAccountStatement: React.FC = () => {
       .filter(t => {
         // Filter for pharmacy business transactions only
         const isPharmacyTransaction = [
-          'pharmacy_sale', 'distributor_payment', 'business_partner_payment',
-          'employee_payment', 'clinic_expense', 'partner_profit', 'patient_payment', 'patient_credit_sale'
+          'pharmacy_sale', 'distributor_payment', 'sales_profit_distribution',
+          'employee_payment', 'clinic_expense', 'patient_payment', 'patient_credit_sale'
         ].includes(t.category);
         
         const transactionDate = new Date(t.date);
@@ -223,9 +224,9 @@ const BusinessAccountStatement: React.FC = () => {
       // Calculate partner's share of current business balance
       const shareOfCurrentBalance = (currentBalance * partner.ownershipPercentage) / 100;
       
-      // Calculate total withdrawn by this partner (sum of all partner_profit transactions for this partner)
+      // Calculate total withdrawn by this partner (sum of all sales_profit_distribution transactions for this partner)
       const totalWithdrawn = allTransactions
-        .filter(t => t.category === 'partner_profit' && t.stakeholderName === partner.name)
+        .filter(t => t.category === 'sales_profit_distribution' && t.stakeholderName === partner.name)
         .reduce((sum, t) => sum + t.debit, 0);
       
       // Profit due = Share of current balance - Total already withdrawn
@@ -243,17 +244,7 @@ const BusinessAccountStatement: React.FC = () => {
   }, [filteredTransactions, allTransactions]);
 
   const setCategoryColor = (category: TransactionCategory) => {
-    const colors = {
-      pharmacy_sale: 'text-green-400',
-      consultation_fee: 'text-blue-400',
-      distributor_payment: 'text-orange-400',
-      doctor_expense: 'text-red-400',
-      business_partner_payment: 'text-purple-400',
-      employee_payment: 'text-cyan-400',
-      clinic_expense: 'text-yellow-400',
-      partner_profit: 'text-pink-400'
-    };
-    return colors[category];
+    return getTransactionTypeColor(category);
   };
 
   const getCategoryIcon = (category: TransactionCategory) => {
@@ -262,26 +253,37 @@ const BusinessAccountStatement: React.FC = () => {
       consultation_fee: UserGroupIcon,
       distributor_payment: TruckIcon,
       doctor_expense: UserGroupIcon,
-      business_partner_payment: UsersIcon,
+      sales_profit_distribution: BanknotesIcon,
       employee_payment: UsersIcon,
-      clinic_expense: BuildingOfficeIcon,
-      partner_profit: BanknotesIcon
+      clinic_expense: BuildingOfficeIcon
     };
     return icons[category];
   };
 
   const getCategoryLabel = (category: TransactionCategory) => {
-    const labels = {
-      pharmacy_sale: 'Pharmacy Sale',
-      consultation_fee: 'Consultation Fee',
-      distributor_payment: 'Distributor Payment',
-      doctor_expense: 'Doctor Expense',
-      business_partner_payment: 'Business Partner Payment',
-      employee_payment: 'Employee Payment',
-      clinic_expense: 'Clinic Expense',
-      partner_profit: 'Partner Profit Distribution'
-    };
-    return labels[category];
+    return getTransactionTypeLabel(category);
+  };
+
+  // Helper function to determine cash flow impact
+  const getCashFlowImpact = (category: TransactionCategory): { type: 'Revenue' | 'Expense' | 'Distribution' | 'Credit Issued' | 'Credit Received' | 'Credit Reduction', color: string } => {
+    const revenueCategories: TransactionCategory[] = ['pharmacy_sale', 'consultation_fee', 'patient_payment'];
+    const expenseCategories: TransactionCategory[] = ['distributor_payment', 'doctor_expense', 'employee_payment', 'clinic_expense'];
+
+    if (revenueCategories.includes(category)) {
+      return { type: 'Revenue', color: 'text-green-400' };
+    } else if (expenseCategories.includes(category)) {
+      return { type: 'Expense', color: 'text-red-400' };
+    } else if (category === 'sales_profit_distribution') {
+      return { type: 'Distribution', color: 'text-purple-400' }; // Profit distribution to partners
+    } else if (category === 'patient_credit_sale') {
+      return { type: 'Credit Issued', color: 'text-orange-400' }; // We give credit to patient
+    } else if (category === 'distributor_credit_purchase') {
+      return { type: 'Credit Received', color: 'text-blue-400' }; // We receive credit from distributor
+    } else if (category === 'distributor_credit_note') {
+      return { type: 'Credit Reduction', color: 'text-indigo-400' }; // We return items, reducing distributor credit
+    } else {
+      return { type: 'Credit Issued', color: 'text-gray-400' }; // fallback
+    }
   };
 
   const handlePeriodChange = (period: string) => {
@@ -513,10 +515,9 @@ const BusinessAccountStatement: React.FC = () => {
               <option value="all">All Pharmacy Business Types</option>
               <option value="pharmacy_sale">Pharmacy Sales (Revenue)</option>
               <option value="distributor_payment">Distributor Payments (Expense)</option>
-              <option value="business_partner_payment">Business Partner Payments (Expense)</option>
+              <option value="sales_profit_distribution">Sales Profit Distributions (Distribution)</option>
               <option value="employee_payment">Employee Payments (Expense)</option>
               <option value="clinic_expense">Clinic Expenses (Expense)</option>
-              <option value="partner_profit">Partner Profit Distributions (Expense)</option>
             </select>
           </div>
         </div>
@@ -578,6 +579,7 @@ const BusinessAccountStatement: React.FC = () => {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Date</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Reference</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Type</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">Cash Flow Impact</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Description</th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Debit</th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Credit</th>
@@ -604,6 +606,24 @@ const BusinessAccountStatement: React.FC = () => {
                             {getCategoryLabel(transaction.category)}
                           </span>
                         </div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-center">
+                        {(() => {
+                          const impact = getCashFlowImpact(transaction.category);
+                          return (
+                            <span className={clsx('text-xs font-semibold px-2 py-1 rounded-full', 
+                              impact.type === 'Revenue' ? 'bg-green-900/50 text-green-400' :
+                              impact.type === 'Expense' ? 'bg-red-900/50 text-red-400' :
+                              impact.type === 'Distribution' ? 'bg-purple-900/50 text-purple-400' :
+                              impact.type === 'Credit Issued' ? 'bg-orange-900/50 text-orange-400' :
+                              impact.type === 'Credit Received' ? 'bg-blue-900/50 text-blue-400' :
+                              impact.type === 'Credit Reduction' ? 'bg-indigo-900/50 text-indigo-400' :
+                              'bg-gray-900/50 text-gray-400'
+                            )}>
+                              {impact.type}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-300 max-w-xs">
                         <div>
@@ -640,7 +660,7 @@ const BusinessAccountStatement: React.FC = () => {
                 })
               ) : (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
+                  <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
                     No transactions found for the selected criteria
                   </td>
                 </tr>

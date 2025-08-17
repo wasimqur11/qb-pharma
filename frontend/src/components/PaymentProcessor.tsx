@@ -15,6 +15,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { useStakeholders } from '../contexts/StakeholderContext';
 import { useTransactions } from '../contexts/TransactionContext';
+// import { useToast } from '../contexts/ToastContext';
 import type { StakeholderType } from '../types';
 import clsx from 'clsx';
 
@@ -45,6 +46,7 @@ interface PaymentBatch {
 const PaymentProcessor: React.FC<PaymentProcessorProps> = ({ isOpen, onClose, onProcessPayments }) => {
   const { doctors, businessPartners, employees, distributors } = useStakeholders();
   const { getDoctorPayables, getBusinessPartnerPayables, getEmployeeSalaryDue, getDistributorCredits } = useTransactions();
+  // const { showError, showSuccess } = useToast();
   
   const [activeTab, setActiveTab] = useState<'pending' | 'batch' | 'process'>('pending');
   const [selectedPayments, setSelectedPayments] = useState<PaymentItem[]>([]);
@@ -179,12 +181,12 @@ const PaymentProcessor: React.FC<PaymentProcessorProps> = ({ isOpen, onClose, on
 
   const handleProcessPayments = async () => {
     if (selectedPayments.length === 0) {
-      alert('Please select at least one payment to process');
+      alert('No Payments Selected: Please select at least one payment to process.');
       return;
     }
 
     if (!reference.trim()) {
-      alert('Please enter a payment reference');
+      alert('Missing Reference: Please enter a payment reference for this batch.');
       return;
     }
 
@@ -207,7 +209,7 @@ const PaymentProcessor: React.FC<PaymentProcessorProps> = ({ isOpen, onClose, on
     setSelectedPayments([]);
     setReference('');
     
-    alert(`Successfully processed ${selectedPayments.length} payments totaling ${formatCurrency(totalSelectedAmount)}`);
+    alert(`Payments Processed Successfully: ${selectedPayments.length} payments totaling ${formatCurrency(totalSelectedAmount)} have been processed.`);
     onClose();
   };
 

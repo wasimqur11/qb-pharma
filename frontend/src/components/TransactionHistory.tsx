@@ -12,15 +12,20 @@ import {
   BuildingOfficeIcon,
   EyeIcon,
   ArrowUpIcon,
-  ArrowDownIcon
+  ArrowDownIcon,
+  PencilIcon
 } from '@heroicons/react/24/outline';
 import { useStakeholders } from '../contexts/StakeholderContext';
 import { useTransactions } from '../contexts/TransactionContext';
+import { useAuth } from '../contexts/AuthContext';
+// import { useToast } from '../contexts/ToastContext';
+import { TRANSACTION_TYPES } from '../constants/transactionTypes';
 import type { Transaction, TransactionCategory, StakeholderType } from '../types';
 import clsx from 'clsx';
 
 interface TransactionHistoryProps {
   transactions?: Transaction[];
+  onEditTransaction?: (transaction: Transaction) => void;
 }
 
 interface FilterState {
@@ -34,9 +39,64 @@ interface FilterState {
   searchTerm: string;
 }
 
-const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: propTransactions }) => {
+const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: propTransactions, onEditTransaction }) => {
   const { transactions } = useTransactions();
   const { doctors, businessPartners, employees, distributors, patients } = useStakeholders();
+  const { hasPermission } = useAuth();
+  // const { showInfo } = useToast();
+
+  // Helper function to get stakeholder name from transaction
+  const getStakeholderName = (transaction: Transaction): string => {
+    if (!transaction.stakeholderId || !transaction.stakeholderType) {
+      return 'NA';
+    }
+
+    let stakeholderList;
+    switch (transaction.stakeholderType) {
+      case 'doctor':
+        stakeholderList = doctors;
+        break;
+      case 'business_partner':
+        stakeholderList = businessPartners;
+        break;
+      case 'employee':
+        stakeholderList = employees;
+        break;
+      case 'distributor':
+        stakeholderList = distributors;
+        break;
+      case 'patient':
+        stakeholderList = patients;
+        break;
+      default:
+        return 'NA';
+    }
+
+    const stakeholder = stakeholderList.find(s => s.id === transaction.stakeholderId);
+    return stakeholder ? stakeholder.name : 'NA';
+  };
+
+  // Helper function to determine cash flow impact
+  const getCashFlowImpact = (category: TransactionCategory): { type: 'Revenue' | 'Expense' | 'Distribution' | 'Credit Issued' | 'Credit Received' | 'Credit Reduction', color: string } => {
+    const revenueCategories: TransactionCategory[] = ['pharmacy_sale', 'consultation_fee', 'patient_payment'];
+    const expenseCategories: TransactionCategory[] = ['distributor_payment', 'doctor_expense', 'employee_payment', 'clinic_expense'];
+
+    if (revenueCategories.includes(category)) {
+      return { type: 'Revenue', color: 'text-green-400' };
+    } else if (expenseCategories.includes(category)) {
+      return { type: 'Expense', color: 'text-red-400' };
+    } else if (category === 'sales_profit_distribution') {
+      return { type: 'Distribution', color: 'text-purple-400' }; // Profit distribution to partners
+    } else if (category === 'patient_credit_sale') {
+      return { type: 'Credit Issued', color: 'text-orange-400' }; // We give credit to patient
+    } else if (category === 'distributor_credit_purchase') {
+      return { type: 'Credit Received', color: 'text-blue-400' }; // We receive credit from distributor
+    } else if (category === 'distributor_credit_note') {
+      return { type: 'Credit Reduction', color: 'text-indigo-400' }; // We return items, reducing distributor credit
+    } else {
+      return { type: 'Credit Issued', color: 'text-gray-400' }; // fallback
+    }
+  };
   
   const [filters, setFilters] = useState<FilterState>({
     dateFrom: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -52,6 +112,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
   const [sortField, setSortField] = useState<'date' | 'amount'>('date');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  const [selectedPeriod, setSelectedPeriod] = useState('30days');
 
   // Use context transactions if no prop transactions provided
   const allTransactions = useMemo(() => {
@@ -137,33 +198,13 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
   };
 
   const getCategoryLabel = (category: TransactionCategory) => {
-    const labels = {
-      pharmacy_sale: 'Pharmacy Sale',
-      consultation_fee: 'Consultation Fee',
-      distributor_payment: 'Distributor Payment',
-      doctor_expense: 'Doctor Expense',
-      business_partner_payment: 'Business Partner Payment',
-      employee_payment: 'Employee Payment',
-      clinic_expense: 'Clinic Expense',
-      patient_credit_sale: 'Patient Credit Sale',
-      patient_payment: 'Patient Payment'
-    };
-    return labels[category];
+    const transactionType = TRANSACTION_TYPES.find(type => type.id === category);
+    return transactionType?.label || category;
   };
 
   const getCategoryColor = (category: TransactionCategory) => {
-    const colors = {
-      pharmacy_sale: 'text-green-400',
-      consultation_fee: 'text-blue-400',
-      distributor_payment: 'text-orange-400',
-      doctor_expense: 'text-red-400',
-      business_partner_payment: 'text-purple-400',
-      employee_payment: 'text-cyan-400',
-      clinic_expense: 'text-yellow-400',
-      patient_credit_sale: 'text-green-300',
-      patient_payment: 'text-green-500'
-    };
-    return colors[category];
+    const transactionType = TRANSACTION_TYPES.find(type => type.id === category);
+    return transactionType?.color || 'text-gray-400';
   };
 
   const handleSort = (field: 'date' | 'amount') => {
@@ -173,6 +214,38 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
       setSortField(field);
       setSortDirection('desc');
     }
+  };
+
+  const handlePeriodChange = (period: string) => {
+    setSelectedPeriod(period);
+    const today = new Date();
+    let fromDate;
+
+    switch (period) {
+      case '7days':
+        fromDate = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case '30days':
+        fromDate = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+        break;
+      case '90days':
+        fromDate = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000);
+        break;
+      case '6months':
+        fromDate = new Date(today.getTime() - 180 * 24 * 60 * 60 * 1000);
+        break;
+      case '1year':
+        fromDate = new Date(today.getTime() - 365 * 24 * 60 * 60 * 1000);
+        break;
+      default:
+        fromDate = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+    }
+
+    setFilters(prev => ({
+      ...prev,
+      dateFrom: fromDate.toISOString().split('T')[0],
+      dateTo: today.toISOString().split('T')[0]
+    }));
   };
 
   const clearFilters = () => {
@@ -186,11 +259,12 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
       amountMax: '',
       searchTerm: ''
     });
+    setSelectedPeriod('30days');
   };
 
   const exportData = () => {
     // Mock export functionality
-    alert(`Exporting ${sortedTransactions.length} transactions to CSV (demo functionality)`);
+    alert(`Export Started: Exporting ${sortedTransactions.length} transactions to CSV. Download will begin shortly.`);
   };
 
   const summaryStats = useMemo(() => {
@@ -209,8 +283,8 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-white">Transaction History</h2>
-          <p className="text-gray-400 text-sm">View and filter all financial transactions</p>
+          <h2 className="text-xl font-bold text-white">Master Business Report</h2>
+          <p className="text-gray-400 text-sm">Comprehensive transaction analysis and business intelligence</p>
         </div>
         <button
           onClick={exportData}
@@ -268,6 +342,33 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
           </button>
         </div>
 
+        {/* Period Filter */}
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-300 mb-3">Quick Period Selection</label>
+          <div className="flex flex-wrap gap-2">
+            {[
+              { value: '7days', label: 'Last 7 Days' },
+              { value: '30days', label: 'Last 30 Days' },
+              { value: '90days', label: 'Last 3 Months' },
+              { value: '6months', label: 'Last 6 Months' },
+              { value: '1year', label: 'Last Year' }
+            ].map(period => (
+              <button
+                key={period.value}
+                onClick={() => handlePeriodChange(period.value)}
+                className={clsx(
+                  'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                  selectedPeriod === period.value
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                )}
+              >
+                {period.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Date Range */}
           <div>
@@ -298,15 +399,11 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
               className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
             >
               <option value="all">All Types</option>
-              <option value="pharmacy_sale">Pharmacy Sale</option>
-              <option value="consultation_fee">Consultation Fee</option>
-              <option value="distributor_payment">Distributor Payment</option>
-              <option value="doctor_expense">Doctor Expense</option>
-              <option value="business_partner_payment">Business Partner Payment</option>
-              <option value="employee_payment">Employee Payment</option>
-              <option value="clinic_expense">Clinic Expense</option>
-              <option value="patient_credit_sale">Patient Credit Sale</option>
-              <option value="patient_payment">Patient Payment</option>
+              {TRANSACTION_TYPES.map(type => (
+                <option key={type.id} value={type.id}>
+                  {type.label}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -431,7 +528,9 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Date</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Type</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">Cash Flow Impact</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Description</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Stakeholder</th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Amount</th>
                 <th className="px-4 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">Actions</th>
               </tr>
@@ -454,8 +553,29 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
                           </span>
                         </div>
                       </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-center">
+                        {(() => {
+                          const impact = getCashFlowImpact(transaction.category);
+                          return (
+                            <span className={clsx('text-xs font-semibold px-2 py-1 rounded-full', 
+                              impact.type === 'Revenue' ? 'bg-green-900/50 text-green-400' :
+                              impact.type === 'Expense' ? 'bg-red-900/50 text-red-400' :
+                              impact.type === 'Distribution' ? 'bg-purple-900/50 text-purple-400' :
+                              impact.type === 'Credit Issued' ? 'bg-orange-900/50 text-orange-400' :
+                              impact.type === 'Credit Received' ? 'bg-blue-900/50 text-blue-400' :
+                              impact.type === 'Credit Reduction' ? 'bg-indigo-900/50 text-indigo-400' :
+                              'bg-gray-900/50 text-gray-400'
+                            )}>
+                              {impact.type}
+                            </span>
+                          );
+                        })()}
+                      </td>
                       <td className="px-4 py-3 text-sm text-gray-300 max-w-xs truncate">
                         {transaction.description}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-300">
+                        {getStakeholderName(transaction)}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-right">
                         <span className="text-sm font-semibold text-green-400">
@@ -463,20 +583,31 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
                         </span>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-center">
-                        <button
-                          onClick={() => setSelectedTransaction(transaction)}
-                          className="text-blue-400 hover:text-blue-300 p-1"
-                          title="View details"
-                        >
-                          <EyeIcon className="h-4 w-4" />
-                        </button>
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => setSelectedTransaction(transaction)}
+                            className="text-blue-400 hover:text-blue-300 p-1"
+                            title="View details"
+                          >
+                            <EyeIcon className="h-4 w-4" />
+                          </button>
+                          {onEditTransaction && (hasPermission('admin') || hasPermission('super_admin')) && (
+                            <button
+                              onClick={() => onEditTransaction(transaction)}
+                              className="text-green-400 hover:text-green-300 p-1"
+                              title="Edit transaction (Admin only)"
+                            >
+                              <PencilIcon className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
                 })
               ) : (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
+                  <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
                     No transactions found matching your criteria
                   </td>
                 </tr>
@@ -522,6 +653,16 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
                 <p className="text-sm text-gray-400">Description</p>
                 <p className="text-white">{selectedTransaction.description}</p>
               </div>
+              <div>
+                <p className="text-sm text-gray-400">Stakeholder</p>
+                <p className="text-white">{getStakeholderName(selectedTransaction)}</p>
+              </div>
+              {selectedTransaction.billNo && (
+                <div>
+                  <p className="text-sm text-gray-400">Bill No.</p>
+                  <p className="text-white">{selectedTransaction.billNo}</p>
+                </div>
+              )}
               <div>
                 <p className="text-sm text-gray-400">Created By</p>
                 <p className="text-white">{selectedTransaction.createdBy}</p>

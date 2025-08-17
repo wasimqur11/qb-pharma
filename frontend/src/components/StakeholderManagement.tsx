@@ -525,7 +525,7 @@ const StakeholderManagement: React.FC = () => {
       </div>
 
       <StakeholderForm
-        isOpen={showAddForm}
+        isOpen={showAddForm || editingItem !== null}
         onClose={() => {
           setShowAddForm(false);
           setEditingItem(null);

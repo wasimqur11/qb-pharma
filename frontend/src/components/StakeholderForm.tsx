@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   PlusIcon, 
   XMarkIcon,
@@ -96,6 +96,66 @@ const StakeholderForm: React.FC<StakeholderFormProps> = ({
     creditLimit: editData?.creditLimit?.toString() || '',
     notes: editData?.notes || ''
   });
+
+  // Update form data when editData changes
+  useEffect(() => {
+    if (editData) {
+      setFormData({
+        name: editData?.name || '',
+        email: editData?.email || '',
+        phone: editData?.phone || '',
+        consultationFee: editData?.consultationFee?.toString() || '',
+        commissionRate: editData?.commissionRate?.toString() || '',
+        ownershipPercentage: editData?.ownershipPercentage?.toString() || '',
+        salary: editData?.salary?.toString() || '',
+        department: editData?.department || '',
+        salaryDueDate: editData?.salaryDueDate || '',
+        lastPaidDate: editData?.lastPaidDate || '',
+        salaryFrequency: editData?.salaryFrequency || 'monthly',
+        contactPerson: editData?.contactPerson || '',
+        address: editData?.address || '',
+        creditBalance: editData?.creditBalance?.toString() || '',
+        initialBalanceDate: editData?.initialBalanceDate || '',
+        paymentSchedule: editData?.paymentSchedule || 'weekly',
+        paymentPercentage: editData?.paymentPercentage?.toString() || '',
+        nextPaymentDue: editData?.nextPaymentDue || '',
+        lastPaymentDate: editData?.lastPaymentDate || '',
+        dateOfBirth: editData?.dateOfBirth || '',
+        emergencyContact: editData?.emergencyContact || '',
+        emergencyPhone: editData?.emergencyPhone || '',
+        creditLimit: editData?.creditLimit?.toString() || '',
+        notes: editData?.notes || ''
+      });
+    } else {
+      // Reset form for new entries
+      setFormData({
+        name: '',
+        email: '',
+        phone: '',
+        consultationFee: '',
+        commissionRate: '',
+        ownershipPercentage: '',
+        salary: '',
+        department: '',
+        salaryDueDate: '',
+        lastPaidDate: '',
+        salaryFrequency: 'monthly',
+        contactPerson: '',
+        address: '',
+        creditBalance: '',
+        initialBalanceDate: '',
+        paymentSchedule: 'weekly',
+        paymentPercentage: '',
+        nextPaymentDue: '',
+        lastPaymentDate: '',
+        dateOfBirth: '',
+        emergencyContact: '',
+        emergencyPhone: '',
+        creditLimit: '',
+        notes: ''
+      });
+    }
+  }, [editData]);
 
   // Validation functions
   const validateEmail = (email: string): boolean => {

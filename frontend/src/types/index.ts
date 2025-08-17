@@ -82,11 +82,11 @@ export type TransactionCategory =
   | 'consultation_fee' 
   | 'distributor_payment' 
   | 'distributor_credit_purchase' // Taking items on credit (increases their credit balance)
+  | 'distributor_credit_note' // Returning items to distributor (decreases their credit balance)
   | 'doctor_expense' 
-  | 'business_partner_payment' 
+  | 'sales_profit_distribution'
   | 'employee_payment' 
   | 'clinic_expense'
-  | 'partner_profit'
   | 'patient_credit_sale'
   | 'patient_payment';
 
@@ -99,6 +99,7 @@ export interface Transaction {
   stakeholderType?: StakeholderType;
   amount: number;
   description: string;
+  billNo?: string;
   date: Date;
   createdBy: string;
   createdAt: Date;
@@ -119,18 +120,22 @@ export interface PayableBalance {
 export interface DashboardStats {
   // Combined metrics (all businesses)
   todayRevenue: number;
+  totalExpenses: number;
   cashPosition: number;
   monthlyProfit: number;
   
   // Pharmacy-specific metrics (pharmacy business only)
   pharmacyRevenue: number;
   todayPharmacyRevenue: number;
+  pharmacyExpenses: number;
   pharmacyCashPosition: number;
   pharmacyMonthlyProfit: number;
   
   // Doctor-specific metrics (doctor accounts only)
   doctorRevenue: number;
   todayDoctorRevenue: number;
+  doctorExpenses: number;
+  doctorCashPosition: number;
   
   // Payables
   doctorPayables: PayableBalance[];
@@ -147,6 +152,7 @@ export interface AccountStatementEntry {
   debit: number;
   credit: number;
   balance: number;
+  category: TransactionCategory;
 }
 
 export interface AccountStatement {

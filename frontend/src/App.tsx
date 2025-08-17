@@ -4,6 +4,7 @@ import { AuthProvider } from './contexts/AuthContext'
 import { ConfigurationProvider } from './contexts/ConfigurationContext'
 import { StakeholderProvider } from './contexts/StakeholderContext'
 import { TransactionProvider } from './contexts/TransactionContext'
+// import { ToastProvider } from './contexts/ToastContext'
 
 function App() {
   return (
