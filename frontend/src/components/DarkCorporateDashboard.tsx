@@ -410,9 +410,10 @@ const DarkCorporateDashboard: React.FC = () => {
       {/* Navigation Tabs */}
       <div className="px-4 pb-0 border-b border-gray-800">
         <nav className="flex items-center gap-1 -mb-px overflow-x-auto scrollbar-hide">
-          {/* Primary Navigation */}
+          {/* Primary Navigation - Daily Operations */}
           {[
             { id: 'dashboard', label: 'Dashboard', icon: Squares2X2Icon, category: 'dashboard', tooltip: 'Comprehensive business dashboard and analytics' },
+            { id: 'reports', label: 'Business Report', icon: DocumentTextIcon, category: 'reports', tooltip: 'Daily business analytics and financial insights' },
           ].map(item => (
             <button
               key={item.id}
@@ -433,7 +434,7 @@ const DarkCorporateDashboard: React.FC = () => {
           {/* Separator */}
           <div className="mx-2 h-6 w-px bg-gray-700"></div>
           
-          {/* Management */}
+          {/* Management - Frequent Operations */}
           {[
             { id: 'stakeholders', label: 'Stakeholders', icon: UsersIcon, category: 'management', tooltip: 'Manage doctors, partners, employees, and distributors' },
             { id: 'patients', label: 'Patients', icon: UserIcon, category: 'management', tooltip: 'Patient management and credit tracking' },
@@ -457,10 +458,9 @@ const DarkCorporateDashboard: React.FC = () => {
           {/* Separator */}
           <div className="mx-2 h-6 w-px bg-gray-700"></div>
           
-          {/* Reports & Statements */}
+          {/* Analysis & Statements - Periodic Review */}
           {[
-            { id: 'reports', label: 'Master Business Report', icon: DocumentTextIcon, category: 'reports', tooltip: 'Comprehensive business analytics and transaction reports' },
-            { id: 'statements', label: 'Statements', icon: DocumentArrowUpIcon, category: 'reports', tooltip: 'Account statements and transaction history' },
+            { id: 'statements', label: 'Statements', icon: DocumentArrowUpIcon, category: 'reports', tooltip: 'Detailed account statements and transaction history' },
           ].map(item => (
             <button
               key={item.id}
@@ -481,7 +481,7 @@ const DarkCorporateDashboard: React.FC = () => {
           {/* Separator */}
           <div className="mx-2 h-6 w-px bg-gray-700"></div>
           
-          {/* Settings */}
+          {/* Configuration - Administrative */}
           {[
             { id: 'configuration', label: 'Settings', icon: Cog6ToothIcon, category: 'settings', tooltip: 'System configuration and department management' },
           ].map(item => (
@@ -1259,8 +1259,50 @@ const DarkCorporateDashboard: React.FC = () => {
       distributorCredits: stats.distributorCredits.reduce((sum, d) => sum + d.creditBalance, 0)
     };
 
+    const exportBusinessReport = async () => {
+      try {
+        const { exportBusinessReportToPDF } = await import('../utils/exportUtils');
+        
+        const reportData = {
+          companyName: 'QB Pharmacy Management',
+          reportTitle: 'Business Performance Report',
+          reportPeriod: `${new Date(dateRange.from).toLocaleDateString()} - ${new Date(dateRange.to).toLocaleDateString()}`,
+          generatedDate: new Date().toLocaleDateString(),
+          metrics: {
+            totalRevenue: businessSummary.totalRevenue,
+            totalExpenses: businessSummary.totalExpenses,
+            netProfit: businessSummary.totalRevenue - businessSummary.totalExpenses,
+            cashPosition: businessSummary.totalCashInHand,
+            pharmacyRevenue: businessSummary.pharmacyRevenue,
+            doctorRevenue: businessSummary.doctorRevenue
+          },
+          transactions: transactions.slice(0, 50) // Latest 50 transactions
+        };
+        
+        await exportBusinessReportToPDF(reportData);
+      } catch (error) {
+        console.error('Export failed:', error);
+        alert('Export failed. Please try again.');
+      }
+    };
+
     return (
       <div className="space-y-6">
+        {/* Header with Export Button */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-bold text-white">Business Performance Report</h2>
+            <p className="text-gray-400 text-sm">Comprehensive business analytics and financial insights</p>
+          </div>
+          <button
+            onClick={exportBusinessReport}
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm"
+          >
+            <DocumentArrowUpIcon className="h-4 w-4" />
+            Export PDF Report
+          </button>
+        </div>
+
         {/* Business Performance Summary */}
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
           <h3 className="text-lg font-semibold text-white mb-4">Business Performance Summary</h3>

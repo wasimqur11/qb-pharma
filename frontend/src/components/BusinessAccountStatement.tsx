@@ -19,18 +19,6 @@ import { getTransactionTypeLabel, getTransactionTypeColor } from '../constants/t
 import type { TransactionCategory } from '../types';
 import clsx from 'clsx';
 
-interface BusinessTransaction {
-  id: string;
-  date: Date;
-  category: TransactionCategory;
-  description: string;
-  stakeholderName?: string;
-  stakeholderType?: string;
-  debit: number;
-  credit: number;
-  balance: number;
-  reference?: string;
-}
 
 interface BusinessSummary {
   totalRevenue: number;
@@ -52,7 +40,7 @@ interface PartnerProfitSummary {
 
 const BusinessAccountStatement: React.FC = () => {
   const { businessPartners } = useStakeholders();
-  const { transactions, getTotalRevenue, getCashPosition } = useTransactions();
+  const { transactions, getCashPosition, getPeriodFilteredStats } = useTransactions();
   
   const [dateRange, setDateRange] = useState({
     from: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 90 days ago
@@ -64,77 +52,7 @@ const BusinessAccountStatement: React.FC = () => {
 
   const formatCurrency = (amount: number) => `₹${amount.toLocaleString()}`;
 
-  const generateBusinessTransactions = (): BusinessTransaction[] => {
-    const transactions: BusinessTransaction[] = [];
-    let runningBalance = 100000; // Starting balance - more realistic
-    
-    // PHARMACY BUSINESS TRANSACTIONS ONLY
-    // Consultation fees and doctor expenses are separate doctor account transactions
-    const transactionTemplates = [
-      // PHARMACY REVENUE transactions (more frequent, smaller amounts)
-      { category: 'pharmacy_sale', description: 'Daily pharmacy sales', credit: 8000, debit: 0, weight: 0.3 },
-      { category: 'pharmacy_sale', description: 'Medicine retail sales', credit: 12000, debit: 0, weight: 0.25 },
-      { category: 'pharmacy_sale', description: 'OTC medicines sales', credit: 5000, debit: 0, weight: 0.2 },
-      
-      // PHARMACY EXPENSE transactions (less frequent, larger amounts)
-      { category: 'distributor_payment', description: 'Medicine stock purchase', debit: 60000, credit: 0, stakeholder: 'Pharma Solutions Ltd', type: 'distributor', weight: 0.08 },
-      { category: 'distributor_payment', description: 'Medical supplies purchase', debit: 35000, credit: 0, stakeholder: 'MedSupply Corporation', type: 'distributor', weight: 0.06 },
-      { category: 'employee_payment', description: 'Staff salary payment', debit: 45000, credit: 0, stakeholder: 'Ali Hassan', type: 'employee', weight: 0.03 },
-      { category: 'employee_payment', description: 'Pharmacist salary', debit: 40000, credit: 0, stakeholder: 'Ayesha Khan', type: 'employee', weight: 0.03 },
-      { category: 'business_partner_payment', description: 'Business partner commission payment', debit: 8000, credit: 0, stakeholder: 'Karachi Business Partners', type: 'business_partner', weight: 0.02 },
-      { category: 'clinic_expense', description: 'Rent and utilities', debit: 25000, credit: 0, weight: 0.02 },
-      { category: 'clinic_expense', description: 'Equipment maintenance', debit: 8000, credit: 0, weight: 0.01 },
-      
-      // BUSINESS PARTNER PROFIT DISTRIBUTIONS (quarterly distributions)
-      { category: 'partner_profit', description: 'Quarterly profit distribution', debit: 80000, credit: 0, stakeholder: 'Ahmed Khan', type: 'partner', weight: 0.005 },
-      { category: 'partner_profit', description: 'Quarterly profit distribution', debit: 70000, credit: 0, stakeholder: 'Sarah Ali', type: 'partner', weight: 0.005 },
-      { category: 'partner_profit', description: 'Quarterly profit distribution', debit: 50000, credit: 0, stakeholder: 'Dr. Wasim Qureshi', type: 'partner', weight: 0.005 },
-    ];
-
-    const startDate = new Date(dateRange.from);
-    const endDate = new Date(dateRange.to);
-    const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-    
-    // Create weighted template selection
-    const weightedTemplates: any[] = [];
-    transactionTemplates.forEach(template => {
-      const count = Math.round(template.weight * 1000); // Scale weights
-      for (let i = 0; i < count; i++) {
-        weightedTemplates.push(template);
-      }
-    });
-    
-    // Generate transactions for each day
-    for (let day = 0; day <= daysDiff; day++) {
-      const currentDate = new Date(startDate.getTime() + day * 24 * 60 * 60 * 1000);
-      
-      // Generate 1-3 transactions per day (more realistic)
-      const dailyTransactions = Math.floor(Math.random() * 3) + 1;
-      
-      for (let i = 0; i < dailyTransactions; i++) {
-        const template = weightedTemplates[Math.floor(Math.random() * weightedTemplates.length)];
-        const debitAmount = template.debit;
-        const creditAmount = template.credit;
-        
-        runningBalance += creditAmount - debitAmount;
-        
-        transactions.push({
-          id: `bus-${day}-${i}`,
-          date: new Date(currentDate.getTime() + i * 3600000), // Spread transactions throughout the day
-          category: template.category as TransactionCategory,
-          description: template.stakeholder ? `${template.description} - ${template.stakeholder}` : template.description,
-          stakeholderName: template.stakeholder,
-          stakeholderType: template.type,
-          debit: debitAmount,
-          credit: creditAmount,
-          balance: runningBalance,
-          reference: `TXN${day.toString().padStart(3, '0')}${i.toString().padStart(2, '0')}`
-        });
-      }
-    }
-
-    return transactions.sort((a, b) => b.date.getTime() - a.date.getTime());
-  };
+  // Use real transaction data instead of generated mock data
 
   const allTransactions = useMemo(() => {
     const startDate = new Date(dateRange.from);
@@ -142,21 +60,35 @@ const BusinessAccountStatement: React.FC = () => {
     
     return transactions
       .filter(t => {
-        // Filter for pharmacy business transactions only
+        // Filter for pharmacy business transactions only (excluding doctor-specific transactions)
         const isPharmacyTransaction = [
           'pharmacy_sale', 'distributor_payment', 'sales_profit_distribution',
-          'employee_payment', 'clinic_expense', 'patient_payment', 'patient_credit_sale'
+          'employee_payment', 'clinic_expense', 'patient_payment', 'patient_credit_sale',
+          'distributor_credit_purchase', 'distributor_credit_note'
         ].includes(t.category);
         
         const transactionDate = new Date(t.date);
         return isPharmacyTransaction && transactionDate >= startDate && transactionDate <= endDate;
       })
       .map(t => {
-        const stakeholderName = t.stakeholderId ? 
-          (businessPartners.find(bp => bp.id === t.stakeholderId)?.name || 'Unknown Stakeholder') : 
-          undefined;
+        // Get stakeholder name from the appropriate context
+        let stakeholderName = '';
+        if (t.stakeholderId) {
+          if (t.stakeholderType === 'business_partner') {
+            stakeholderName = businessPartners.find(bp => bp.id === t.stakeholderId)?.name || 'Unknown Business Partner';
+          } else if (t.stakeholderType === 'employee') {
+            stakeholderName = `Employee: ${t.stakeholderId}`;
+          } else if (t.stakeholderType === 'distributor') {
+            stakeholderName = `Distributor: ${t.stakeholderId}`;
+          } else if (t.stakeholderType === 'patient') {
+            stakeholderName = `Patient: ${t.stakeholderId}`;
+          } else {
+            stakeholderName = 'Unknown Stakeholder';
+          }
+        }
         
-        const isCredit = ['pharmacy_sale', 'patient_payment', 'patient_credit_sale'].includes(t.category);
+        // Classify as credit (income) or debit (expense) based on business logic
+        const isCredit = ['pharmacy_sale', 'patient_payment'].includes(t.category);
         
         return {
           id: t.id,
@@ -183,19 +115,27 @@ const BusinessAccountStatement: React.FC = () => {
       return matchesSearch && matchesCategory;
     });
     
-    // Calculate running balances
-    let runningBalance = 100000; // Starting balance
+    // Calculate running balances based on actual pharmacy cash position
+    const pharmacyCashPosition = getCashPosition(); // Use actual cash position from context
+    let runningBalance = Math.max(pharmacyCashPosition, 0); // Start with current cash position
+    
     return filtered.reverse().map(t => {
       runningBalance += t.credit - t.debit;
       return { ...t, balance: runningBalance };
     }).reverse();
-  }, [allTransactions, searchTerm, categoryFilter]);
+  }, [allTransactions, searchTerm, categoryFilter, getCashPosition]);
 
   const businessSummary = useMemo((): BusinessSummary => {
-    const totalRevenue = filteredTransactions.reduce((sum, t) => sum + t.credit, 0);
-    const totalExpenses = filteredTransactions.reduce((sum, t) => sum + t.debit, 0);
+    // Use actual TransactionContext methods for consistent calculations
+    const startDate = new Date(dateRange.from);
+    const endDate = new Date(dateRange.to);
+    const periodStats = getPeriodFilteredStats(startDate, endDate);
+    
+    // For pharmacy business statement, use pharmacy-specific metrics
+    const totalRevenue = periodStats.pharmacyRevenue;
+    const totalExpenses = periodStats.pharmacyExpenses;
     const netProfit = totalRevenue - totalExpenses;
-    const cashFlow = netProfit;
+    const cashFlow = periodStats.pharmacyCashPosition;
     const transactionCount = filteredTransactions.length;
     const avgTransactionValue = transactionCount > 0 ? (totalRevenue + totalExpenses) / transactionCount : 0;
 
@@ -207,29 +147,33 @@ const BusinessAccountStatement: React.FC = () => {
       transactionCount,
       avgTransactionValue
     };
-  }, [filteredTransactions]);
+  }, [filteredTransactions, dateRange, getPeriodFilteredStats]);
 
   const partnerProfitSummary = useMemo((): PartnerProfitSummary[] => {
-    // Calculate running balance for filtered transactions
-    let runningBalance = 100000; // Starting balance
-    const transactionsWithBalance = filteredTransactions.map(t => {
-      const newBalance = runningBalance + t.credit - t.debit;
-      runningBalance = newBalance;
-      return { ...t, balance: newBalance };
-    }).reverse();
+    // Use actual business logic from TransactionContext for consistent calculations
+    const startDate = new Date(dateRange.from);
+    const endDate = new Date(dateRange.to);
+    const periodStats = getPeriodFilteredStats(startDate, endDate);
     
-    const currentBalance = transactionsWithBalance[transactionsWithBalance.length - 1]?.balance || 100000;
+    // Current business balance is the pharmacy cash position
+    const currentBalance = periodStats.pharmacyCashPosition;
     
     return businessPartners.map(partner => {
       // Calculate partner's share of current business balance
       const shareOfCurrentBalance = (currentBalance * partner.ownershipPercentage) / 100;
       
-      // Calculate total withdrawn by this partner (sum of all sales_profit_distribution transactions for this partner)
-      const totalWithdrawn = allTransactions
-        .filter(t => t.category === 'sales_profit_distribution' && t.stakeholderName === partner.name)
-        .reduce((sum, t) => sum + t.debit, 0);
+      // Calculate total withdrawn by this partner in the selected period
+      const totalWithdrawn = transactions
+        .filter(t => {
+          const transactionDate = new Date(t.date);
+          return t.category === 'sales_profit_distribution' && 
+                 t.stakeholderId === partner.id &&
+                 transactionDate >= startDate && 
+                 transactionDate <= endDate;
+        })
+        .reduce((sum, t) => sum + t.amount, 0);
       
-      // Profit due = Share of current balance - Total already withdrawn
+      // Profit due = Share of current balance - Total already withdrawn in this period
       const profitDue = shareOfCurrentBalance - totalWithdrawn;
       
       return {
@@ -241,23 +185,27 @@ const BusinessAccountStatement: React.FC = () => {
         profitDue
       };
     });
-  }, [filteredTransactions, allTransactions]);
+  }, [businessPartners, transactions, dateRange, getPeriodFilteredStats]);
 
   const setCategoryColor = (category: TransactionCategory) => {
     return getTransactionTypeColor(category);
   };
 
   const getCategoryIcon = (category: TransactionCategory) => {
-    const icons = {
+    const iconMap = {
       pharmacy_sale: CurrencyDollarIcon,
       consultation_fee: UserGroupIcon,
       distributor_payment: TruckIcon,
       doctor_expense: UserGroupIcon,
       sales_profit_distribution: BanknotesIcon,
       employee_payment: UsersIcon,
-      clinic_expense: BuildingOfficeIcon
-    };
-    return icons[category];
+      clinic_expense: BuildingOfficeIcon,
+      patient_payment: CurrencyDollarIcon,
+      patient_credit_sale: CurrencyDollarIcon,
+      distributor_credit_purchase: TruckIcon,
+      distributor_credit_note: TruckIcon
+    } as const;
+    return iconMap[category] || CurrencyDollarIcon;
   };
 
   const getCategoryLabel = (category: TransactionCategory) => {
@@ -509,7 +457,7 @@ const BusinessAccountStatement: React.FC = () => {
             <label className="block text-sm font-medium text-gray-300 mb-2">Transaction Type</label>
             <select
               value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value as any)}
+              onChange={(e) => setCategoryFilter(e.target.value as TransactionCategory | 'all')}
               className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
             >
               <option value="all">All Pharmacy Business Types</option>

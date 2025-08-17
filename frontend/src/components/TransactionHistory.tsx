@@ -266,9 +266,49 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
     setSelectedPeriod('30days');
   };
 
-  const exportData = () => {
-    // Mock export functionality
-    alert(`Export Started: Exporting ${sortedTransactions.length} transactions to CSV. Download will begin shortly.`);
+  const exportData = async () => {
+    try {
+      const { exportToPDF, exportToExcel, exportTransactionsToExcel } = await import('../utils/exportUtils');
+      
+      const exportChoice = window.confirm(
+        `Export ${sortedTransactions.length} transactions?\n\nOK for PDF Report\nCancel for Excel Spreadsheet`
+      );
+      
+      if (exportChoice) {
+        // Export as PDF
+        const summaryData = [
+          { label: 'Total Revenue', value: businessMetrics.totalRevenue },
+          { label: 'Total Expenses', value: businessMetrics.totalExpenses },
+          { label: 'Net Profit', value: businessMetrics.netProfit },
+          { label: 'Profit Margin', value: `${businessMetrics.profitMargin.toFixed(1)}%` },
+          { label: 'Transaction Count', value: businessMetrics.transactionCount },
+          { label: 'Date Range', value: `${new Date(filters.dateFrom).toLocaleDateString()} - ${new Date(filters.dateTo).toLocaleDateString()}` }
+        ];
+        
+        const headers = ['Date', 'Type', 'Description', 'Stakeholder', 'Amount'];
+        const data = sortedTransactions.map(t => [
+          t.date.toLocaleDateString(),
+          getCategoryLabel(t.category),
+          t.description,
+          getStakeholderName(t),
+          formatCurrency(t.amount)
+        ]);
+        
+        await exportToPDF({
+          title: 'Transaction History Report',
+          subtitle: `${new Date(filters.dateFrom).toLocaleDateString()} - ${new Date(filters.dateTo).toLocaleDateString()}`,
+          headers,
+          data,
+          summary: summaryData
+        });
+      } else {
+        // Export as Excel
+        exportTransactionsToExcel(sortedTransactions, 'Transaction History');
+      }
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('Export failed. Please try again.');
+    }
   };
 
   const businessMetrics = useMemo(() => {
@@ -304,13 +344,15 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
           <h2 className="text-xl font-bold text-white">Master Business Report</h2>
           <p className="text-gray-400 text-sm">Comprehensive transaction analysis and business intelligence</p>
         </div>
-        <button
-          onClick={exportData}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
-        >
-          <ArrowDownTrayIcon className="h-4 w-4" />
-          Export CSV
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={exportData}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
+          >
+            <ArrowDownTrayIcon className="h-4 w-4" />
+            Export Report
+          </button>
+        </div>
       </div>
 
       {/* Business Metrics */}
