@@ -77,18 +77,41 @@ const BusinessAccountStatement: React.FC = () => {
           if (t.stakeholderType === 'business_partner') {
             stakeholderName = businessPartners.find(bp => bp.id === t.stakeholderId)?.name || 'Unknown Business Partner';
           } else if (t.stakeholderType === 'employee') {
-            stakeholderName = `Employee: ${t.stakeholderId}`;
+            stakeholderName = t.stakeholderId; // For now, using ID as name - could be enhanced with employee context
           } else if (t.stakeholderType === 'distributor') {
-            stakeholderName = `Distributor: ${t.stakeholderId}`;
+            stakeholderName = t.stakeholderId; // For now, using ID as name - could be enhanced with distributor context
           } else if (t.stakeholderType === 'patient') {
-            stakeholderName = `Patient: ${t.stakeholderId}`;
+            stakeholderName = t.stakeholderId; // For now, using ID as name - could be enhanced with patient context
+          } else if (t.stakeholderType === 'doctor') {
+            stakeholderName = t.stakeholderId; // For now, using ID as name - could be enhanced with doctor context
           } else {
-            stakeholderName = 'Unknown Stakeholder';
+            stakeholderName = 'Internal';
           }
+        } else {
+          stakeholderName = 'Internal';
         }
         
         // Classify as credit (income) or debit (expense) based on business logic
-        const isCredit = ['pharmacy_sale', 'patient_payment'].includes(t.category);
+        const revenueCategories = ['pharmacy_sale', 'patient_payment', 'distributor_credit_note'];
+        const expenseCategories = ['distributor_payment', 'employee_payment', 'clinic_expense', 'sales_profit_distribution'];
+        
+        // Special handling for credit transactions
+        let isCredit = false;
+        let isDebit = false;
+        
+        if (revenueCategories.includes(t.category)) {
+          isCredit = true;
+        } else if (expenseCategories.includes(t.category)) {
+          isDebit = true;
+        } else if (t.category === 'patient_credit_sale') {
+          // Patient credit sale: We give credit to patient (reduces our cash)
+          isDebit = true;
+        } else if (t.category === 'distributor_credit_purchase') {
+          // Distributor credit purchase: We receive credit from distributor (no immediate cash impact)
+          // This should be tracked separately but for cash flow, it's neutral initially
+          isCredit = false;
+          isDebit = false;
+        }
         
         return {
           id: t.id,
@@ -97,7 +120,7 @@ const BusinessAccountStatement: React.FC = () => {
           description: t.description,
           stakeholderName,
           stakeholderType: t.stakeholderType,
-          debit: isCredit ? 0 : t.amount,
+          debit: isDebit ? t.amount : 0,
           credit: isCredit ? t.amount : 0,
           balance: 0, // Will be calculated below
           reference: `TXN${t.id.slice(-6)}`
@@ -115,14 +138,32 @@ const BusinessAccountStatement: React.FC = () => {
       return matchesSearch && matchesCategory;
     });
     
-    // Calculate running balances based on actual pharmacy cash position
-    const pharmacyCashPosition = getCashPosition(); // Use actual cash position from context
-    let runningBalance = Math.max(pharmacyCashPosition, 0); // Start with current cash position
+    // Sort transactions chronologically (oldest first) for proper balance calculation
+    const chronological = [...filtered].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     
-    return filtered.reverse().map(t => {
+    // Calculate running balances properly
+    // Start with the oldest transaction's opening balance (based on historical data)
+    let runningBalance = 0;
+    
+    // For the first transaction, calculate what the opening balance should be
+    if (chronological.length > 0) {
+      // Get current cash position and work backwards from the current state
+      const currentCash = getCashPosition();
+      const totalCreditsFromFiltered = filtered.reduce((sum, t) => sum + t.credit, 0);
+      const totalDebitsFromFiltered = filtered.reduce((sum, t) => sum + t.debit, 0);
+      
+      // Opening balance = Current Cash - Net Movement of filtered transactions
+      runningBalance = currentCash - (totalCreditsFromFiltered - totalDebitsFromFiltered);
+    }
+    
+    // Calculate running balances chronologically
+    const withBalances = chronological.map(t => {
       runningBalance += t.credit - t.debit;
       return { ...t, balance: runningBalance };
-    }).reverse();
+    });
+    
+    // Return in reverse chronological order (newest first) for display
+    return withBalances.reverse();
   }, [allTransactions, searchTerm, categoryFilter, getCashPosition]);
 
   const businessSummary = useMemo((): BusinessSummary => {
@@ -504,9 +545,9 @@ const BusinessAccountStatement: React.FC = () => {
             <p className="text-sm text-gray-400">Current Balance</p>
             <p className={clsx(
               "text-2xl font-bold",
-              filteredTransactions[0]?.balance >= 0 ? "text-green-400" : "text-red-400"
+              getCashPosition() >= 0 ? "text-green-400" : "text-red-400"
             )}>
-              {formatCurrency(filteredTransactions[0]?.balance || 0)}
+              {formatCurrency(getCashPosition())}
             </p>
           </div>
         </div>

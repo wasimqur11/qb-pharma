@@ -83,7 +83,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
   // Helper function to determine cash flow impact
   const getCashFlowImpact = (category: TransactionCategory): { type: 'Revenue' | 'Expense' | 'Distribution' | 'Credit Issued' | 'Credit Received' | 'Credit Reduction', color: string } => {
     const revenueCategories: TransactionCategory[] = ['pharmacy_sale', 'consultation_fee', 'patient_payment'];
-    const expenseCategories: TransactionCategory[] = ['distributor_payment', 'doctor_expense', 'employee_payment', 'clinic_expense'];
+    const expenseCategories: TransactionCategory[] = ['distributor_payment', 'doctor_expense', 'employee_payment', 'clinic_expense', 'sales_profit_distribution'];
 
     if (revenueCategories.includes(category)) {
       return { type: 'Revenue', color: 'text-green-400' };
@@ -266,16 +266,25 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
     setSelectedPeriod('30days');
   };
 
-  const exportData = async () => {
+  const exportTransactions = async (format: 'excel' | 'pdf') => {
     try {
-      const { exportToPDF, exportToExcel, exportTransactionsToExcel } = await import('../utils/exportUtils');
+      const { exportToPDF, exportTransactionsToExcel } = await import('../utils/exportUtils');
       
-      const exportChoice = window.confirm(
-        `Export ${sortedTransactions.length} transactions?\n\nOK for PDF Report\nCancel for Excel Spreadsheet`
-      );
+      const dateRange = {
+        from: filters.dateFrom,
+        to: filters.dateTo
+      };
       
-      if (exportChoice) {
-        // Export as PDF
+      if (format === 'excel') {
+        // Export as Professional Excel
+        await exportTransactionsToExcel(
+          sortedTransactions, 
+          'Transaction History Report',
+          dateRange,
+          businessMetrics
+        );
+      } else {
+        // Export as Professional PDF
         const summaryData = [
           { label: 'Total Revenue', value: businessMetrics.totalRevenue },
           { label: 'Total Expenses', value: businessMetrics.totalExpenses },
@@ -301,10 +310,15 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
           data,
           summary: summaryData
         });
-      } else {
-        // Export as Excel
-        exportTransactionsToExcel(sortedTransactions, 'Transaction History');
       }
+      
+      // Show success message
+      const toast = document.createElement('div');
+      toast.textContent = `Successfully exported ${sortedTransactions.length} transactions as ${format.toUpperCase()}`;
+      toast.className = 'fixed bottom-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+      document.body.appendChild(toast);
+      setTimeout(() => document.body.removeChild(toast), 3000);
+      
     } catch (error) {
       console.error('Export failed:', error);
       alert('Export failed. Please try again.');
@@ -314,7 +328,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
   const businessMetrics = useMemo(() => {
     // Categorize transactions properly
     const revenueCategories: TransactionCategory[] = ['pharmacy_sale', 'consultation_fee', 'patient_payment'];
-    const expenseCategories: TransactionCategory[] = ['distributor_payment', 'doctor_expense', 'employee_payment', 'clinic_expense'];
+    const expenseCategories: TransactionCategory[] = ['distributor_payment', 'doctor_expense', 'employee_payment', 'clinic_expense', 'sales_profit_distribution'];
     
     const totalRevenue = sortedTransactions
       .filter(t => revenueCategories.includes(t.category))
@@ -346,11 +360,18 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
         </div>
         <div className="flex gap-2">
           <button
-            onClick={exportData}
+            onClick={() => exportTransactions('excel')}
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm"
+          >
+            <ArrowDownTrayIcon className="h-4 w-4" />
+            Export Excel
+          </button>
+          <button
+            onClick={() => exportTransactions('pdf')}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
           >
             <ArrowDownTrayIcon className="h-4 w-4" />
-            Export Report
+            Export PDF
           </button>
         </div>
       </div>

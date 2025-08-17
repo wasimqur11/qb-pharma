@@ -135,7 +135,7 @@ const DarkCorporateDashboard: React.FC = () => {
     const expenseCategories = {
       'Distributor Payments': transactions.filter(t => t.category === 'distributor_payment').reduce((sum, t) => sum + t.amount, 0),
       'Employee Payments': transactions.filter(t => t.category === 'employee_payment').reduce((sum, t) => sum + t.amount, 0),
-      'Partner Payments': transactions.filter(t => t.category === 'business_partner_payment').reduce((sum, t) => sum + t.amount, 0),
+      'Partner Payments': transactions.filter(t => t.category === 'sales_profit_distribution').reduce((sum, t) => sum + t.amount, 0),
       'Clinic Expenses': transactions.filter(t => t.category === 'clinic_expense').reduce((sum, t) => sum + t.amount, 0),
       'Doctor Expenses': transactions.filter(t => t.category === 'doctor_expense').reduce((sum, t) => sum + t.amount, 0)
     };
@@ -196,7 +196,7 @@ const DarkCorporateDashboard: React.FC = () => {
         .reduce((sum, t) => sum + t.amount, 0);
         
       const expenses = monthTransactions
-        .filter(t => ['distributor_payment', 'employee_payment', 'clinic_expense', 'business_partner_payment', 'doctor_expense'].includes(t.category))
+        .filter(t => ['distributor_payment', 'employee_payment', 'clinic_expense', 'sales_profit_distribution', 'doctor_expense'].includes(t.category))
         .reduce((sum, t) => sum + t.amount, 0);
       
       data.push({
@@ -807,80 +807,6 @@ const DarkCorporateDashboard: React.FC = () => {
       <div className="space-y-6">
         <DateFilter />
         
-        {/* Business Performance Summary */}
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Business Performance Summary</h3>
-          <div className="flex flex-col lg:flex-row gap-4">
-            {/* Left Side - Total Cash in Hand (spans full height) */}
-            <div className="lg:w-64 xl:w-80">
-              <div className="bg-gradient-to-br from-gray-750 to-gray-800 rounded-lg p-6 h-full flex flex-col justify-center border-l-4 border-green-500 border-r-2 border-r-green-500/30 shadow-lg hover:shadow-xl transition-shadow duration-200">
-                <div className="text-center">
-                  <div className="mb-3">
-                    <p className="text-sm text-gray-300 font-semibold uppercase tracking-wider mb-1">Total Cash in Hand</p>
-                    <div className="w-12 h-0.5 bg-green-500 mx-auto rounded-full"></div>
-                  </div>
-                  <p className="text-4xl lg:text-5xl font-bold text-green-400 mb-3 tracking-tight">
-                    {formatCurrency(businessSummary.totalCashInHand)}
-                  </p>
-                  <p className="text-xs text-gray-400 font-medium">Combined cash position</p>
-                  <div className="mt-5 pt-4 border-t border-gray-600/50">
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs text-gray-400">Pharmacy:</span>
-                        <span className="text-cyan-400 text-xs font-semibold">
-                          {formatCurrency(businessSummary.pharmacyCash)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs text-gray-400">Doctor:</span>
-                        <span className="text-orange-400 text-xs font-semibold">
-                          {formatCurrency(businessSummary.doctorCash)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            {/* Right Grid - 6 cards in 3x2 layout */}
-            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* First Row */}
-              <div className="bg-gray-750 rounded-lg p-4">
-                <p className="text-sm text-gray-400">Total Revenue</p>
-                <p className="text-2xl font-bold text-green-400">{formatCurrency(businessSummary.totalRevenue)}</p>
-                <p className="text-xs text-gray-500 mt-1">All-time earnings</p>
-              </div>
-              <div className="bg-gray-750 rounded-lg p-4">
-                <p className="text-sm text-gray-400">Pharmacy Revenue</p>
-                <p className="text-2xl font-bold text-blue-400">{formatCurrency(businessSummary.pharmacyRevenue)}</p>
-                <p className="text-xs text-gray-500 mt-1">Pharmacy sales only</p>
-              </div>
-              <div className="bg-gray-750 rounded-lg p-4">
-                <p className="text-sm text-gray-400">Doctor Revenue</p>
-                <p className="text-2xl font-bold text-purple-400">{formatCurrency(businessSummary.doctorRevenue)}</p>
-                <p className="text-xs text-gray-500 mt-1">Consultation fees</p>
-              </div>
-              
-              {/* Second Row */}
-              <div className="bg-gray-750 rounded-lg p-4">
-                <p className="text-sm text-gray-400">Total Expenses</p>
-                <p className="text-2xl font-bold text-red-400">{formatCurrency(businessSummary.totalExpenses)}</p>
-                <p className="text-xs text-gray-500 mt-1">All expenses combined</p>
-              </div>
-              <div className="bg-gray-750 rounded-lg p-4">
-                <p className="text-sm text-gray-400">Pharmacy Expenses</p>
-                <p className="text-2xl font-bold text-red-300">{formatCurrency(businessSummary.pharmacyExpenses)}</p>
-                <p className="text-xs text-gray-500 mt-1">Pharmacy-related costs</p>
-              </div>
-              <div className="bg-gray-750 rounded-lg p-4">
-                <p className="text-sm text-gray-400">Doctor's Expenses</p>
-                <p className="text-2xl font-bold text-red-500">{formatCurrency(businessSummary.doctorExpenses)}</p>
-                <p className="text-xs text-gray-500 mt-1">Doctor-related costs</p>
-              </div>
-            </div>
-          </div>
-        </div>
 
         {/* Key Metrics */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -909,11 +835,11 @@ const DarkCorporateDashboard: React.FC = () => {
             icon={UserGroupIcon}
           />
           <MetricCard
-            title="Monthly Profit"
-            value={formatCurrency(stats.monthlyProfit)}
+            title="Pharmacy Profit"
+            value={formatCurrency(stats.pharmacyMonthlyProfit)}
             change="+0%"
             changeType="increase"
-            subtitle="This month's profit"
+            subtitle="Pharmacy business profit"
             icon={ChartBarIcon}
           />
         </div>
@@ -1233,17 +1159,6 @@ const DarkCorporateDashboard: React.FC = () => {
   );
 
   const renderReports = () => {
-    // Calculate doctor performance data from real transactions
-    const doctorPerformance = stats.doctorPayables.map(doctor => ({
-      name: doctor.stakeholderName,
-      revenue: doctor.totalEarned,
-      payablesDue: doctor.netPayable,
-      transactionCount: transactions.filter(t => t.stakeholderId === doctor.stakeholderId).length,
-      lastActivity: transactions
-        .filter(t => t.stakeholderId === doctor.stakeholderId)
-        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]?.date
-    }));
-
     // Calculate business performance summary
     const businessSummary = {
       pharmacyRevenue: stats.pharmacyRevenue,
@@ -1261,7 +1176,7 @@ const DarkCorporateDashboard: React.FC = () => {
 
     const exportBusinessReport = async () => {
       try {
-        const { exportBusinessReportToPDF } = await import('../utils/exportUtils');
+        const { exportEnhancedBusinessReportToPDF } = await import('../utils/exportUtils');
         
         const reportData = {
           companyName: 'QB Pharmacy Management',
@@ -1279,7 +1194,7 @@ const DarkCorporateDashboard: React.FC = () => {
           transactions: transactions.slice(0, 50) // Latest 50 transactions
         };
         
-        await exportBusinessReportToPDF(reportData);
+        await exportEnhancedBusinessReportToPDF(reportData);
       } catch (error) {
         console.error('Export failed:', error);
         alert('Export failed. Please try again.');
@@ -1378,57 +1293,6 @@ const DarkCorporateDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Doctor Performance Analysis */}
-        <div className="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-700">
-            <h3 className="text-lg font-semibold text-white">Doctor Performance Analysis</h3>
-            <p className="text-sm text-gray-400">Revenue and activity analysis per doctor</p>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-750">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Doctor Name</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Revenue Generated</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Payables Due</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">Transactions</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">Last Activity</th>
-                </tr>
-              </thead>
-              <tbody className="bg-gray-800 divide-y divide-gray-700">
-                {doctorPerformance.length > 0 ? (
-                  doctorPerformance.map((doctor, index) => (
-                    <tr key={index} className="hover:bg-gray-750 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-white">{doctor.name}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
-                        <span className="text-sm font-semibold text-green-400">{formatCurrency(doctor.revenue)}</span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
-                        <span className="text-sm font-semibold text-red-400">{formatCurrency(doctor.payablesDue)}</span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-center">
-                        <span className="text-sm text-gray-300">{doctor.transactionCount}</span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-center">
-                        <span className="text-sm text-gray-300">
-                          {doctor.lastActivity ? new Date(doctor.lastActivity).toLocaleDateString() : 'No activity'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-8 text-center text-gray-400">
-                      No doctor transactions found
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
 
         {/* Transaction History */}
         <TransactionHistory transactions={transactions} onEditTransaction={handleEditTransaction} />
