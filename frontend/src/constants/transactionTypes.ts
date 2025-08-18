@@ -134,3 +134,105 @@ export const getTransactionTypeColor = (id: TransactionCategory): string => {
   const config = getTransactionTypeConfig(id);
   return config?.color || 'text-gray-400';
 };
+
+// Centralized transaction classification
+export const REVENUE_CATEGORIES: TransactionCategory[] = [
+  'pharmacy_sale',
+  'consultation_fee',
+  'patient_payment',
+  'distributor_credit_note' // Returning items to distributor increases our cash/reduces debt
+];
+
+export const EXPENSE_CATEGORIES: TransactionCategory[] = [
+  'distributor_payment',
+  'doctor_expense',
+  'employee_payment',
+  'clinic_expense',
+  'sales_profit_distribution',
+  'patient_credit_sale' // Giving credit to patient reduces our cash
+];
+
+export const PHARMACY_REVENUE_CATEGORIES: TransactionCategory[] = [
+  'pharmacy_sale',
+  'patient_payment',
+  'distributor_credit_note'
+];
+
+export const PHARMACY_EXPENSE_CATEGORIES: TransactionCategory[] = [
+  'distributor_payment',
+  'employee_payment',
+  'clinic_expense',
+  'sales_profit_distribution',
+  'patient_credit_sale'
+];
+
+export const DOCTOR_REVENUE_CATEGORIES: TransactionCategory[] = [
+  'consultation_fee'
+];
+
+export const DOCTOR_EXPENSE_CATEGORIES: TransactionCategory[] = [
+  'doctor_expense'
+];
+
+// Helper functions for transaction classification
+export const isRevenueTransaction = (category: TransactionCategory): boolean => {
+  return REVENUE_CATEGORIES.includes(category);
+};
+
+export const isExpenseTransaction = (category: TransactionCategory): boolean => {
+  return EXPENSE_CATEGORIES.includes(category);
+};
+
+export const isPharmacyRevenue = (category: TransactionCategory): boolean => {
+  return PHARMACY_REVENUE_CATEGORIES.includes(category);
+};
+
+export const isPharmacyExpense = (category: TransactionCategory): boolean => {
+  return PHARMACY_EXPENSE_CATEGORIES.includes(category);
+};
+
+export const isDoctorRevenue = (category: TransactionCategory): boolean => {
+  return DOCTOR_REVENUE_CATEGORIES.includes(category);
+};
+
+export const isDoctorExpense = (category: TransactionCategory): boolean => {
+  return DOCTOR_EXPENSE_CATEGORIES.includes(category);
+};
+
+// Credit/Debit classification for accounting purposes
+export const isCreditTransaction = (category: TransactionCategory): boolean => {
+  return REVENUE_CATEGORIES.includes(category);
+};
+
+export const isDebitTransaction = (category: TransactionCategory): boolean => {
+  return EXPENSE_CATEGORIES.includes(category);
+};
+
+export const isPharmacyCreditTransaction = (category: TransactionCategory): boolean => {
+  return PHARMACY_REVENUE_CATEGORIES.includes(category);
+};
+
+export const isPharmacyDebitTransaction = (category: TransactionCategory): boolean => {
+  return PHARMACY_EXPENSE_CATEGORIES.includes(category);
+};
+
+// Cash flow impact classification
+export type CashFlowImpact = 'Revenue' | 'Expense' | 'Distribution' | 'Credit Issued' | 'Credit Received' | 'Credit Reduction';
+
+export const getCashFlowImpact = (category: TransactionCategory): { type: CashFlowImpact, color: string } => {
+  if (REVENUE_CATEGORIES.includes(category)) {
+    return { type: 'Revenue', color: 'text-green-400' };
+  } else if (EXPENSE_CATEGORIES.includes(category)) {
+    if (category === 'sales_profit_distribution') {
+      return { type: 'Distribution', color: 'text-purple-400' };
+    } else {
+      return { type: 'Expense', color: 'text-red-400' };
+    }
+  } else if (category === 'patient_credit_sale') {
+    return { type: 'Credit Issued', color: 'text-orange-400' };
+  } else if (category === 'distributor_credit_purchase') {
+    return { type: 'Credit Received', color: 'text-blue-400' };
+  } else {
+    return { type: 'Credit Issued', color: 'text-gray-400' };
+  }
+};

@@ -30,6 +30,7 @@ import {
   Squares2X2Icon, ChevronDownIcon, MagnifyingGlassIcon, FunnelIcon,
   ArrowRightOnRectangleIcon
 } from '@heroicons/react/24/outline';
+import { SYSTEM_CONFIG, getDefaultDateRange } from '../constants/systemConfig';
 import clsx from 'clsx';
 
 const DarkCorporateDashboard: React.FC = () => {
@@ -50,10 +51,7 @@ const DarkCorporateDashboard: React.FC = () => {
   
   const { user, logout } = useAuth();
   // const { showSuccess } = useToast();
-  const [dateRange, setDateRange] = useState({
-    from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days ago
-    to: new Date().toISOString().split('T')[0]
-  });
+  const [dateRange, setDateRange] = useState(getDefaultDateRange('transaction'));
   const [selectedPeriod, setSelectedPeriod] = useState('30days');
   
   // Keyboard shortcuts
@@ -99,7 +97,7 @@ const DarkCorporateDashboard: React.FC = () => {
   };
 
   const formatCurrency = (amount: number) => {
-    return `₹${amount.toLocaleString()}`;
+    return `${SYSTEM_CONFIG.CURRENCY_SYMBOL}${amount.toLocaleString()}`;
   };
 
   const formatNumber = (num: number) => {
@@ -279,10 +277,10 @@ const DarkCorporateDashboard: React.FC = () => {
         fromDate = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
         break;
       case '30days':
-        fromDate = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+        fromDate = new Date(today.getTime() - SYSTEM_CONFIG.DEFAULT_TRANSACTION_HISTORY_DAYS * 24 * 60 * 60 * 1000);
         break;
       case '90days':
-        fromDate = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000);
+        fromDate = new Date(today.getTime() - SYSTEM_CONFIG.DEFAULT_BUSINESS_STATEMENT_DAYS * 24 * 60 * 60 * 1000);
         break;
       case '6months':
         fromDate = new Date(today.getTime() - 180 * 24 * 60 * 60 * 1000);
@@ -624,34 +622,6 @@ const DarkCorporateDashboard: React.FC = () => {
     </div>
   );
 
-  const PayablesTable: React.FC<{ payables: PayableBalance[]; title: string }> = ({ payables, title }) => (
-    <div className="bg-gray-800 border border-gray-700 rounded-lg h-fit">
-      <div className="px-4 py-3 border-b border-gray-700">
-        <h3 className="text-sm font-semibold text-white">{title}</h3>
-      </div>
-      <div className="p-4">
-        <div className="space-y-3">
-          {payables.slice(0, 4).map((payable, idx) => (
-            <div key={idx} className="space-y-1">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-white truncate">{payable.stakeholderName}</p>
-                <span className="text-sm font-bold text-red-400">{formatCurrency(payable.netPayable)}</span>
-              </div>
-              <div className="flex items-center justify-between text-xs text-gray-400">
-                <span>Earned: {formatCurrency(payable.totalEarned)}</span>
-                <span>Paid: {formatCurrency(payable.totalPaid)}</span>
-              </div>
-            </div>
-          ))}
-          {payables.length > 4 && (
-            <div className="pt-2 text-center border-t border-gray-700">
-              <p className="text-xs text-gray-400">+{payables.length - 4} more payables</p>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
 
   const DistributorPaymentsDue: React.FC = () => {
     const paymentsDue = getDistributorPaymentsDue();
@@ -874,30 +844,6 @@ const DarkCorporateDashboard: React.FC = () => {
           </ChartCard>
         </div>
 
-        {/* Payables and Outstanding Items */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4">
-          <PayablesTable payables={stats.employeeSalaryDue} title="Employee Salary Due" />
-          <PayablesTable payables={stats.businessPartnerPayables} title="Business Partner Outstanding" />
-          <PayablesTable payables={stats.doctorPayables} title="Doctor Outstanding Payments" />
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
-            <h4 className="text-sm font-semibold text-white mb-3">Distributor Credits</h4>
-            {stats.distributorCredits.length > 0 ? (
-              <div className="space-y-2">
-                {stats.distributorCredits.slice(0, 3).map(credit => (
-                  <div key={credit.id} className="flex justify-between items-center py-1">
-                    <span className="text-xs text-gray-300 truncate">{credit.name}</span>
-                    <span className="text-xs font-medium text-orange-400">{formatCurrency(credit.creditBalance)}</span>
-                  </div>
-                ))}
-                {stats.distributorCredits.length > 3 && (
-                  <p className="text-xs text-gray-500">+{stats.distributorCredits.length - 3} more</p>
-                )}
-              </div>
-            ) : (
-              <p className="text-xs text-gray-500">No outstanding credits</p>
-            )}
-          </div>
-        </div>
       </div>
     );
   };
@@ -996,9 +942,7 @@ const DarkCorporateDashboard: React.FC = () => {
       </div>
 
       {/* Pharmacy Business Data Tables */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4">
-        <PayablesTable payables={stats.employeeSalaryDue} title="Employee Salary Due" />
-        <PayablesTable payables={stats.businessPartnerPayables} title="Business Partner Commission Due" />
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
         <DistributorPaymentsDue />
         <DataTable
           title="Distributor Credit Balances"
@@ -1111,10 +1055,6 @@ const DarkCorporateDashboard: React.FC = () => {
         </ChartCard>
       </div>
 
-      {/* Doctor Data Tables */}
-      <div className="grid grid-cols-1 gap-4">
-        <PayablesTable payables={stats.doctorPayables} title="Doctor Outstanding Payments" />
-      </div>
     </div>
   );
 

@@ -15,7 +15,16 @@ import {
 } from '@heroicons/react/24/outline';
 import { useStakeholders } from '../contexts/StakeholderContext';
 import { useTransactions } from '../contexts/TransactionContext';
-import { getTransactionTypeLabel, getTransactionTypeColor } from '../constants/transactionTypes';
+import { 
+  getTransactionTypeLabel, 
+  getTransactionTypeColor,
+  PHARMACY_REVENUE_CATEGORIES,
+  PHARMACY_EXPENSE_CATEGORIES,
+  isPharmacyCreditTransaction,
+  isPharmacyDebitTransaction,
+  getCashFlowImpact
+} from '../constants/transactionTypes';
+import { SYSTEM_CONFIG, getDefaultDateRange } from '../constants/systemConfig';
 import type { TransactionCategory } from '../types';
 import clsx from 'clsx';
 
@@ -40,17 +49,14 @@ interface PartnerProfitSummary {
 
 const BusinessAccountStatement: React.FC = () => {
   const { businessPartners } = useStakeholders();
-  const { transactions, getCashPosition, getPeriodFilteredStats } = useTransactions();
+  const { transactions, getCashPosition, getPeriodFilteredStats, getBusinessPartnerPayables } = useTransactions();
   
-  const [dateRange, setDateRange] = useState({
-    from: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 90 days ago
-    to: new Date().toISOString().split('T')[0]
-  });
+  const [dateRange, setDateRange] = useState(getDefaultDateRange('business'));
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<TransactionCategory | 'all'>('all');
   const [selectedPeriod, setSelectedPeriod] = useState('90days');
 
-  const formatCurrency = (amount: number) => `₹${amount.toLocaleString()}`;
+  const formatCurrency = (amount: number) => `${SYSTEM_CONFIG.CURRENCY_SYMBOL}${amount.toLocaleString()}`;
 
   // Use real transaction data instead of generated mock data
 
@@ -61,11 +67,8 @@ const BusinessAccountStatement: React.FC = () => {
     return transactions
       .filter(t => {
         // Filter for pharmacy business transactions only (excluding doctor-specific transactions)
-        const isPharmacyTransaction = [
-          'pharmacy_sale', 'distributor_payment', 'sales_profit_distribution',
-          'employee_payment', 'clinic_expense', 'patient_payment', 'patient_credit_sale',
-          'distributor_credit_purchase', 'distributor_credit_note'
-        ].includes(t.category);
+        const allPharmacyCategories = [...PHARMACY_REVENUE_CATEGORIES, ...PHARMACY_EXPENSE_CATEGORIES, 'distributor_credit_purchase'];
+        const isPharmacyTransaction = allPharmacyCategories.includes(t.category);
         
         const transactionDate = new Date(t.date);
         return isPharmacyTransaction && transactionDate >= startDate && transactionDate <= endDate;
@@ -91,27 +94,9 @@ const BusinessAccountStatement: React.FC = () => {
           stakeholderName = 'Internal';
         }
         
-        // Classify as credit (income) or debit (expense) based on business logic
-        const revenueCategories = ['pharmacy_sale', 'patient_payment', 'distributor_credit_note'];
-        const expenseCategories = ['distributor_payment', 'employee_payment', 'clinic_expense', 'sales_profit_distribution'];
-        
-        // Special handling for credit transactions
-        let isCredit = false;
-        let isDebit = false;
-        
-        if (revenueCategories.includes(t.category)) {
-          isCredit = true;
-        } else if (expenseCategories.includes(t.category)) {
-          isDebit = true;
-        } else if (t.category === 'patient_credit_sale') {
-          // Patient credit sale: We give credit to patient (reduces our cash)
-          isDebit = true;
-        } else if (t.category === 'distributor_credit_purchase') {
-          // Distributor credit purchase: We receive credit from distributor (no immediate cash impact)
-          // This should be tracked separately but for cash flow, it's neutral initially
-          isCredit = false;
-          isDebit = false;
-        }
+        // Use centralized classification logic
+        const isCredit = isPharmacyCreditTransaction(t.category);
+        const isDebit = isPharmacyDebitTransaction(t.category);
         
         return {
           id: t.id,
@@ -141,19 +126,36 @@ const BusinessAccountStatement: React.FC = () => {
     // Sort transactions chronologically (oldest first) for proper balance calculation
     const chronological = [...filtered].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     
-    // Calculate running balances properly
-    // Start with the oldest transaction's opening balance (based on historical data)
+    // Calculate running balances properly using period-based approach
     let runningBalance = 0;
     
-    // For the first transaction, calculate what the opening balance should be
+    // For proper balance calculation, we need to know the opening balance at the start of the period
     if (chronological.length > 0) {
-      // Get current cash position and work backwards from the current state
-      const currentCash = getCashPosition();
-      const totalCreditsFromFiltered = filtered.reduce((sum, t) => sum + t.credit, 0);
-      const totalDebitsFromFiltered = filtered.reduce((sum, t) => sum + t.debit, 0);
+      // Get period stats to understand the starting position
+      const periodStartDate = new Date(dateRange.from);
+      const periodEndDate = new Date(dateRange.to);
       
-      // Opening balance = Current Cash - Net Movement of filtered transactions
-      runningBalance = currentCash - (totalCreditsFromFiltered - totalDebitsFromFiltered);
+      // Calculate cumulative balance up to the period start using all transactions (not just filtered ones)
+      const allPharmacyCategories = [...PHARMACY_REVENUE_CATEGORIES, ...PHARMACY_EXPENSE_CATEGORIES, 'distributor_credit_purchase'];
+      const allBusinessTransactions = transactions
+        .filter(t => allPharmacyCategories.includes(t.category))
+        .map(t => {
+          const isCredit = PHARMACY_REVENUE_CATEGORIES.includes(t.category);
+          const isDebit = PHARMACY_EXPENSE_CATEGORIES.includes(t.category);
+          
+          return {
+            date: t.date,
+            credit: isCredit ? t.amount : 0,
+            debit: isDebit ? t.amount : 0
+          };
+        });
+      
+      const transactionsBeforePeriod = allBusinessTransactions.filter(t => new Date(t.date) < periodStartDate);
+      const openingBalance = transactionsBeforePeriod.reduce((balance, t) => {
+        return balance + t.credit - t.debit;
+      }, 0);
+      
+      runningBalance = openingBalance;
     }
     
     // Calculate running balances chronologically
@@ -191,42 +193,36 @@ const BusinessAccountStatement: React.FC = () => {
   }, [filteredTransactions, dateRange, getPeriodFilteredStats]);
 
   const partnerProfitSummary = useMemo((): PartnerProfitSummary[] => {
-    // Use actual business logic from TransactionContext for consistent calculations
+    // Use period-filtered business partner payables for accurate calculations
     const startDate = new Date(dateRange.from);
     const endDate = new Date(dateRange.to);
-    const periodStats = getPeriodFilteredStats(startDate, endDate);
-    
-    // Current business balance is the pharmacy cash position
-    const currentBalance = periodStats.pharmacyCashPosition;
+    const periodPayables = getBusinessPartnerPayables(startDate, endDate);
     
     return businessPartners.map(partner => {
-      // Calculate partner's share of current business balance
-      const shareOfCurrentBalance = (currentBalance * partner.ownershipPercentage) / 100;
+      const payable = periodPayables.find(p => p.stakeholderId === partner.id);
       
-      // Calculate total withdrawn by this partner in the selected period
-      const totalWithdrawn = transactions
-        .filter(t => {
-          const transactionDate = new Date(t.date);
-          return t.category === 'sales_profit_distribution' && 
-                 t.stakeholderId === partner.id &&
-                 transactionDate >= startDate && 
-                 transactionDate <= endDate;
-        })
-        .reduce((sum, t) => sum + t.amount, 0);
-      
-      // Profit due = Share of current balance - Total already withdrawn in this period
-      const profitDue = shareOfCurrentBalance - totalWithdrawn;
-      
-      return {
-        partnerId: partner.id,
-        partnerName: partner.name,
-        ownershipPercentage: partner.ownershipPercentage,
-        shareOfCurrentBalance,
-        totalWithdrawn,
-        profitDue
-      };
+      if (payable) {
+        return {
+          partnerId: partner.id,
+          partnerName: partner.name,
+          ownershipPercentage: partner.ownershipPercentage,
+          shareOfCurrentBalance: payable.totalEarned,
+          totalWithdrawn: payable.totalPaid,
+          profitDue: payable.netPayable
+        };
+      } else {
+        // If no payable found, partner has no earnings in this period
+        return {
+          partnerId: partner.id,
+          partnerName: partner.name,
+          ownershipPercentage: partner.ownershipPercentage,
+          shareOfCurrentBalance: 0,
+          totalWithdrawn: 0,
+          profitDue: 0
+        };
+      }
     });
-  }, [businessPartners, transactions, dateRange, getPeriodFilteredStats]);
+  }, [businessPartners, dateRange, getBusinessPartnerPayables]);
 
   const setCategoryColor = (category: TransactionCategory) => {
     return getTransactionTypeColor(category);
@@ -253,27 +249,6 @@ const BusinessAccountStatement: React.FC = () => {
     return getTransactionTypeLabel(category);
   };
 
-  // Helper function to determine cash flow impact
-  const getCashFlowImpact = (category: TransactionCategory): { type: 'Revenue' | 'Expense' | 'Distribution' | 'Credit Issued' | 'Credit Received' | 'Credit Reduction', color: string } => {
-    const revenueCategories: TransactionCategory[] = ['pharmacy_sale', 'consultation_fee', 'patient_payment'];
-    const expenseCategories: TransactionCategory[] = ['distributor_payment', 'doctor_expense', 'employee_payment', 'clinic_expense'];
-
-    if (revenueCategories.includes(category)) {
-      return { type: 'Revenue', color: 'text-green-400' };
-    } else if (expenseCategories.includes(category)) {
-      return { type: 'Expense', color: 'text-red-400' };
-    } else if (category === 'sales_profit_distribution') {
-      return { type: 'Distribution', color: 'text-purple-400' }; // Profit distribution to partners
-    } else if (category === 'patient_credit_sale') {
-      return { type: 'Credit Issued', color: 'text-orange-400' }; // We give credit to patient
-    } else if (category === 'distributor_credit_purchase') {
-      return { type: 'Credit Received', color: 'text-blue-400' }; // We receive credit from distributor
-    } else if (category === 'distributor_credit_note') {
-      return { type: 'Credit Reduction', color: 'text-indigo-400' }; // We return items, reducing distributor credit
-    } else {
-      return { type: 'Credit Issued', color: 'text-gray-400' }; // fallback
-    }
-  };
 
   const handlePeriodChange = (period: string) => {
     setSelectedPeriod(period);

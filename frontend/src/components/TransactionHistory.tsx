@@ -17,13 +17,15 @@ import {
   ArrowTrendingUpIcon,
   ArrowTrendingDownIcon,
   ChartBarIcon,
-  CalculatorIcon
+  CalculatorIcon,
+  BanknotesIcon
 } from '@heroicons/react/24/outline';
 import { useStakeholders } from '../contexts/StakeholderContext';
 import { useTransactions } from '../contexts/TransactionContext';
 import { useAuth } from '../contexts/AuthContext';
 // import { useToast } from '../contexts/ToastContext';
-import { TRANSACTION_TYPES } from '../constants/transactionTypes';
+import { TRANSACTION_TYPES, REVENUE_CATEGORIES, EXPENSE_CATEGORIES, getCashFlowImpact } from '../constants/transactionTypes';
+import { SYSTEM_CONFIG, getDefaultDateRange } from '../constants/systemConfig';
 import type { Transaction, TransactionCategory, StakeholderType } from '../types';
 import clsx from 'clsx';
 
@@ -44,7 +46,7 @@ interface FilterState {
 }
 
 const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: propTransactions, onEditTransaction }) => {
-  const { transactions } = useTransactions();
+  const { transactions, getDashboardStats } = useTransactions();
   const { doctors, businessPartners, employees, distributors, patients } = useStakeholders();
   const { hasPermission } = useAuth();
   // const { showInfo } = useToast();
@@ -80,31 +82,10 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
     return stakeholder ? stakeholder.name : 'NA';
   };
 
-  // Helper function to determine cash flow impact
-  const getCashFlowImpact = (category: TransactionCategory): { type: 'Revenue' | 'Expense' | 'Distribution' | 'Credit Issued' | 'Credit Received' | 'Credit Reduction', color: string } => {
-    const revenueCategories: TransactionCategory[] = ['pharmacy_sale', 'consultation_fee', 'patient_payment'];
-    const expenseCategories: TransactionCategory[] = ['distributor_payment', 'doctor_expense', 'employee_payment', 'clinic_expense', 'sales_profit_distribution'];
-
-    if (revenueCategories.includes(category)) {
-      return { type: 'Revenue', color: 'text-green-400' };
-    } else if (expenseCategories.includes(category)) {
-      return { type: 'Expense', color: 'text-red-400' };
-    } else if (category === 'sales_profit_distribution') {
-      return { type: 'Distribution', color: 'text-purple-400' }; // Profit distribution to partners
-    } else if (category === 'patient_credit_sale') {
-      return { type: 'Credit Issued', color: 'text-orange-400' }; // We give credit to patient
-    } else if (category === 'distributor_credit_purchase') {
-      return { type: 'Credit Received', color: 'text-blue-400' }; // We receive credit from distributor
-    } else if (category === 'distributor_credit_note') {
-      return { type: 'Credit Reduction', color: 'text-indigo-400' }; // We return items, reducing distributor credit
-    } else {
-      return { type: 'Credit Issued', color: 'text-gray-400' }; // fallback
-    }
-  };
   
   const [filters, setFilters] = useState<FilterState>({
-    dateFrom: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    dateTo: new Date().toISOString().split('T')[0],
+    dateFrom: getDefaultDateRange('transaction').from,
+    dateTo: getDefaultDateRange('transaction').to,
     category: 'all',
     stakeholderType: 'all',
     stakeholderId: '',
@@ -122,6 +103,9 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
   const allTransactions = useMemo(() => {
     return propTransactions || transactions;
   }, [propTransactions, transactions]);
+
+  // Get dashboard stats for payables data
+  const dashboardStats = useMemo(() => getDashboardStats(), [getDashboardStats]);
 
   const getAllStakeholders = () => {
     const stakeholders = [
@@ -187,7 +171,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
     return sorted;
   }, [filteredTransactions, sortField, sortDirection]);
 
-  const formatCurrency = (amount: number) => `₹${amount.toLocaleString()}`;
+  const formatCurrency = (amount: number) => `${SYSTEM_CONFIG.CURRENCY_SYMBOL}${amount.toLocaleString()}`;
 
   const getStakeholderIcon = (type?: StakeholderType | 'partner') => {
     switch (type) {
@@ -253,9 +237,10 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
   };
 
   const clearFilters = () => {
+    const defaultRange = getDefaultDateRange('transaction');
     setFilters({
-      dateFrom: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      dateTo: new Date().toISOString().split('T')[0],
+      dateFrom: defaultRange.from,
+      dateTo: defaultRange.to,
       category: 'all',
       stakeholderType: 'all',
       stakeholderId: '',
@@ -326,16 +311,13 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
   };
 
   const businessMetrics = useMemo(() => {
-    // Categorize transactions properly
-    const revenueCategories: TransactionCategory[] = ['pharmacy_sale', 'consultation_fee', 'patient_payment'];
-    const expenseCategories: TransactionCategory[] = ['distributor_payment', 'doctor_expense', 'employee_payment', 'clinic_expense', 'sales_profit_distribution'];
-    
+    // Use centralized transaction categorization
     const totalRevenue = sortedTransactions
-      .filter(t => revenueCategories.includes(t.category))
+      .filter(t => REVENUE_CATEGORIES.includes(t.category))
       .reduce((sum, t) => sum + t.amount, 0);
     
     const totalExpenses = sortedTransactions
-      .filter(t => expenseCategories.includes(t.category))
+      .filter(t => EXPENSE_CATEGORIES.includes(t.category))
       .reduce((sum, t) => sum + t.amount, 0);
     
     const netProfit = totalRevenue - totalExpenses;
@@ -426,23 +408,159 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="bg-gray-800 border border-gray-700 rounded-lg p-5">
-        <div className="flex items-center gap-3 mb-4">
-          <FunnelIcon className="h-5 w-5 text-gray-400" />
-          <h3 className="text-lg font-semibold text-white">Filters</h3>
+      {/* Financial Management Section */}
+      <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
+        <div className="flex items-center gap-2 mb-4">
+          <BanknotesIcon className="h-5 w-5 text-amber-400" />
+          <h3 className="text-base font-semibold text-white">Financial Management</h3>
+          <p className="text-xs text-gray-400 ml-auto">Outstanding payables and credits</p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4">
+          {/* Employee Salary Due */}
+          <div className="bg-gray-750 border border-gray-600 rounded p-3">
+            <div className="flex items-center gap-2 mb-3">
+              <UsersIcon className="h-4 w-4 text-blue-400" />
+              <h4 className="text-sm font-medium text-white">Employee Salary Due</h4>
+            </div>
+            {dashboardStats.employeeSalaryDue.length > 0 ? (
+              <div className="space-y-2">
+                {dashboardStats.employeeSalaryDue.slice(0, 3).map(payable => (
+                  <div key={payable.stakeholderId} className="flex justify-between items-center">
+                    <span className="text-xs text-gray-300 truncate">{payable.stakeholderName}</span>
+                    <span className="text-xs font-medium text-blue-400">{formatCurrency(payable.netPayable)}</span>
+                  </div>
+                ))}
+                {dashboardStats.employeeSalaryDue.length > 3 && (
+                  <p className="text-xs text-gray-500">+{dashboardStats.employeeSalaryDue.length - 3} more</p>
+                )}
+                <div className="pt-2 border-t border-gray-600">
+                  <div className="flex justify-between">
+                    <span className="text-xs font-medium text-gray-300">Total Due:</span>
+                    <span className="text-xs font-bold text-blue-400">
+                      {formatCurrency(dashboardStats.employeeSalaryDue.reduce((sum, p) => sum + p.netPayable, 0))}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-gray-500">No outstanding salaries</p>
+            )}
+          </div>
+
+          {/* Business Partner Outstanding */}
+          <div className="bg-gray-750 border border-gray-600 rounded p-3">
+            <div className="flex items-center gap-2 mb-3">
+              <BuildingOfficeIcon className="h-4 w-4 text-green-400" />
+              <h4 className="text-sm font-medium text-white">Partner Outstanding</h4>
+            </div>
+            {dashboardStats.businessPartnerPayables.length > 0 ? (
+              <div className="space-y-2">
+                {dashboardStats.businessPartnerPayables.slice(0, 3).map(payable => (
+                  <div key={payable.stakeholderId} className="flex justify-between items-center">
+                    <span className="text-xs text-gray-300 truncate">{payable.stakeholderName}</span>
+                    <span className="text-xs font-medium text-green-400">{formatCurrency(payable.netPayable)}</span>
+                  </div>
+                ))}
+                {dashboardStats.businessPartnerPayables.length > 3 && (
+                  <p className="text-xs text-gray-500">+{dashboardStats.businessPartnerPayables.length - 3} more</p>
+                )}
+                <div className="pt-2 border-t border-gray-600">
+                  <div className="flex justify-between">
+                    <span className="text-xs font-medium text-gray-300">Total Due:</span>
+                    <span className="text-xs font-bold text-green-400">
+                      {formatCurrency(dashboardStats.businessPartnerPayables.reduce((sum, p) => sum + p.netPayable, 0))}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-gray-500">No outstanding payments</p>
+            )}
+          </div>
+
+          {/* Doctor Outstanding Payments */}
+          <div className="bg-gray-750 border border-gray-600 rounded p-3">
+            <div className="flex items-center gap-2 mb-3">
+              <UserGroupIcon className="h-4 w-4 text-purple-400" />
+              <h4 className="text-sm font-medium text-white">Doctor Outstanding</h4>
+            </div>
+            {dashboardStats.doctorPayables.length > 0 ? (
+              <div className="space-y-2">
+                {dashboardStats.doctorPayables.slice(0, 3).map(payable => (
+                  <div key={payable.stakeholderId} className="flex justify-between items-center">
+                    <span className="text-xs text-gray-300 truncate">{payable.stakeholderName}</span>
+                    <span className="text-xs font-medium text-purple-400">{formatCurrency(payable.netPayable)}</span>
+                  </div>
+                ))}
+                {dashboardStats.doctorPayables.length > 3 && (
+                  <p className="text-xs text-gray-500">+{dashboardStats.doctorPayables.length - 3} more</p>
+                )}
+                <div className="pt-2 border-t border-gray-600">
+                  <div className="flex justify-between">
+                    <span className="text-xs font-medium text-gray-300">Total Due:</span>
+                    <span className="text-xs font-bold text-purple-400">
+                      {formatCurrency(dashboardStats.doctorPayables.reduce((sum, p) => sum + p.netPayable, 0))}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-gray-500">No outstanding payments</p>
+            )}
+          </div>
+
+          {/* Distributor Credits */}
+          <div className="bg-gray-750 border border-gray-600 rounded p-3">
+            <div className="flex items-center gap-2 mb-3">
+              <TruckIcon className="h-4 w-4 text-orange-400" />
+              <h4 className="text-sm font-medium text-white">Distributor Credits</h4>
+            </div>
+            {dashboardStats.distributorCredits.length > 0 ? (
+              <div className="space-y-2">
+                {dashboardStats.distributorCredits.slice(0, 3).map(credit => (
+                  <div key={credit.id} className="flex justify-between items-center">
+                    <span className="text-xs text-gray-300 truncate">{credit.name}</span>
+                    <span className="text-xs font-medium text-orange-400">{formatCurrency(credit.creditBalance)}</span>
+                  </div>
+                ))}
+                {dashboardStats.distributorCredits.length > 3 && (
+                  <p className="text-xs text-gray-500">+{dashboardStats.distributorCredits.length - 3} more</p>
+                )}
+                <div className="pt-2 border-t border-gray-600">
+                  <div className="flex justify-between">
+                    <span className="text-xs font-medium text-gray-300">Total Credits:</span>
+                    <span className="text-xs font-bold text-orange-400">
+                      {formatCurrency(dashboardStats.distributorCredits.reduce((sum, c) => sum + c.creditBalance, 0))}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-gray-500">No outstanding credits</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Compact Filters */}
+      <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <FunnelIcon className="h-4 w-4 text-gray-400" />
+            <h3 className="text-base font-semibold text-white">Filters</h3>
+          </div>
           <button
             onClick={clearFilters}
-            className="ml-auto text-sm text-blue-400 hover:text-blue-300 underline"
+            className="text-xs text-blue-400 hover:text-blue-300 underline"
           >
-            Clear All Filters
+            Clear All
           </button>
         </div>
 
-        {/* Period Filter */}
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-300 mb-3">Quick Period Selection</label>
-          <div className="flex flex-wrap gap-2">
+        {/* Period Filter - Compact buttons */}
+        <div className="mb-3">
+          <div className="flex flex-wrap gap-1">
             {[
               { value: '7days', label: 'Last 7 Days' },
               { value: '30days', label: 'Last 30 Days' },
@@ -454,7 +572,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
                 key={period.value}
                 onClick={() => handlePeriodChange(period.value)}
                 className={clsx(
-                  'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                  'px-3 py-1 rounded text-xs font-medium transition-colors',
                   selectedPeriod === period.value
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
@@ -466,34 +584,35 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Main filters in single row */}
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-3">
           {/* Date Range */}
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">From Date</label>
+            <label className="block text-xs font-medium text-gray-400 mb-1">From</label>
             <input
               type="date"
               value={filters.dateFrom}
               onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+              className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">To Date</label>
+            <label className="block text-xs font-medium text-gray-400 mb-1">To</label>
             <input
               type="date"
               value={filters.dateTo}
               onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))}
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+              className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
             />
           </div>
 
           {/* Category Filter */}
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Transaction Type</label>
+            <label className="block text-xs font-medium text-gray-400 mb-1">Type</label>
             <select
               value={filters.category}
               onChange={(e) => setFilters(prev => ({ ...prev, category: e.target.value as any }))}
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+              className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
             >
               <option value="all">All Types</option>
               {TRANSACTION_TYPES.map(type => (
@@ -506,32 +625,59 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
 
           {/* Stakeholder Type Filter */}
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Stakeholder Type</label>
+            <label className="block text-xs font-medium text-gray-400 mb-1">Stakeholder</label>
             <select
               value={filters.stakeholderType}
               onChange={(e) => setFilters(prev => ({ ...prev, stakeholderType: e.target.value as any, stakeholderId: '' }))}
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+              className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
             >
-              <option value="all">All Stakeholders</option>
+              <option value="all">All</option>
               <option value="doctor">Doctors</option>
               <option value="employee">Employees</option>
-              <option value="business_partner">Business Partners</option>
+              <option value="business_partner">Partners</option>
               <option value="distributor">Distributors</option>
               <option value="patient">Patients</option>
             </select>
           </div>
+
+          {/* Amount Range */}
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1">Min Amount</label>
+            <input
+              type="number"
+              value={filters.amountMin}
+              onChange={(e) => setFilters(prev => ({ ...prev, amountMin: e.target.value }))}
+              placeholder="0"
+              className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
+            />
+          </div>
+
+          {/* Search */}
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1">Search</label>
+            <div className="relative">
+              <MagnifyingGlassIcon className="h-3 w-3 absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                value={filters.searchTerm}
+                onChange={(e) => setFilters(prev => ({ ...prev, searchTerm: e.target.value }))}
+                placeholder="Search..."
+                className="w-full pl-7 pr-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
+              />
+            </div>
+          </div>
         </div>
 
-        {/* Second row of filters */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+        {/* Secondary filters row - only show when relevant */}
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
           {/* Specific Stakeholder */}
           {filters.stakeholderType !== 'all' && (
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Specific Stakeholder</label>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Specific {filters.stakeholderType.replace('_', ' ')}</label>
               <select
                 value={filters.stakeholderId}
                 onChange={(e) => setFilters(prev => ({ ...prev, stakeholderId: e.target.value }))}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
               >
                 <option value="">All {filters.stakeholderType.replace('_', ' ')}s</option>
                 {getAllStakeholders().map(stakeholder => (
@@ -543,42 +689,19 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
             </div>
           )}
 
-          {/* Amount Range */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Min Amount</label>
-            <input
-              type="number"
-              value={filters.amountMin}
-              onChange={(e) => setFilters(prev => ({ ...prev, amountMin: e.target.value }))}
-              placeholder="0"
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Max Amount</label>
-            <input
-              type="number"
-              value={filters.amountMax}
-              onChange={(e) => setFilters(prev => ({ ...prev, amountMax: e.target.value }))}
-              placeholder="No limit"
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-            />
-          </div>
-
-          {/* Search */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Search Description</label>
-            <div className="relative">
-              <MagnifyingGlassIcon className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+          {/* Max Amount - only show if min amount is set */}
+          {filters.amountMin && (
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Max Amount</label>
               <input
-                type="text"
-                value={filters.searchTerm}
-                onChange={(e) => setFilters(prev => ({ ...prev, searchTerm: e.target.value }))}
-                placeholder="Search transactions..."
-                className="w-full pl-10 pr-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                type="number"
+                value={filters.amountMax}
+                onChange={(e) => setFilters(prev => ({ ...prev, amountMax: e.target.value }))}
+                placeholder="No limit"
+                className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
               />
             </div>
-          </div>
+          )}
         </div>
       </div>
 

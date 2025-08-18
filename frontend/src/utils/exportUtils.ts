@@ -2,6 +2,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
+import { SYSTEM_CONFIG } from '../constants/systemConfig';
 
 declare module 'jspdf' {
   interface jsPDF {
@@ -46,7 +47,7 @@ const addLogoAndHeader = async (pdf: jsPDF, title: string, subtitle?: string) =>
   pdf.setTextColor(255, 255, 255);
   pdf.setFontSize(20);
   pdf.setFont('helvetica', 'bold');
-  pdf.text('QB Pharmacy Management', margin, 25);
+  pdf.text(SYSTEM_CONFIG.DEFAULT_REPORT_TITLE, margin, 25);
   
   if (subtitle) {
     pdf.setFontSize(10);
@@ -91,9 +92,9 @@ const addFooter = (pdf: jsPDF) => {
     pdf.setTextColor(156, 163, 175);
     pdf.setFontSize(8);
     pdf.setFont('helvetica', 'normal');
-    pdf.text('QB Pharmacy Management System', 20, pageHeight - 12);
+    pdf.text(SYSTEM_CONFIG.DEFAULT_REPORT_TITLE, 20, pageHeight - 12);
     pdf.text(`Page ${i} of ${pageCount}`, pageWidth - 60, pageHeight - 12);
-    pdf.text('Confidential Business Report', pageWidth / 2 - 40, pageHeight - 12);
+    pdf.text(SYSTEM_CONFIG.REPORT_FOOTER_TEXT, pageWidth / 2 - 40, pageHeight - 12);
   }
 };
 
@@ -119,7 +120,7 @@ export const exportToPDF = async (data: ExportData): Promise<void> => {
       pdf.setTextColor(31, 41, 55);
       pdf.setFont('helvetica', 'bold');
       const valueText = typeof item.value === 'number' 
-        ? `₹${item.value.toLocaleString()}` 
+        ? `${SYSTEM_CONFIG.CURRENCY_SYMBOL}${item.value.toLocaleString()}` 
         : item.value.toString();
       pdf.text(valueText, 120, currentY);
       
@@ -213,7 +214,7 @@ export const exportBusinessReportToPDF = async (reportData: BusinessReportData):
       pdf.setTextColor(239, 68, 68);
     }
     pdf.setFont('helvetica', 'bold');
-    pdf.text(`₹${item.value.toLocaleString()}`, xPos + 100, yPos);
+    pdf.text(`${SYSTEM_CONFIG.CURRENCY_SYMBOL}${item.value.toLocaleString()}`, xPos + 100, yPos);
   });
   
   currentY += summaryItems.length * 10 + 30;
@@ -230,7 +231,7 @@ export const exportBusinessReportToPDF = async (reportData: BusinessReportData):
       new Date(t.date).toLocaleDateString(),
       t.description || 'N/A',
       t.category?.replace('_', ' ').toUpperCase() || 'N/A',
-      `₹${t.amount.toLocaleString()}`
+      `${SYSTEM_CONFIG.CURRENCY_SYMBOL}${t.amount.toLocaleString()}`
     ]);
     
     autoTable(pdf, {
@@ -271,7 +272,7 @@ export const exportToExcel = (data: ExportData): void => {
   const workbook = XLSX.utils.book_new();
   
   const worksheetData = [
-    [`QB Pharmacy Management - ${data.title}`],
+    [`${SYSTEM_CONFIG.DEFAULT_REPORT_TITLE} - ${data.title}`],
     [data.subtitle || ''],
     [`Generated on: ${new Date().toLocaleDateString()}`],
     [''],
@@ -400,7 +401,7 @@ export const exportTransactionsToExcel = (
   
   // Create professional worksheet structure
   const worksheetData = [
-    ['QB PHARMACY MANAGEMENT SYSTEM'],
+    [SYSTEM_CONFIG.DEFAULT_REPORT_TITLE.toUpperCase()],
     [title.toUpperCase()],
     [`Generated on: ${new Date().toLocaleDateString('en-IN', { 
       weekday: 'long', 
@@ -503,7 +504,7 @@ export const exportTransactionsToExcel = (
         
         // Special formatting for amount column
         if (C === 4 && typeof cell.v === 'number') {
-          cell.z = '"₹"#,##0.00';
+          cell.z = `"${SYSTEM_CONFIG.CURRENCY_SYMBOL}"#,##0.00`;
         }
       }
     }
@@ -521,7 +522,7 @@ export const exportTransactionsToExcel = (
   // Generate professional filename
   const dateStr = new Date().toISOString().split('T')[0];
   const timeStr = new Date().toTimeString().split(' ')[0].replace(/:/g, '');
-  const fileName = `QB_Pharmacy_${title.replace(/\s+/g, '_')}_${dateStr}_${timeStr}.xlsx`;
+  const fileName = `${SYSTEM_CONFIG.DEFAULT_REPORT_TITLE.replace(/\s+/g, '_')}_${title.replace(/\s+/g, '_')}_${dateStr}_${timeStr}.xlsx`;
   
   XLSX.writeFile(workbook, fileName);
 };
@@ -580,7 +581,7 @@ export const exportAccountStatementToExcel = (
   ];
   
   const worksheetData = [
-    ['QB PHARMACY MANAGEMENT SYSTEM'],
+    [SYSTEM_CONFIG.DEFAULT_REPORT_TITLE.toUpperCase()],
     ['ACCOUNT STATEMENT REPORT'],
     [`Generated on: ${new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`],
     [`Report Time: ${new Date().toLocaleTimeString('en-IN')}`],
@@ -662,7 +663,7 @@ export const exportAccountStatementToExcel = (
         
         // Number formatting for financial columns
         if ((C >= 3 && C <= 5) && typeof cell.v === 'number') {
-          cell.z = '"₹"#,##0.00';
+          cell.z = `"${SYSTEM_CONFIG.CURRENCY_SYMBOL}"#,##0.00`;
         }
       }
     }
@@ -672,7 +673,7 @@ export const exportAccountStatementToExcel = (
   
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Account Statement');
   
-  const fileName = `QB_Pharmacy_Account_Statement_${stakeholderInfo.name?.replace(/\s+/g, '_') || 'Unknown'}_${new Date().toISOString().split('T')[0]}.xlsx`;
+  const fileName = `${SYSTEM_CONFIG.DEFAULT_REPORT_TITLE.replace(/\s+/g, '_')}_Account_Statement_${stakeholderInfo.name?.replace(/\s+/g, '_') || 'Unknown'}_${new Date().toISOString().split('T')[0]}.xlsx`;
   XLSX.writeFile(workbook, fileName);
 };
 
@@ -767,7 +768,7 @@ export const exportEnhancedBusinessReportToPDF = async (reportData: BusinessRepo
       new Date(t.date).toLocaleDateString('en-IN'),
       (t.description || 'N/A').substring(0, 30) + (t.description?.length > 30 ? '...' : ''),
       (t.category?.replace('_', ' ') || 'N/A').toUpperCase(),
-      `₹${t.amount.toLocaleString()}`
+      `${SYSTEM_CONFIG.CURRENCY_SYMBOL}${t.amount.toLocaleString()}`
     ]);
     
     autoTable(pdf, {
@@ -833,10 +834,10 @@ export const exportEnhancedBusinessReportToPDF = async (reportData: BusinessRepo
   
   addFooter(pdf);
   
-  const fileName = `QB_Pharmacy_Business_Report_${new Date().toISOString().split('T')[0]}.pdf`;
+  const fileName = `${SYSTEM_CONFIG.DEFAULT_REPORT_TITLE.replace(/\s+/g, '_')}_Business_Report_${new Date().toISOString().split('T')[0]}.pdf`;
   pdf.save(fileName);
 };
 
 export const formatCurrency = (amount: number): string => {
-  return `₹${amount.toLocaleString()}`;
+  return `${SYSTEM_CONFIG.CURRENCY_SYMBOL}${amount.toLocaleString()}`;
 };

@@ -11,6 +11,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { useStakeholders } from '../contexts/StakeholderContext';
 import { useTransactions } from '../contexts/TransactionContext';
+import { SYSTEM_CONFIG, getDefaultDateRange } from '../constants/systemConfig';
 import type { TransactionCategory } from '../types';
 import clsx from 'clsx';
 
@@ -37,76 +38,16 @@ interface DoctorSummary {
 
 const DoctorAccountStatement: React.FC = () => {
   const { doctors } = useStakeholders();
-  const { transactions, getTransactionsByType } = useTransactions();
+  const { transactions, getDoctorRevenue, getDoctorExpenses } = useTransactions();
   
-  const [dateRange, setDateRange] = useState({
-    from: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    to: new Date().toISOString().split('T')[0]
-  });
+  const [dateRange, setDateRange] = useState(getDefaultDateRange('doctor'));
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<'consultation_fee' | 'doctor_expense' | 'all'>('all');
   const [doctorFilter, setDoctorFilter] = useState<string>('all');
   const [selectedPeriod, setSelectedPeriod] = useState('90days');
 
-  const formatCurrency = (amount: number) => `₹${amount.toLocaleString()}`;
+  const formatCurrency = (amount: number) => `${SYSTEM_CONFIG.CURRENCY_SYMBOL}${amount.toLocaleString()}`;
 
-  const generateDoctorTransactions = (): DoctorTransaction[] => {
-    const transactions: DoctorTransaction[] = [];
-    let runningBalance = 15000; // Starting balance for doctor accounts
-    
-    // DOCTOR-SPECIFIC TRANSACTIONS ONLY
-    const transactionTemplates = [
-      // DOCTOR REVENUE - Consultation fees
-      { category: 'consultation_fee', description: 'Patient consultation fee', credit: () => Math.floor(Math.random() * 3000) + 1000, debit: 0 },
-      { category: 'consultation_fee', description: 'Follow-up consultation', credit: () => Math.floor(Math.random() * 2000) + 800, debit: 0 },
-      { category: 'consultation_fee', description: 'Medical examination fee', credit: () => Math.floor(Math.random() * 2500) + 1200, debit: 0 },
-      { category: 'consultation_fee', description: 'Specialist consultation', credit: () => Math.floor(Math.random() * 4000) + 1500, debit: 0 },
-      
-      // DOCTOR EXPENSES - Equipment, supplies, development
-      { category: 'doctor_expense', description: 'Medical equipment purchase', debit: () => Math.floor(Math.random() * 8000) + 2000, credit: 0 },
-      { category: 'doctor_expense', description: 'Medical supplies expense', debit: () => Math.floor(Math.random() * 3000) + 1000, credit: 0 },
-      { category: 'doctor_expense', description: 'Professional development course', debit: () => Math.floor(Math.random() * 5000) + 2000, credit: 0 },
-      { category: 'doctor_expense', description: 'Medical conference registration', debit: () => Math.floor(Math.random() * 4000) + 1500, credit: 0 },
-      { category: 'doctor_expense', description: 'Office supplies expense', debit: () => Math.floor(Math.random() * 2000) + 500, credit: 0 },
-      { category: 'doctor_expense', description: 'Equipment maintenance', debit: () => Math.floor(Math.random() * 1500) + 500, credit: 0 },
-    ];
-
-    const startDate = new Date(dateRange.from);
-    const endDate = new Date(dateRange.to);
-    const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-    
-    // Generate transactions for each day, distributed across doctors
-    for (let day = 0; day <= daysDiff; day++) {
-      const currentDate = new Date(startDate.getTime() + day * 24 * 60 * 60 * 1000);
-      
-      // Generate 1-3 doctor transactions per day
-      const dailyTransactions = Math.floor(Math.random() * 3) + 1;
-      
-      for (let i = 0; i < dailyTransactions; i++) {
-        const template = transactionTemplates[Math.floor(Math.random() * transactionTemplates.length)];
-        const doctor = doctors[Math.floor(Math.random() * doctors.length)] || { id: 'demo', name: 'Demo Doctor' };
-        const debitAmount = typeof template.debit === 'function' ? template.debit() : template.debit;
-        const creditAmount = typeof template.credit === 'function' ? template.credit() : template.credit;
-        
-        runningBalance += creditAmount - debitAmount;
-        
-        transactions.push({
-          id: `doc-${day}-${i}`,
-          date: new Date(currentDate.getTime() + i * 3600000),
-          category: template.category as 'consultation_fee' | 'doctor_expense',
-          description: `${template.description} - ${doctor.name}`,
-          doctorId: doctor.id,
-          doctorName: doctor.name,
-          debit: debitAmount,
-          credit: creditAmount,
-          balance: runningBalance,
-          reference: `DOC${day.toString().padStart(3, '0')}${i.toString().padStart(2, '0')}`
-        });
-      }
-    }
-
-    return transactions.sort((a, b) => b.date.getTime() - a.date.getTime());
-  };
 
   const allTransactions = useMemo(() => {
     const startDate = new Date(dateRange.from);
@@ -140,6 +81,7 @@ const DoctorAccountStatement: React.FC = () => {
   }, [dateRange, transactions, doctors]);
 
   const filteredTransactions = useMemo(() => {
+    // Use real transactions from allTransactions instead of mock data
     const filtered = allTransactions.filter(transaction => {
       const matchesSearch = transaction.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           transaction.doctorName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -149,12 +91,19 @@ const DoctorAccountStatement: React.FC = () => {
       return matchesSearch && matchesCategory && matchesDoctor;
     });
     
-    // Calculate running balances
-    let runningBalance = 15000; // Starting balance for doctor accounts
-    return filtered.reverse().map(t => {
+    // Calculate running balances chronologically
+    const chronological = [...filtered].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    
+    // Start with configurable opening balance
+    let runningBalance = SYSTEM_CONFIG.DEFAULT_DOCTOR_OPENING_BALANCE;
+    
+    const withBalances = chronological.map(t => {
       runningBalance += t.credit - t.debit;
       return { ...t, balance: runningBalance };
-    }).reverse();
+    });
+    
+    // Return in reverse chronological order (newest first) for display
+    return withBalances.reverse();
   }, [allTransactions, searchTerm, categoryFilter, doctorFilter]);
 
   const doctorSummary = useMemo((): DoctorSummary => {
@@ -394,12 +343,12 @@ const DoctorAccountStatement: React.FC = () => {
             </p>
           </div>
           <div className="text-right">
-            <p className="text-sm text-gray-400">Current Balance</p>
+            <p className="text-sm text-gray-400">Current Doctor Balance</p>
             <p className={clsx(
               "text-2xl font-bold",
-              filteredTransactions[0]?.balance >= 0 ? "text-green-400" : "text-red-400"
+              (getDoctorRevenue() - getDoctorExpenses()) >= 0 ? "text-green-400" : "text-red-400"
             )}>
-              {formatCurrency(filteredTransactions[0]?.balance || 0)}
+              {formatCurrency(getDoctorRevenue() - getDoctorExpenses())}
             </p>
           </div>
         </div>

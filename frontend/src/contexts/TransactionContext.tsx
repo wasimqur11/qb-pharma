@@ -1,5 +1,12 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import type { Transaction, DashboardStats, PayableBalance, StakeholderType } from '../types';
+import { 
+  PHARMACY_REVENUE_CATEGORIES, 
+  PHARMACY_EXPENSE_CATEGORIES,
+  DOCTOR_REVENUE_CATEGORIES,
+  DOCTOR_EXPENSE_CATEGORIES,
+  EXPENSE_CATEGORIES
+} from '../constants/transactionTypes';
 import { useStakeholders } from './StakeholderContext';
 
 interface TransactionContextType {
@@ -34,7 +41,7 @@ interface TransactionContextType {
   
   // Payables
   getDoctorPayables: () => PayableBalance[];
-  getBusinessPartnerPayables: () => PayableBalance[];
+  getBusinessPartnerPayables: (startDate?: Date, endDate?: Date) => PayableBalance[];
   getEmployeeSalaryDue: () => PayableBalance[];
   getDistributorCredits: () => { id: string; name: string; creditBalance: number }[];
   getPatientCredits: () => { id: string; name: string; creditBalance: number }[];
@@ -142,19 +149,19 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
   // Analytics - Separated by Business Type
   const getPharmacyRevenue = () => {
     return transactions
-      .filter(t => ['pharmacy_sale', 'patient_payment'].includes(t.category))
+      .filter(t => PHARMACY_REVENUE_CATEGORIES.includes(t.category))
       .reduce((sum, t) => sum + t.amount, 0);
   };
 
   const getDoctorRevenue = () => {
     return transactions
-      .filter(t => t.category === 'consultation_fee')
+      .filter(t => DOCTOR_REVENUE_CATEGORIES.includes(t.category))
       .reduce((sum, t) => sum + t.amount, 0);
   };
 
   const getDoctorExpenses = () => {
     return transactions
-      .filter(t => t.category === 'doctor_expense')
+      .filter(t => DOCTOR_EXPENSE_CATEGORIES.includes(t.category))
       .reduce((sum, t) => sum + t.amount, 0);
   };
 
@@ -166,7 +173,7 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     const today = new Date().toDateString();
     return transactions
       .filter(t => 
-        ['pharmacy_sale', 'patient_payment'].includes(t.category) &&
+        PHARMACY_REVENUE_CATEGORIES.includes(t.category) &&
         t.date.toDateString() === today
       )
       .reduce((sum, t) => sum + t.amount, 0);
@@ -176,7 +183,7 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     const today = new Date().toDateString();
     return transactions
       .filter(t => 
-        t.category === 'consultation_fee' &&
+        DOCTOR_REVENUE_CATEGORIES.includes(t.category) &&
         t.date.toDateString() === today
       )
       .reduce((sum, t) => sum + t.amount, 0);
@@ -188,13 +195,13 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
 
   const getPharmacyExpenses = () => {
     return transactions
-      .filter(t => ['distributor_payment', 'employee_payment', 'clinic_expense'].includes(t.category))
+      .filter(t => PHARMACY_EXPENSE_CATEGORIES.includes(t.category))
       .reduce((sum, t) => sum + t.amount, 0);
   };
 
   const getTotalExpenses = () => {
     return transactions
-      .filter(t => ['distributor_payment', 'doctor_expense', 'employee_payment', 'clinic_expense', 'sales_profit_distribution'].includes(t.category))
+      .filter(t => EXPENSE_CATEGORIES.includes(t.category))
       .reduce((sum, t) => sum + t.amount, 0);
   };
 
@@ -202,21 +209,15 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     const now = new Date();
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     
-    const monthlyPharmacyRevenue = transactions
-      .filter(t => 
-        ['pharmacy_sale', 'patient_payment'].includes(t.category) &&
-        t.date >= firstDayOfMonth
-      )
-      .reduce((sum, t) => sum + t.amount, 0);
+    // Get monthly business partner payables data to calculate total profit earned by partners
+    const monthlyPartnerPayables = getBusinessPartnerPayables(firstDayOfMonth, now);
     
-    const monthlyPharmacyExpenses = transactions
-      .filter(t => 
-        ['distributor_payment', 'employee_payment', 'clinic_expense'].includes(t.category) &&
-        t.date >= firstDayOfMonth
-      )
-      .reduce((sum, t) => sum + t.amount, 0);
+    // Sum of all profit earned by partners (their share of the total pharmacy profit)
+    const totalPartnerProfitEarned = monthlyPartnerPayables.reduce((sum, partner) => {
+      return sum + partner.totalEarned;
+    }, 0);
     
-    return monthlyPharmacyRevenue - monthlyPharmacyExpenses;
+    return totalPartnerProfitEarned;
   };
 
   const getMonthlyProfit = () => {
@@ -249,7 +250,10 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
   };
 
   const getCashPosition = () => {
-    return getTotalRevenue() - getTotalExpenses();
+    // Use consistent calculation: (Pharmacy + Doctor Revenue) - Total Expenses
+    const totalRevenue = getPharmacyRevenue() + getDoctorRevenue();
+    const totalExpenses = getTotalExpenses();
+    return totalRevenue - totalExpenses;
   };
 
   // Payables calculation
@@ -281,16 +285,32 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     }).filter(payable => payable.netPayable > 0);
   };
 
-  const getBusinessPartnerPayables = (): PayableBalance[] => {
+  const getBusinessPartnerPayables = (startDate?: Date, endDate?: Date): PayableBalance[] => {
     return businessPartners.map(partner => {
-      const partnerTransactions = transactions.filter(t => 
+      // Filter transactions by date range if provided
+      let partnerTransactions = transactions.filter(t => 
         t.stakeholderId === partner.id && t.stakeholderType === 'business_partner'
       );
       
+      if (startDate && endDate) {
+        partnerTransactions = partnerTransactions.filter(t => {
+          const transactionDate = new Date(t.date);
+          return transactionDate >= startDate && transactionDate <= endDate;
+        });
+      }
+      
       // Calculate profit share based on ownership percentage
-      // Profit = Pharmacy Revenue - All Pharmacy Expenses
-      const pharmacyRevenue = getPharmacyRevenue();
-      const pharmacyExpenses = getPharmacyExpenses();
+      // Use period-filtered data if dates provided, otherwise use all-time data
+      let pharmacyRevenue, pharmacyExpenses;
+      if (startDate && endDate) {
+        const periodStats = getPeriodFilteredStats(startDate, endDate);
+        pharmacyRevenue = periodStats.pharmacyRevenue;
+        pharmacyExpenses = periodStats.pharmacyExpenses;
+      } else {
+        pharmacyRevenue = getPharmacyRevenue();
+        pharmacyExpenses = getPharmacyExpenses();
+      }
+      
       const totalProfit = pharmacyRevenue - pharmacyExpenses;
       
       // Partner's share = Total Profit * Ownership Percentage
@@ -436,31 +456,31 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     
     const getPharmacyRevenueForPeriod = () => {
       return periodTransactions
-        .filter(t => ['pharmacy_sale', 'patient_payment'].includes(t.category))
+        .filter(t => PHARMACY_REVENUE_CATEGORIES.includes(t.category))
         .reduce((sum, t) => sum + t.amount, 0);
     };
 
     const getDoctorRevenueForPeriod = () => {
       return periodTransactions
-        .filter(t => t.category === 'consultation_fee')
+        .filter(t => DOCTOR_REVENUE_CATEGORIES.includes(t.category))
         .reduce((sum, t) => sum + t.amount, 0);
     };
 
     const getPharmacyExpensesForPeriod = () => {
       return periodTransactions
-        .filter(t => ['distributor_payment', 'employee_payment', 'clinic_expense'].includes(t.category))
+        .filter(t => PHARMACY_EXPENSE_CATEGORIES.includes(t.category))
         .reduce((sum, t) => sum + t.amount, 0);
     };
 
     const getDoctorExpensesForPeriod = () => {
       return periodTransactions
-        .filter(t => t.category === 'doctor_expense')
+        .filter(t => DOCTOR_EXPENSE_CATEGORIES.includes(t.category))
         .reduce((sum, t) => sum + t.amount, 0);
     };
 
     const getTotalExpensesForPeriod = () => {
       return periodTransactions
-        .filter(t => ['distributor_payment', 'doctor_expense', 'employee_payment', 'clinic_expense', 'sales_profit_distribution'].includes(t.category))
+        .filter(t => EXPENSE_CATEGORIES.includes(t.category))
         .reduce((sum, t) => sum + t.amount, 0);
     };
 
