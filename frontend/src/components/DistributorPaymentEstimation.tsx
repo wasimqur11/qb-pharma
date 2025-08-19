@@ -14,7 +14,11 @@ import { CalendarIcon, CurrencyDollarIcon, UserGroupIcon, Cog6ToothIcon } from '
 const DistributorPaymentEstimation: React.FC = () => {
   const { distributors } = useStakeholders();
   const { transactions } = useTransactions();
-  const [config, setConfig] = React.useState({
+  const [config, setConfig] = React.useState<{
+    profitPercentage: number;
+    distributorPercentage: number;
+    maxPaymentPercentage: number;
+  }>({
     profitPercentage: SYSTEM_CONFIG.PROFIT_ALLOCATION_PERCENTAGE,
     distributorPercentage: SYSTEM_CONFIG.DISTRIBUTOR_ALLOCATION_PERCENTAGE,
     maxPaymentPercentage: SYSTEM_CONFIG.MAX_DISTRIBUTOR_PAYMENT_PERCENTAGE
@@ -24,7 +28,7 @@ const DistributorPaymentEstimation: React.FC = () => {
     return calculateDistributorPaymentEstimates(transactions, distributors, config);
   }, [transactions, distributors, config]);
 
-  const { weeklyData, distributorEstimates, totalEstimatedPayments, remainingFunds } = estimationResult;
+  const { weeklyData, currentWeekData, distributorEstimates, totalEstimatedPayments, remainingFunds } = estimationResult;
 
   return (
     <div className="p-6">
@@ -98,7 +102,14 @@ const DistributorPaymentEstimation: React.FC = () => {
               </h2>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-gray-900 border border-gray-600 rounded-lg p-3">
+                <div className="text-sm font-medium text-blue-400 mb-1">Week Period</div>
+                <div className="text-base font-semibold text-blue-300">
+                  {formatDateRange(currentWeekData.weekStart, currentWeekData.weekEnd)}
+                </div>
+              </div>
+              
               <div className="bg-gray-900 border border-gray-600 rounded-lg p-3">
                 <div className="text-sm font-medium text-green-400 mb-1">Total Estimated Payments</div>
                 <div className="text-xl font-bold text-green-300">

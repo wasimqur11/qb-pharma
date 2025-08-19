@@ -12,7 +12,11 @@ interface PaymentEstimationConfigProps {
 
 const PaymentEstimationConfig: React.FC<PaymentEstimationConfigProps> = ({ onConfigChange }) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [config, setConfig] = useState({
+  const [config, setConfig] = useState<{
+    profitPercentage: number;
+    distributorPercentage: number;
+    maxPaymentPercentage: number;
+  }>({
     profitPercentage: SYSTEM_CONFIG.PROFIT_ALLOCATION_PERCENTAGE,
     distributorPercentage: SYSTEM_CONFIG.DISTRIBUTOR_ALLOCATION_PERCENTAGE,
     maxPaymentPercentage: SYSTEM_CONFIG.MAX_DISTRIBUTOR_PAYMENT_PERCENTAGE

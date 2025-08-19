@@ -9,6 +9,11 @@ export interface WeeklySalesData {
   distributorAllocation: number; // 75%
 }
 
+export interface CurrentWeekData {
+  weekStart: Date;
+  weekEnd: Date;
+}
+
 export interface DistributorPaymentEstimate {
   distributorId: string;
   distributorName: string;
@@ -20,6 +25,7 @@ export interface DistributorPaymentEstimate {
 
 export interface PaymentEstimationResult {
   weeklyData: WeeklySalesData;
+  currentWeekData: CurrentWeekData;
   distributorEstimates: DistributorPaymentEstimate[];
   totalEstimatedPayments: number;
   remainingFunds: number;
@@ -48,6 +54,20 @@ export function getWeekEnd(date: Date): Date {
   // Set to end of day
   weekEnd.setHours(23, 59, 59, 999);
   return weekEnd;
+}
+
+/**
+ * Get the current week's date range
+ */
+export function getCurrentWeekRange(): { start: Date; end: Date } {
+  const today = new Date();
+  const currentWeekStart = getWeekStart(today);
+  const currentWeekEnd = getWeekEnd(today);
+  
+  return {
+    start: currentWeekStart,
+    end: currentWeekEnd
+  };
 }
 
 /**
@@ -98,6 +118,7 @@ export function calculateDistributorPaymentEstimates(
   }
 ): PaymentEstimationResult {
   const { start: weekStart, end: weekEnd } = getPreviousWeekRange();
+  const { start: currentWeekStart, end: currentWeekEnd } = getCurrentWeekRange();
   const totalSales = calculateWeeklySales(transactions, weekStart, weekEnd);
   
   // Use custom config if provided, otherwise use system defaults
@@ -115,6 +136,11 @@ export function calculateDistributorPaymentEstimates(
     profitAllocation,
     distributorAllocation
   };
+
+  const currentWeekData: CurrentWeekData = {
+    weekStart: currentWeekStart,
+    weekEnd: currentWeekEnd
+  };
   
   // Filter distributors with positive credit balance
   const eligibleDistributors = distributors.filter(d => d.creditBalance > 0);
@@ -122,6 +148,7 @@ export function calculateDistributorPaymentEstimates(
   if (eligibleDistributors.length === 0) {
     return {
       weeklyData,
+      currentWeekData,
       distributorEstimates: [],
       totalEstimatedPayments: 0,
       remainingFunds: distributorAllocation
@@ -159,6 +186,7 @@ export function calculateDistributorPaymentEstimates(
   
   return {
     weeklyData,
+    currentWeekData,
     distributorEstimates,
     totalEstimatedPayments,
     remainingFunds
