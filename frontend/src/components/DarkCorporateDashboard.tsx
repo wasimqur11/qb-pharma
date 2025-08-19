@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
+  LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, ComposedChart,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer 
 } from 'recharts';
 // No mock data imports - clean slate for real pharmacy
@@ -18,6 +18,7 @@ import TransactionHistory from './TransactionHistory';
 import BusinessAccountStatement from './BusinessAccountStatement';
 import DoctorAccountStatement from './DoctorAccountStatement';
 import DistributorAccountStatement from './DistributorAccountStatement';
+import DistributorPaymentEstimation from './DistributorPaymentEstimation';
 import DepartmentManagement from './DepartmentManagement';
 import PatientManagement from './PatientManagement';
 import ConfigurationManagement from './ConfigurationManagement';
@@ -34,7 +35,7 @@ import { SYSTEM_CONFIG, getDefaultDateRange } from '../constants/systemConfig';
 import clsx from 'clsx';
 
 const DarkCorporateDashboard: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'reports' | 'stakeholders' | 'patients' | 'statements' | 'business_statement' | 'doctor_statement' | 'distributor_statement' | 'configuration'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'reports' | 'stakeholders' | 'patients' | 'statements' | 'business_statement' | 'doctor_statement' | 'distributor_statement' | 'payment_estimation' | 'configuration'>('dashboard');
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   const [showEditTransactionForm, setShowEditTransactionForm] = useState(false);
   const [selectedTransactionForEdit, setSelectedTransactionForEdit] = useState<Transaction | null>(null);
@@ -224,6 +225,82 @@ const DarkCorporateDashboard: React.FC = () => {
       data.push({
         name: date.toLocaleDateString('en-US', { weekday: 'short' }),
         total: revenue
+      });
+    }
+    
+    return data;
+  };
+
+  // Cash Flow Timeline Chart Data - shows daily cash inflows vs outflows
+  const getCashFlowTimelineData = () => {
+    const days = 14; // Show last 2 weeks for better trend visibility
+    const data = [];
+    
+    for (let i = days - 1; i >= 0; i--) {
+      const date = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
+      const dayTransactions = transactions.filter(t => 
+        t.date.toDateString() === date.toDateString()
+      );
+      
+      // Cash Inflows (Revenue categories)
+      const cashIn = dayTransactions
+        .filter(t => ['pharmacy_sale', 'consultation_fee', 'patient_payment', 'distributor_credit_note'].includes(t.category))
+        .reduce((sum, t) => sum + t.amount, 0);
+        
+      // Cash Outflows (Expense categories)
+      const cashOut = dayTransactions
+        .filter(t => ['distributor_payment', 'employee_payment', 'clinic_expense', 'sales_profit_distribution', 'doctor_expense', 'patient_credit_sale'].includes(t.category))
+        .reduce((sum, t) => sum + t.amount, 0);
+      
+      // Net Cash Flow for the day
+      const netCashFlow = cashIn - cashOut;
+      
+      data.push({
+        date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        cashIn,
+        cashOut,
+        netCashFlow,
+        // Running balance would require more complex calculation
+        fullDate: date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+      });
+    }
+    
+    return data;
+  };
+
+  // Transaction Volume Chart Data - shows daily transaction counts and patterns
+  const getTransactionVolumeData = () => {
+    const days = 14; // Show last 2 weeks for better pattern visibility
+    const data = [];
+    
+    for (let i = days - 1; i >= 0; i--) {
+      const date = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
+      const dayTransactions = transactions.filter(t => 
+        t.date.toDateString() === date.toDateString()
+      );
+      
+      // Count transactions by category
+      const revenueTransactions = dayTransactions.filter(t => 
+        ['pharmacy_sale', 'consultation_fee', 'patient_payment', 'distributor_credit_note'].includes(t.category)
+      ).length;
+      
+      const expenseTransactions = dayTransactions.filter(t => 
+        ['distributor_payment', 'employee_payment', 'clinic_expense', 'sales_profit_distribution', 'doctor_expense', 'patient_credit_sale'].includes(t.category)
+      ).length;
+      
+      const totalTransactions = dayTransactions.length;
+      
+      // Calculate average transaction value for the day
+      const totalAmount = dayTransactions.reduce((sum, t) => sum + t.amount, 0);
+      const avgTransactionValue = totalTransactions > 0 ? totalAmount / totalTransactions : 0;
+      
+      data.push({
+        date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        revenueTransactions,
+        expenseTransactions,
+        totalTransactions,
+        avgTransactionValue,
+        fullDate: date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
       });
     }
     
@@ -436,6 +513,7 @@ const DarkCorporateDashboard: React.FC = () => {
           {[
             { id: 'stakeholders', label: 'Stakeholders', icon: UsersIcon, category: 'management', tooltip: 'Manage doctors, partners, employees, and distributors' },
             { id: 'patients', label: 'Patients', icon: UserIcon, category: 'management', tooltip: 'Patient management and credit tracking' },
+            { id: 'payment_estimation', label: 'Payment Estimation', icon: CurrencyDollarIcon, category: 'management', tooltip: 'Estimate distributor payments based on weekly sales' },
           ].map(item => (
             <button
               key={item.id}
@@ -844,6 +922,91 @@ const DarkCorporateDashboard: React.FC = () => {
           </ChartCard>
         </div>
 
+        {/* Cash Flow Timeline Chart */}
+        <div className="grid grid-cols-1 gap-4">
+          <ChartCard title="Cash Flow Timeline" subtitle="Daily Cash Inflows vs Outflows (Last 2 Weeks)" height="350px">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={getCashFlowTimelineData()} margin={{ top: 10, right: 30, left: 20, bottom: 5 }}>
+                <defs>
+                  <linearGradient id="cashInGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0.1}/>
+                  </linearGradient>
+                  <linearGradient id="cashOutGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0.1}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                <XAxis dataKey="date" stroke="#9ca3af" fontSize={11} />
+                <YAxis stroke="#9ca3af" fontSize={11} />
+                <Tooltip 
+                  formatter={(value, name) => [
+                    formatCurrency(value as number), 
+                    name === 'cashIn' ? 'Cash Inflow' : 
+                    name === 'cashOut' ? 'Cash Outflow' : 'Net Cash Flow'
+                  ]} 
+                  contentStyle={darkTooltipStyle}
+                  labelFormatter={(label) => `Date: ${label}`}
+                />
+                <Legend wrapperStyle={{ fontSize: '11px' }} />
+                <Area type="monotone" dataKey="cashIn" stroke="#10b981" fill="url(#cashInGradient)" name="Cash Inflow" />
+                <Area type="monotone" dataKey="cashOut" stroke="#ef4444" fill="url(#cashOutGradient)" name="Cash Outflow" />
+                <Line type="monotone" dataKey="netCashFlow" stroke="#f59e0b" strokeWidth={3} dot={{ fill: '#f59e0b', strokeWidth: 2, r: 4 }} name="Net Cash Flow" />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </ChartCard>
+        </div>
+
+        {/* Transaction Volume Analytics */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <ChartCard title="Transaction Volume Trends" subtitle="Daily Transaction Counts (Last 2 Weeks)" height="300px">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={getTransactionVolumeData()} margin={{ top: 10, right: 30, left: 20, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                <XAxis dataKey="date" stroke="#9ca3af" fontSize={11} />
+                <YAxis stroke="#9ca3af" fontSize={11} />
+                <Tooltip 
+                  formatter={(value, name) => [
+                    name === 'avgTransactionValue' ? formatCurrency(value as number) : value,
+                    name === 'revenueTransactions' ? 'Revenue Transactions' : 
+                    name === 'expenseTransactions' ? 'Expense Transactions' :
+                    name === 'totalTransactions' ? 'Total Transactions' : 'Avg Transaction Value'
+                  ]} 
+                  contentStyle={darkTooltipStyle}
+                  labelFormatter={(label) => `Date: ${label}`}
+                />
+                <Legend wrapperStyle={{ fontSize: '11px' }} />
+                <Bar dataKey="revenueTransactions" fill="#10b981" name="Revenue Transactions" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="expenseTransactions" fill="#ef4444" name="Expense Transactions" radius={[2, 2, 0, 0]} />
+                <Line type="monotone" dataKey="totalTransactions" stroke="#3b82f6" strokeWidth={3} dot={{ fill: '#3b82f6', strokeWidth: 2, r: 4 }} name="Total Transactions" />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </ChartCard>
+
+          <ChartCard title="Average Transaction Value" subtitle="Daily Transaction Value Patterns" height="300px">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={getTransactionVolumeData()} margin={{ top: 10, right: 30, left: 20, bottom: 5 }}>
+                <defs>
+                  <linearGradient id="avgValueGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.1}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                <XAxis dataKey="date" stroke="#9ca3af" fontSize={11} />
+                <YAxis stroke="#9ca3af" fontSize={11} />
+                <Tooltip 
+                  formatter={(value) => [formatCurrency(value as number), 'Avg Transaction Value']} 
+                  contentStyle={darkTooltipStyle}
+                  labelFormatter={(label) => `Date: ${label}`}
+                />
+                <Area type="monotone" dataKey="avgTransactionValue" stroke="#8b5cf6" fill="url(#avgValueGradient)" strokeWidth={2} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </ChartCard>
+        </div>
+
       </div>
     );
   };
@@ -1237,53 +1400,6 @@ const DarkCorporateDashboard: React.FC = () => {
         {/* Transaction History */}
         <TransactionHistory transactions={transactions} onEditTransaction={handleEditTransaction} />
 
-        {/* Payables Summary */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-            <h4 className="text-md font-semibold text-white mb-4">Doctor Payables</h4>
-            <div className="space-y-3">
-              {stats.doctorPayables.slice(0, 5).map((payable, idx) => (
-                <div key={idx} className="flex justify-between items-center">
-                  <span className="text-sm text-gray-300">{payable.stakeholderName}</span>
-                  <span className="text-sm font-semibold text-red-400">{formatCurrency(payable.netPayable)}</span>
-                </div>
-              ))}
-              {stats.doctorPayables.length === 0 && (
-                <p className="text-sm text-gray-500">No doctor payables</p>
-              )}
-            </div>
-          </div>
-
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-            <h4 className="text-md font-semibold text-white mb-4">Employee Salaries Due</h4>
-            <div className="space-y-3">
-              {stats.employeeSalaryDue.slice(0, 5).map((payable, idx) => (
-                <div key={idx} className="flex justify-between items-center">
-                  <span className="text-sm text-gray-300">{payable.stakeholderName}</span>
-                  <span className="text-sm font-semibold text-yellow-400">{formatCurrency(payable.netPayable)}</span>
-                </div>
-              ))}
-              {stats.employeeSalaryDue.length === 0 && (
-                <p className="text-sm text-gray-500">No employee salaries due</p>
-              )}
-            </div>
-          </div>
-
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-            <h4 className="text-md font-semibold text-white mb-4">Distributor Credits</h4>
-            <div className="space-y-3">
-              {stats.distributorCredits.slice(0, 5).map((credit, idx) => (
-                <div key={idx} className="flex justify-between items-center">
-                  <span className="text-sm text-gray-300">{credit.name}</span>
-                  <span className="text-sm font-semibold text-orange-400">{formatCurrency(credit.creditBalance)}</span>
-                </div>
-              ))}
-              {stats.distributorCredits.length === 0 && (
-                <p className="text-sm text-gray-500">No distributor credits</p>
-              )}
-            </div>
-          </div>
-        </div>
       </div>
     );
   };
@@ -1317,6 +1433,7 @@ const DarkCorporateDashboard: React.FC = () => {
         {activeTab === 'business_statement' && <BusinessAccountStatement />}
         {activeTab === 'doctor_statement' && <DoctorAccountStatement />}
         {activeTab === 'distributor_statement' && <DistributorAccountStatement />}
+        {activeTab === 'payment_estimation' && <DistributorPaymentEstimation />}
         {activeTab === 'configuration' && <ConfigurationManagement />}
       </main>
 

@@ -60,6 +60,11 @@ export const SYSTEM_CONFIG = {
   DATE_FORMAT: 'DD/MM/YYYY',
   DATETIME_FORMAT: 'DD/MM/YYYY HH:mm:ss',
   
+  // Payment Estimation Settings
+  PROFIT_ALLOCATION_PERCENTAGE: 25, // % of weekly sales allocated for profit/expenses
+  DISTRIBUTOR_ALLOCATION_PERCENTAGE: 75, // % of weekly sales allocated for distributor payments
+  MAX_DISTRIBUTOR_PAYMENT_PERCENTAGE: 10, // % of distributor credit balance as payment cap
+  
   // Feature flags
   ENABLE_DOCTOR_ACCOUNTS: true,
   ENABLE_PATIENT_CREDIT: true,
