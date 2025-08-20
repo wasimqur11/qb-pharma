@@ -4,7 +4,8 @@ import {
   TruckIcon,
   UsersIcon,
   CreditCardIcon,
-  BuildingOfficeIcon
+  BuildingOfficeIcon,
+  CheckBadgeIcon
 } from '@heroicons/react/24/outline';
 import type { TransactionCategory, StakeholderType } from '../types';
 
@@ -115,6 +116,14 @@ export const TRANSACTION_TYPES: TransactionTypeConfig[] = [
     requiresStakeholder: true,
     stakeholderType: 'patient',
     description: 'Credit payments received from patients'
+  },
+  {
+    id: 'settlement_point',
+    label: 'Settlement Point',
+    icon: CheckBadgeIcon,
+    color: 'text-emerald-400',
+    requiresStakeholder: false,
+    description: 'Marks a point where cash was zero and all dues cleared - fresh business cycle start'
   }
 ];
 
@@ -158,12 +167,24 @@ export const PHARMACY_REVENUE_CATEGORIES: TransactionCategory[] = [
   'distributor_credit_note'
 ];
 
+// Operational pharmacy expenses (not including profit distributions)
+export const PHARMACY_OPERATIONAL_EXPENSE_CATEGORIES: TransactionCategory[] = [
+  'distributor_payment',
+  'patient_credit_sale'
+];
+
+// All pharmacy expenses (including profit distributions for total calculation)
 export const PHARMACY_EXPENSE_CATEGORIES: TransactionCategory[] = [
   'distributor_payment',
   'employee_payment',
   'clinic_expense',
   'sales_profit_distribution',
   'patient_credit_sale'
+];
+
+// Partner/business profit distributions
+export const PARTNER_DISTRIBUTION_CATEGORIES: TransactionCategory[] = [
+  'sales_profit_distribution'
 ];
 
 export const DOCTOR_REVENUE_CATEGORIES: TransactionCategory[] = [

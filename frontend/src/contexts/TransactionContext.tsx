@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { Transaction, DashboardStats, PayableBalance, StakeholderType } from '../types';
 import { 
   PHARMACY_REVENUE_CATEGORIES, 
@@ -70,6 +71,10 @@ interface TransactionContextType {
   getDistributorPaymentsDue: () => { id: string; name: string; amountDue: number; dueDate: string }[];
   addDistributorCreditPurchase: (distributorId: string, amount: number, description: string) => void;
   calculateDistributorCurrentBalance: (distributorId: string) => number;
+  
+  // Settlement Point functions
+  getLastSettlementPoint: () => Transaction | null;
+  getDefaultDateRange: () => { from: string; to: string };
 }
 
 const TransactionContext = createContext<TransactionContextType | undefined>(undefined);
@@ -667,6 +672,40 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     }
   };
 
+  // Settlement Point functions
+  const getLastSettlementPoint = (): Transaction | null => {
+    const settlementPoints = transactions
+      .filter(t => t.category === 'settlement_point')
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    
+    return settlementPoints.length > 0 ? settlementPoints[0] : null;
+  };
+  
+  const getDefaultDateRange = (): { from: string; to: string } => {
+    const lastSettlement = getLastSettlementPoint();
+    const today = new Date();
+    
+    if (lastSettlement) {
+      // Start from day after last settlement
+      const fromDate = new Date(lastSettlement.date);
+      fromDate.setDate(fromDate.getDate() + 1);
+      
+      return {
+        from: fromDate.toISOString().split('T')[0],
+        to: today.toISOString().split('T')[0]
+      };
+    } else {
+      // Fallback to 30 days if no settlement point
+      const fromDate = new Date();
+      fromDate.setDate(fromDate.getDate() - 30);
+      
+      return {
+        from: fromDate.toISOString().split('T')[0],
+        to: today.toISOString().split('T')[0]
+      };
+    }
+  };
+
   const contextValue: TransactionContextType = {
     // Data
     transactions,
@@ -714,7 +753,11 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     // Distributor-specific functions
     getDistributorPaymentsDue,
     addDistributorCreditPurchase,
-    calculateDistributorCurrentBalance
+    calculateDistributorCurrentBalance,
+    
+    // Settlement Point functions
+    getLastSettlementPoint,
+    getDefaultDateRange
   };
 
   return (

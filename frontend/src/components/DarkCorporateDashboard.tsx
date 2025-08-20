@@ -6,6 +6,7 @@ import {
 // No mock data imports - clean slate for real pharmacy
 import type { DashboardStats, PayableBalance, Transaction } from '../types';
 import { useTransactions } from '../contexts/TransactionContext';
+import { useStakeholders } from '../contexts/StakeholderContext';
 import { useAuth } from '../contexts/AuthContext';
 // import { useToast } from '../contexts/ToastContext';
 import qbLogo from '../assets/qblogo.png';
@@ -38,6 +39,8 @@ import clsx from 'clsx';
 const DarkCorporateDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'reports' | 'stakeholders' | 'patients' | 'statements' | 'business_statement' | 'doctor_statement' | 'distributor_statement' | 'payment_estimation' | 'data_import' | 'configuration'>('dashboard');
   const [showTransactionForm, setShowTransactionForm] = useState(false);
+  
+  const [selectedPeriod, setSelectedPeriod] = useState('30days');
   const [showEditTransactionForm, setShowEditTransactionForm] = useState(false);
   const [selectedTransactionForEdit, setSelectedTransactionForEdit] = useState<Transaction | null>(null);
   const [showPaymentProcessor, setShowPaymentProcessor] = useState(false);
@@ -48,14 +51,46 @@ const DarkCorporateDashboard: React.FC = () => {
     updateTransaction,
     getDashboardStats,
     getDistributorPaymentsDue,
-    getPeriodFilteredStats
+    getPeriodFilteredStats,
+    getLastSettlementPoint,
+    getDefaultDateRange
   } = useTransactions();
+  
+  const { doctors, businessPartners, employees, distributors, patients } = useStakeholders();
   
   const { user, logout } = useAuth();
   // const { showSuccess } = useToast();
   const [dateRange, setDateRange] = useState(getDefaultDateRange('transaction'));
-  const [selectedPeriod, setSelectedPeriod] = useState('30days');
+
+  // Report filter state - initialize with Settlement Point date range or fallback
+  const [reportFilters, setReportFilters] = useState(() => {
+    const defaultRange = getDefaultDateRange();
+    return {
+      dateFrom: defaultRange.from,
+      dateTo: defaultRange.to,
+      category: 'all' as const,
+      stakeholderType: 'all' as const,
+      stakeholderId: '',
+      amountMin: '',
+      amountMax: '',
+      searchTerm: ''
+    };
+  });
   
+  // Update filters when Settlement Points change
+  useEffect(() => {
+    const lastSettlement = getLastSettlementPoint();
+    if (lastSettlement) {
+      const defaultRange = getDefaultDateRange();
+      setReportFilters(prev => ({
+        ...prev,
+        dateFrom: defaultRange.from,
+        dateTo: defaultRange.to
+      }));
+      setSelectedPeriod('settlement');
+    }
+  }, [transactions, getLastSettlementPoint, getDefaultDateRange]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -374,6 +409,41 @@ const DarkCorporateDashboard: React.FC = () => {
       from: fromDate.toISOString().split('T')[0],
       to: today.toISOString().split('T')[0]
     });
+  };
+
+  const handleReportPeriodChange = (period: string) => {
+    setSelectedPeriod(period);
+    const today = new Date();
+    let fromDate;
+
+    switch (period) {
+      case '7days':
+        fromDate = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case '30days':
+        fromDate = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+        break;
+      case '90days':
+        fromDate = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000);
+        break;
+      case '6months':
+        fromDate = new Date(today.getTime() - 180 * 24 * 60 * 60 * 1000);
+        break;
+      case '1year':
+        fromDate = new Date(today.getTime() - 365 * 24 * 60 * 60 * 1000);
+        break;
+      case 'all':
+        fromDate = new Date(2020, 0, 1); // Start from a very early date to show all data
+        break;
+      default:
+        fromDate = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+    }
+
+    setReportFilters(prev => ({
+      ...prev,
+      dateFrom: fromDate.toISOString().split('T')[0],
+      dateTo: today.toISOString().split('T')[0]
+    }));
   };
 
   const Header: React.FC = () => (
@@ -757,6 +827,7 @@ const DarkCorporateDashboard: React.FC = () => {
     borderRadius: '8px',
     color: '#ffffff'
   };
+
 
   const DateFilter: React.FC = () => (
     <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 mb-5 overflow-hidden">
@@ -1244,53 +1315,95 @@ const DarkCorporateDashboard: React.FC = () => {
         </ResponsiveContainer>
       </ChartCard>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {[].map((kpi, index) => (
-          <div key={index} className="bg-gray-800 border border-gray-700 rounded-lg p-4 h-fit">
-            <h4 className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2 truncate">{kpi.metric}</h4>
-            <div className="flex items-baseline gap-2 mb-2">
-              <span className="text-lg font-bold text-white">{kpi.value}</span>
-              <span className="text-xs text-gray-500 truncate">/ {kpi.target}</span>
-            </div>
-            <div className="w-full bg-gray-700 rounded-full h-2 mb-2">
-              <div 
-                className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                style={{ width: `${Math.min((kpi.value / kpi.target) * 100, 100)}%` }}
-              ></div>
-            </div>
-            <p className="text-xs text-green-400 font-medium truncate">{kpi.trend}</p>
-          </div>
-        ))}
-      </div>
     </div>
   );
 
+  // Filter transactions based on report filters - simplified filtering
+  const filteredReportTransactions = React.useMemo(() => {
+    return transactions.filter(transaction => {
+      const transactionDate = new Date(transaction.date);
+      const fromDate = new Date(reportFilters.dateFrom);
+      const toDate = new Date(reportFilters.dateTo);
+      
+      // Date filter
+      if (transactionDate < fromDate || transactionDate > toDate) return false;
+      
+      // Search term
+      if (reportFilters.searchTerm) {
+        const searchLower = reportFilters.searchTerm.toLowerCase();
+        return transaction.description.toLowerCase().includes(searchLower);
+      }
+      
+      return true;
+    });
+  }, [transactions, reportFilters]);
+
+
+  // Get stakeholders for dropdown
+  const getAllStakeholders = () => {
+    const stakeholders = [
+      ...doctors.map(d => ({ ...d, type: 'doctor' as const })),
+      ...businessPartners.map(bp => ({ ...bp, type: 'business_partner' as const })),
+      ...employees.map(e => ({ ...e, type: 'employee' as const })),
+      ...distributors.map(d => ({ ...d, type: 'distributor' as const })),
+      ...patients.map(p => ({ ...p, type: 'patient' as const }))
+    ];
+    
+    if (reportFilters.stakeholderType === 'all') return stakeholders;
+    return stakeholders.filter(s => s.type === reportFilters.stakeholderType as any);
+  };
+
   const renderReports = () => {
-    // Calculate business performance summary using all-time stats (filtering is handled by TransactionHistory)
+    // Calculate business performance summary using filtered transactions
+    const pharmacyRevenue = filteredReportTransactions
+      .filter(t => ['pharmacy_sale', 'patient_payment', 'distributor_credit_note'].includes(t.category))
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    const doctorRevenue = filteredReportTransactions
+      .filter(t => t.category === 'consultation_fee')
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    const totalExpenses = filteredReportTransactions
+      .filter(t => ['distributor_payment', 'doctor_expense', 'employee_payment', 'clinic_expense', 'sales_profit_distribution', 'patient_credit_sale'].includes(t.category))
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    const pharmacyExpenses = filteredReportTransactions
+      .filter(t => ['distributor_payment', 'employee_payment', 'clinic_expense', 'sales_profit_distribution', 'patient_credit_sale'].includes(t.category))
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    const doctorExpenses = filteredReportTransactions
+      .filter(t => t.category === 'doctor_expense')
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    // Calculate cash positions using filtered data
+    const pharmacyCash = pharmacyRevenue - pharmacyExpenses;
+    const doctorCash = doctorRevenue - doctorExpenses;
+    const totalCashInHand = pharmacyCash + doctorCash;
+
     const businessSummary = {
-      pharmacyRevenue: allTimeStats.pharmacyRevenue,
-      doctorRevenue: allTimeStats.doctorRevenue,
-      totalRevenue: allTimeStats.pharmacyRevenue + allTimeStats.doctorRevenue,
-      totalExpenses: allTimeStats.totalExpenses,
-      pharmacyExpenses: allTimeStats.pharmacyExpenses,
-      doctorExpenses: allTimeStats.doctorExpenses,
-      pharmacyProfit: allTimeStats.pharmacyCashPosition,
-      totalCashInHand: allTimeStats.cashPosition,
-      pharmacyCash: allTimeStats.pharmacyCashPosition,
-      doctorCash: allTimeStats.doctorCashPosition,
+      pharmacyRevenue,
+      doctorRevenue,
+      totalRevenue: pharmacyRevenue + doctorRevenue,
+      totalExpenses,
+      pharmacyExpenses,
+      doctorExpenses,
+      pharmacyProfit: pharmacyCash,
+      totalCashInHand,
+      pharmacyCash,
+      doctorCash,
       distributorCredits: allTimeStats.distributorCredits.reduce((sum, d) => sum + d.creditBalance, 0)
     };
 
-    // Calculate detailed pharmacy expense breakdown
-    const distributorPayments = transactions
+    // Calculate detailed pharmacy expense breakdown using filtered data
+    const distributorPayments = filteredReportTransactions
       .filter(t => t.category === 'distributor_payment')
       .reduce((sum, t) => sum + t.amount, 0);
 
-    const salesProfitDistribution = transactions
+    const salesProfitDistribution = filteredReportTransactions
       .filter(t => t.category === 'sales_profit_distribution')
       .reduce((sum, t) => sum + t.amount, 0);
 
-    const otherPharmacyExpenses = transactions
+    const otherPharmacyExpenses = filteredReportTransactions
       .filter(t => ['employee_payment', 'clinic_expense', 'patient_credit_sale'].includes(t.category))
       .reduce((sum, t) => sum + t.amount, 0);
 
@@ -1338,6 +1451,154 @@ const DarkCorporateDashboard: React.FC = () => {
             <DocumentArrowUpIcon className="h-4 w-4" />
             Export PDF Report
           </button>
+        </div>
+
+        {/* Comprehensive Report Filters */}
+        <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <FunnelIcon className="h-4 w-4 text-gray-400" />
+              <h3 className="text-base font-semibold text-white">Report Filters</h3>
+            </div>
+            <button
+              onClick={() => {
+                const defaultRange = getDefaultDateRange();
+                setReportFilters(prev => ({
+                  ...prev,
+                  dateFrom: defaultRange.from,
+                  dateTo: defaultRange.to,
+                  searchTerm: ''
+                }));
+                setSelectedPeriod('30days');
+              }}
+              className="text-xs text-blue-400 hover:text-blue-300 underline"
+            >
+              Clear All
+            </button>
+          </div>
+
+          {/* Period Filter - Compact buttons */}
+          <div className="mb-3">
+            <div className="flex flex-wrap gap-1">
+              {/* Settlement Point button - shown first if available */}
+              {getLastSettlementPoint() && (
+                <button
+                  onClick={() => {
+                    const defaultRange = getDefaultDateRange();
+                    setReportFilters(prev => ({
+                      ...prev,
+                      dateFrom: defaultRange.from,
+                      dateTo: defaultRange.to,
+                      searchTerm: ''
+                    }));
+                    setSelectedPeriod('settlement');
+                  }}
+                  className={clsx(
+                    'px-3 py-1 rounded text-xs font-medium transition-colors',
+                    selectedPeriod === 'settlement'
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-emerald-900/30 text-emerald-300 hover:bg-emerald-800/50 border border-emerald-600/30'
+                  )}
+                >
+                  📍 Since Settlement
+                </button>
+              )}
+              
+              {/* Regular period buttons */}
+              {[
+                { value: '7days', label: 'Last 7 Days' },
+                { value: '30days', label: 'Last 30 Days' },
+                { value: '90days', label: 'Last 3 Months' },
+                { value: '6months', label: 'Last 6 Months' },
+                { value: '1year', label: 'Last Year' },
+                { value: 'all', label: 'Show All' }
+              ].map(period => (
+                <button
+                  key={period.value}
+                  onClick={() => handleReportPeriodChange(period.value)}
+                  className={clsx(
+                    'px-3 py-1 rounded text-xs font-medium transition-colors',
+                    selectedPeriod === period.value
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  )}
+                >
+                  {period.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Main filters in single row */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+            {/* Date Range */}
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">From</label>
+              <input
+                type="date"
+                value={reportFilters.dateFrom}
+                onChange={(e) => setReportFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+                className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">To</label>
+              <input
+                type="date"
+                value={reportFilters.dateTo}
+                onChange={(e) => setReportFilters(prev => ({ ...prev, dateTo: e.target.value }))}
+                className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
+              />
+            </div>
+
+            {/* Search */}
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Search</label>
+              <div className="relative">
+                <MagnifyingGlassIcon className="h-3 w-3 absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  value={reportFilters.searchTerm}
+                  onChange={(e) => setReportFilters(prev => ({ ...prev, searchTerm: e.target.value }))}
+                  placeholder="Search..."
+                  className="w-full pl-7 pr-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
+                />
+              </div>
+            </div>
+          </div>
+
+
+          {/* Filter Summary */}
+          <div className="mt-3 pt-3 border-t border-gray-600/30">
+            <div className="flex items-center justify-between text-sm">
+              <div className="flex items-center gap-3">
+                <span className="text-gray-400">
+                  Showing {filteredReportTransactions.length} transactions from {new Date(reportFilters.dateFrom).toLocaleDateString()} to {new Date(reportFilters.dateTo).toLocaleDateString()}
+                </span>
+                {(() => {
+                  const lastSettlement = getLastSettlementPoint();
+                  const defaultRange = getDefaultDateRange();
+                  if (lastSettlement && reportFilters.dateFrom === defaultRange.from) {
+                    return (
+                      <span className="bg-emerald-900/30 text-emerald-300 px-3 py-1.5 rounded-md text-xs font-medium border border-emerald-600/50 flex items-center gap-1">
+                        <span className="text-emerald-400">📍</span>
+                        Since Settlement Point ({new Date(lastSettlement.date).toLocaleDateString()})
+                      </span>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
+              <div className="flex items-center gap-4">
+                <span className="text-green-400 font-medium">
+                  Transactions: {filteredReportTransactions.length}
+                </span>
+                <span className="text-blue-400 font-medium">
+                  Period: {selectedPeriod.replace('days', 'd').replace('months', 'm').replace('year', 'y')}
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Business Performance Summary */}
@@ -1431,8 +1692,9 @@ const DarkCorporateDashboard: React.FC = () => {
         </div>
 
 
-        {/* Transaction History - Internal filtering handled by component */}
+        {/* Transaction History - Uses filtered transactions from report filters */}
         <TransactionHistory 
+          transactions={filteredReportTransactions}
           onEditTransaction={handleEditTransaction} 
         />
 

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   ClockIcon,
   FunnelIcon,
@@ -24,7 +24,7 @@ import { useStakeholders } from '../contexts/StakeholderContext';
 import { useTransactions } from '../contexts/TransactionContext';
 import { useAuth } from '../contexts/AuthContext';
 // import { useToast } from '../contexts/ToastContext';
-import { TRANSACTION_TYPES, REVENUE_CATEGORIES, EXPENSE_CATEGORIES, getCashFlowImpact } from '../constants/transactionTypes';
+import { TRANSACTION_TYPES, REVENUE_CATEGORIES, EXPENSE_CATEGORIES, PHARMACY_REVENUE_CATEGORIES, PHARMACY_EXPENSE_CATEGORIES, getCashFlowImpact } from '../constants/transactionTypes';
 import { SYSTEM_CONFIG, getDefaultDateRange } from '../constants/systemConfig';
 import type { Transaction, TransactionCategory, StakeholderType } from '../types';
 import clsx from 'clsx';
@@ -98,6 +98,10 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState('30days');
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(50);
 
   // Use context transactions if no prop transactions provided
   const allTransactions = useMemo(() => {
@@ -121,6 +125,12 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
   };
 
   const filteredTransactions = useMemo(() => {
+    // If transactions are passed as props, they're already filtered by parent component
+    if (propTransactions) {
+      return propTransactions;
+    }
+    
+    // Otherwise, apply local filtering (for standalone usage)
     return allTransactions.filter(transaction => {
       const transactionDate = new Date(transaction.date);
       const fromDate = new Date(filters.dateFrom);
@@ -153,7 +163,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
       
       return true;
     });
-  }, [allTransactions, filters]);
+  }, [allTransactions, filters, propTransactions]);
 
   const sortedTransactions = useMemo(() => {
     const sorted = [...filteredTransactions].sort((a, b) => {
@@ -171,7 +181,53 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
     return sorted;
   }, [filteredTransactions, sortField, sortDirection]);
 
+  // Pagination logic
+  const totalTransactions = sortedTransactions.length;
+  const totalPages = Math.ceil(totalTransactions / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedTransactions = sortedTransactions.slice(startIndex, endIndex);
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters, sortField, sortDirection]);
+
   const formatCurrency = (amount: number) => `${SYSTEM_CONFIG.CURRENCY_SYMBOL}${amount.toLocaleString()}`;
+  
+  // Helper function to round up currency values while maintaining total accuracy
+  const formatCurrencyRounded = (amount: number) => `${SYSTEM_CONFIG.CURRENCY_SYMBOL}${Math.ceil(amount).toLocaleString()}`;
+  
+  // Function to distribute rounded amounts that sum to the exact total
+  const distributeRoundedAmounts = (amounts: number[], exactTotal: number) => {
+    // Round up all individual amounts
+    const roundedAmounts = amounts.map(amount => Math.ceil(amount));
+    const roundedTotal = roundedAmounts.reduce((sum, amount) => sum + amount, 0);
+    
+    // Calculate the difference
+    const difference = roundedTotal - exactTotal;
+    
+    // If there's a difference, adjust the largest amounts downward
+    if (difference > 0) {
+      // Create array of indices sorted by original amount (descending)
+      const sortedIndices = amounts
+        .map((amount, index) => ({ amount, index }))
+        .sort((a, b) => b.amount - a.amount)
+        .map(item => item.index);
+      
+      // Reduce the largest amounts by 1 until we match the exact total
+      let remaining = difference;
+      for (const index of sortedIndices) {
+        if (remaining <= 0) break;
+        if (roundedAmounts[index] > amounts[index]) {
+          roundedAmounts[index]--;
+          remaining--;
+        }
+      }
+    }
+    
+    return roundedAmounts;
+  };
 
   const getStakeholderIcon = (type?: StakeholderType | 'partner') => {
     switch (type) {
@@ -225,6 +281,10 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
       case '1year':
         fromDate = new Date(today.getTime() - 365 * 24 * 60 * 60 * 1000);
         break;
+      case 'all':
+        // Set a very old date to show all transactions
+        fromDate = new Date(2020, 0, 1); // January 1, 2020
+        break;
       default:
         fromDate = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
     }
@@ -266,7 +326,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
           sortedTransactions, 
           'Transaction History Report',
           dateRange,
-          businessMetrics
+          { ...businessMetrics, filteredSummary }
         );
       } else {
         // Export as Professional PDF
@@ -276,6 +336,9 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
           { label: 'Net Profit', value: businessMetrics.netProfit },
           { label: 'Profit Margin', value: `${businessMetrics.profitMargin.toFixed(1)}%` },
           { label: 'Transaction Count', value: businessMetrics.transactionCount },
+          { label: 'Filtered Revenue Sum', value: filteredSummary.revenueSum },
+          { label: 'Filtered Expense Sum', value: filteredSummary.expenseSum },
+          { label: 'Filtered Total Sum', value: filteredSummary.totalSum },
           { label: 'Date Range', value: `${new Date(filters.dateFrom).toLocaleDateString()} - ${new Date(filters.dateTo).toLocaleDateString()}` }
         ];
         
@@ -311,25 +374,69 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
   };
 
   const businessMetrics = useMemo(() => {
-    // Use centralized transaction categorization
-    const totalRevenue = sortedTransactions
-      .filter(t => REVENUE_CATEGORIES.includes(t.category))
+    // Total Revenue: Pharmacy sales + Patient payments only
+    const pharmacySales = sortedTransactions
+      .filter(t => t.category === 'pharmacy_sale')
       .reduce((sum, t) => sum + t.amount, 0);
     
-    const totalExpenses = sortedTransactions
-      .filter(t => EXPENSE_CATEGORIES.includes(t.category))
+    const patientPayments = sortedTransactions
+      .filter(t => t.category === 'patient_payment')
       .reduce((sum, t) => sum + t.amount, 0);
     
-    const netProfit = totalRevenue - totalExpenses;
-    const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+    const totalRevenue = pharmacySales + patientPayments;
+    
+    // Expense breakdown for calculations
+    const distributorPayments = sortedTransactions
+      .filter(t => t.category === 'distributor_payment')
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    const salesProfitDistribution = sortedTransactions
+      .filter(t => t.category === 'sales_profit_distribution')
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    const otherPharmacyExpenses = sortedTransactions
+      .filter(t => ['employee_payment', 'clinic_expense', 'patient_credit_sale'].includes(t.category))
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    // Total Expenses: Distributor payments + Other expenses (exclude Sales profit distribution)
+    const totalExpenses = distributorPayments + otherPharmacyExpenses;
+    
+    // Net Profit: Total Pharmacy sale - Distributor payments - Other expenses (exclude Sales profit distribution)
+    const netProfit = pharmacySales - distributorPayments - otherPharmacyExpenses;
+    const profitMargin = pharmacySales > 0 ? (netProfit / pharmacySales) * 100 : 0;
     
     return { 
       totalRevenue, 
       totalExpenses, 
+      distributorPayments,
+      salesProfitDistribution,
+      otherPharmacyExpenses,
       netProfit, 
       profitMargin,
-      transactionCount: sortedTransactions.length 
+      pharmacySales,
+      patientPayments,
+      transactionCount: sortedTransactions.filter(t => 
+        PHARMACY_REVENUE_CATEGORIES.includes(t.category) || 
+        PHARMACY_EXPENSE_CATEGORIES.includes(t.category)
+      ).length 
     };
+  }, [sortedTransactions]);
+
+  // Calculate sum and breakdown of filtered transactions (pharmacy-only)
+  const filteredSummary = useMemo(() => {
+    const pharmacyTransactions = sortedTransactions.filter(t => 
+      PHARMACY_REVENUE_CATEGORIES.includes(t.category) || 
+      PHARMACY_EXPENSE_CATEGORIES.includes(t.category)
+    );
+    const totalSum = pharmacyTransactions.reduce((sum, transaction) => sum + transaction.amount, 0);
+    const revenueSum = sortedTransactions
+      .filter(t => PHARMACY_REVENUE_CATEGORIES.includes(t.category))
+      .reduce((sum, t) => sum + t.amount, 0);
+    const expenseSum = sortedTransactions
+      .filter(t => PHARMACY_EXPENSE_CATEGORIES.includes(t.category))
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    return { totalSum, revenueSum, expenseSum };
   }, [sortedTransactions]);
 
   return (
@@ -358,6 +465,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
         </div>
       </div>
 
+
       {/* Business Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
@@ -366,7 +474,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
             <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Total Revenue</p>
           </div>
           <p className="text-2xl font-bold text-green-400">{formatCurrency(businessMetrics.totalRevenue)}</p>
-          <p className="text-xs text-gray-500 mt-1">Sales + Consultations + Payments</p>
+          <p className="text-xs text-gray-500 mt-1">Sales + Patient Payments</p>
         </div>
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
@@ -374,7 +482,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
             <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Total Expenses</p>
           </div>
           <p className="text-2xl font-bold text-red-400">{formatCurrency(businessMetrics.totalExpenses)}</p>
-          <p className="text-xs text-gray-500 mt-1">Payments + Salaries + Clinic Costs</p>
+          <p className="text-xs text-gray-500 mt-1">Distributor + Other expenses</p>
         </div>
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
@@ -388,7 +496,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
             {formatCurrency(Math.abs(businessMetrics.netProfit))}
           </p>
           <p className="text-xs text-gray-500 mt-1">
-            {businessMetrics.netProfit >= 0 ? "Profit" : "Loss"} for selected period
+            Sales - Distributor - Other expenses
           </p>
         </div>
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
@@ -450,32 +558,84 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
 
           {/* Business Partner Outstanding */}
           <div className="bg-gray-750 border border-gray-600 rounded p-3">
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-2 mb-2">
               <BuildingOfficeIcon className="h-4 w-4 text-green-400" />
               <h4 className="text-sm font-medium text-white">Partner Outstanding</h4>
             </div>
-            {dashboardStats.businessPartnerPayables.length > 0 ? (
-              <div className="space-y-2">
-                {dashboardStats.businessPartnerPayables.slice(0, 3).map(payable => (
-                  <div key={payable.stakeholderId} className="flex justify-between items-center">
-                    <span className="text-xs text-gray-300 truncate">{payable.stakeholderName}</span>
-                    <span className="text-xs font-medium text-green-400">{formatCurrency(payable.netPayable)}</span>
-                  </div>
-                ))}
-                {dashboardStats.businessPartnerPayables.length > 3 && (
-                  <p className="text-xs text-gray-500">+{dashboardStats.businessPartnerPayables.length - 3} more</p>
-                )}
-                <div className="pt-2 border-t border-gray-600">
-                  <div className="flex justify-between">
-                    <span className="text-xs font-medium text-gray-300">Total Due:</span>
-                    <span className="text-xs font-bold text-green-400">
-                      {formatCurrency(dashboardStats.businessPartnerPayables.reduce((sum, p) => sum + p.netPayable, 0))}
-                    </span>
-                  </div>
+            
+            {/* Key Metrics Section */}
+            <div className="grid grid-cols-3 gap-2 mb-3 p-2 bg-gray-800 rounded text-xs">
+              <div className="text-center">
+                <div className="text-gray-400">Cash in Hand</div>
+                <div className="font-semibold text-cyan-400">{formatCurrencyRounded(dashboardStats.pharmacyCashPosition)}</div>
+              </div>
+              <div className="text-center border-l border-r border-gray-600">
+                <div className="text-gray-400">Paid Advance</div>
+                <div className="font-semibold text-orange-400">
+                  {formatCurrencyRounded(dashboardStats.businessPartnerPayables.reduce((sum, p) => sum + p.totalPaid, 0))}
                 </div>
               </div>
-            ) : (
-              <p className="text-xs text-gray-500">No outstanding payments</p>
+              <div className="text-center">
+                <div className="text-gray-400">Total Profit</div>
+                <div className="font-semibold text-yellow-400">
+                  {formatCurrencyRounded(dashboardStats.pharmacyCashPosition + dashboardStats.businessPartnerPayables.reduce((sum, p) => sum + p.totalPaid, 0))}
+                </div>
+              </div>
+            </div>
+
+            {dashboardStats.businessPartnerPayables.length > 0 ? (() => {
+              // Calculate exact totals
+              const exactTotalEarned = dashboardStats.businessPartnerPayables.reduce((sum, p) => sum + p.totalEarned, 0);
+              const exactTotalPaid = dashboardStats.businessPartnerPayables.reduce((sum, p) => sum + p.totalPaid, 0);
+              const exactTotalDue = dashboardStats.businessPartnerPayables.reduce((sum, p) => sum + p.netPayable, 0);
+              
+              // Get amounts for distribution
+              const displayedPayables = dashboardStats.businessPartnerPayables.slice(0, 4);
+              const earnedAmounts = displayedPayables.map(p => p.totalEarned);
+              const paidAmounts = displayedPayables.map(p => p.totalPaid);
+              const dueAmounts = displayedPayables.map(p => p.netPayable);
+              
+              // Distribute rounded amounts that sum to exact totals
+              const roundedEarned = distributeRoundedAmounts(earnedAmounts, Math.ceil(exactTotalEarned));
+              const roundedPaid = distributeRoundedAmounts(paidAmounts, Math.ceil(exactTotalPaid));
+              const roundedDue = distributeRoundedAmounts(dueAmounts, Math.ceil(exactTotalDue));
+              
+              return (
+                <div className="space-y-1">
+                  {/* Column Headers */}
+                  <div className="grid grid-cols-4 gap-2 text-xs text-gray-400 border-b border-gray-600 pb-1 mb-1">
+                    <span>Partner</span>
+                    <span className="text-right">Earned</span>
+                    <span className="text-right">Paid</span>
+                    <span className="text-right">Due</span>
+                  </div>
+                  
+                  {displayedPayables.map((payable, index) => (
+                    <div key={payable.stakeholderId} className="grid grid-cols-4 gap-2 items-center py-1 text-xs">
+                      <span className="text-gray-200 font-medium truncate">{payable.stakeholderName}</span>
+                      <span className="text-blue-400 text-right">{formatCurrency(roundedEarned[index])}</span>
+                      <span className="text-orange-400 text-right">{formatCurrency(roundedPaid[index])}</span>
+                      <span className="text-green-400 text-right font-medium">{formatCurrency(roundedDue[index])}</span>
+                    </div>
+                  ))}
+                  
+                  {dashboardStats.businessPartnerPayables.length > 4 && (
+                    <div className="text-xs text-gray-500 text-center py-0.5">
+                      +{dashboardStats.businessPartnerPayables.length - 4} more
+                    </div>
+                  )}
+                  
+                  {/* Totals */}
+                  <div className="grid grid-cols-4 gap-2 text-xs bg-gray-800 rounded p-1.5 font-bold border-t border-gray-600 mt-1">
+                    <span className="text-gray-200">TOTALS</span>
+                    <span className="text-blue-400 text-right">{formatCurrencyRounded(exactTotalEarned)}</span>
+                    <span className="text-orange-400 text-right">{formatCurrencyRounded(exactTotalPaid)}</span>
+                    <span className="text-green-400 text-right">{formatCurrencyRounded(exactTotalDue)}</span>
+                  </div>
+                </div>
+              );
+            })() : (
+              <p className="text-xs text-gray-500 text-center py-2">No outstanding payments</p>
             )}
           </div>
 
@@ -543,175 +703,27 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
         </div>
       </div>
 
-      {/* Compact Filters */}
-      <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <FunnelIcon className="h-4 w-4 text-gray-400" />
-            <h3 className="text-base font-semibold text-white">Filters</h3>
-          </div>
-          <button
-            onClick={clearFilters}
-            className="text-xs text-blue-400 hover:text-blue-300 underline"
-          >
-            Clear All
-          </button>
-        </div>
-
-        {/* Period Filter - Compact buttons */}
-        <div className="mb-3">
-          <div className="flex flex-wrap gap-1">
-            {[
-              { value: '7days', label: 'Last 7 Days' },
-              { value: '30days', label: 'Last 30 Days' },
-              { value: '90days', label: 'Last 3 Months' },
-              { value: '6months', label: 'Last 6 Months' },
-              { value: '1year', label: 'Last Year' }
-            ].map(period => (
-              <button
-                key={period.value}
-                onClick={() => handlePeriodChange(period.value)}
-                className={clsx(
-                  'px-3 py-1 rounded text-xs font-medium transition-colors',
-                  selectedPeriod === period.value
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                )}
-              >
-                {period.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Main filters in single row */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-3">
-          {/* Date Range */}
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">From</label>
-            <input
-              type="date"
-              value={filters.dateFrom}
-              onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
-              className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">To</label>
-            <input
-              type="date"
-              value={filters.dateTo}
-              onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))}
-              className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
-            />
-          </div>
-
-          {/* Category Filter */}
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">Type</label>
-            <select
-              value={filters.category}
-              onChange={(e) => setFilters(prev => ({ ...prev, category: e.target.value as any }))}
-              className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
-            >
-              <option value="all">All Types</option>
-              {TRANSACTION_TYPES.map(type => (
-                <option key={type.id} value={type.id}>
-                  {type.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Stakeholder Type Filter */}
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">Stakeholder</label>
-            <select
-              value={filters.stakeholderType}
-              onChange={(e) => setFilters(prev => ({ ...prev, stakeholderType: e.target.value as any, stakeholderId: '' }))}
-              className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
-            >
-              <option value="all">All</option>
-              <option value="doctor">Doctors</option>
-              <option value="employee">Employees</option>
-              <option value="business_partner">Partners</option>
-              <option value="distributor">Distributors</option>
-              <option value="patient">Patients</option>
-            </select>
-          </div>
-
-          {/* Amount Range */}
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">Min Amount</label>
-            <input
-              type="number"
-              value={filters.amountMin}
-              onChange={(e) => setFilters(prev => ({ ...prev, amountMin: e.target.value }))}
-              placeholder="0"
-              className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
-            />
-          </div>
-
-          {/* Search */}
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">Search</label>
-            <div className="relative">
-              <MagnifyingGlassIcon className="h-3 w-3 absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                value={filters.searchTerm}
-                onChange={(e) => setFilters(prev => ({ ...prev, searchTerm: e.target.value }))}
-                placeholder="Search..."
-                className="w-full pl-7 pr-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Secondary filters row - only show when relevant */}
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          {/* Specific Stakeholder */}
-          {filters.stakeholderType !== 'all' && (
-            <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1">Specific {filters.stakeholderType.replace('_', ' ')}</label>
-              <select
-                value={filters.stakeholderId}
-                onChange={(e) => setFilters(prev => ({ ...prev, stakeholderId: e.target.value }))}
-                className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
-              >
-                <option value="">All {filters.stakeholderType.replace('_', ' ')}s</option>
-                {getAllStakeholders().map(stakeholder => (
-                  <option key={stakeholder.id} value={stakeholder.id}>
-                    {stakeholder.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Max Amount - only show if min amount is set */}
-          {filters.amountMin && (
-            <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1">Max Amount</label>
-              <input
-                type="number"
-                value={filters.amountMax}
-                onChange={(e) => setFilters(prev => ({ ...prev, amountMax: e.target.value }))}
-                placeholder="No limit"
-                className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
-              />
-            </div>
-          )}
-        </div>
-      </div>
 
       {/* Transactions Table */}
       <div className="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-700">
           <div className="flex items-center justify-between">
-            <h3 className="text-base font-semibold text-white">
-              Transactions ({sortedTransactions.length} results)
-            </h3>
+            <div>
+              <h3 className="text-base font-semibold text-white">
+                Transactions ({totalTransactions} results - Page {currentPage} of {totalPages})
+              </h3>
+              <div className="flex items-center gap-4 mt-1 text-sm">
+                <span className="text-green-400 font-medium">
+                  Revenue: {formatCurrency(filteredSummary.revenueSum)}
+                </span>
+                <span className="text-red-400 font-medium">
+                  Expenses: {formatCurrency(filteredSummary.expenseSum)}
+                </span>
+                <span className="text-blue-400 font-medium">
+                  Total: {formatCurrency(filteredSummary.totalSum)}
+                </span>
+              </div>
+            </div>
             <div className="flex items-center gap-2 text-sm text-gray-400">
               <span>Sort by:</span>
               <button
@@ -756,8 +768,8 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
               </tr>
             </thead>
             <tbody className="bg-gray-800 divide-y divide-gray-700">
-              {sortedTransactions.length > 0 ? (
-                sortedTransactions.map((transaction) => {
+              {paginatedTransactions.length > 0 ? (
+                paginatedTransactions.map((transaction) => {
                   const Icon = getStakeholderIcon(transaction.stakeholderType);
                   
                   return (
@@ -835,6 +847,106 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
             </tbody>
           </table>
         </div>
+        
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="px-5 py-4 border-t border-gray-700 bg-gray-750">
+            <div className="flex items-center justify-between">
+              {/* Items per page selector */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-400">Show:</span>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={200}>200</option>
+                </select>
+                <span className="text-sm text-gray-400">per page</span>
+              </div>
+
+              {/* Page info and navigation */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-400">
+                  Showing {startIndex + 1}-{Math.min(endIndex, totalTransactions)} of {totalTransactions}
+                </span>
+                
+                {/* Page navigation */}
+                <div className="flex items-center gap-1 ml-4">
+                  <button
+                    onClick={() => setCurrentPage(1)}
+                    disabled={currentPage === 1}
+                    className="px-2 py-1 text-sm rounded border border-gray-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600 text-gray-300"
+                    title="First page"
+                  >
+                    ««
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className="px-2 py-1 text-sm rounded border border-gray-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600 text-gray-300"
+                    title="Previous page"
+                  >
+                    «
+                  </button>
+                  
+                  {/* Page numbers */}
+                  {(() => {
+                    const maxVisiblePages = 5;
+                    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+                    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+                    
+                    if (endPage - startPage < maxVisiblePages - 1) {
+                      startPage = Math.max(1, endPage - maxVisiblePages + 1);
+                    }
+                    
+                    const pages = [];
+                    for (let i = startPage; i <= endPage; i++) {
+                      pages.push(
+                        <button
+                          key={i}
+                          onClick={() => setCurrentPage(i)}
+                          className={clsx(
+                            'px-3 py-1 text-sm rounded border',
+                            currentPage === i
+                              ? 'bg-blue-600 border-blue-600 text-white'
+                              : 'border-gray-600 text-gray-300 hover:bg-gray-600'
+                          )}
+                        >
+                          {i}
+                        </button>
+                      );
+                    }
+                    return pages;
+                  })()}
+                  
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-2 py-1 text-sm rounded border border-gray-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600 text-gray-300"
+                    title="Next page"
+                  >
+                    »
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(totalPages)}
+                    disabled={currentPage === totalPages}
+                    className="px-2 py-1 text-sm rounded border border-gray-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600 text-gray-300"
+                    title="Last page"
+                  >
+                    »»
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Transaction Details Modal */}

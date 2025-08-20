@@ -88,7 +88,8 @@ export type TransactionCategory =
   | 'employee_payment' 
   | 'clinic_expense'
   | 'patient_credit_sale'
-  | 'patient_payment';
+  | 'patient_payment'
+  | 'settlement_point'; // Mark point where cash was zero and all dues cleared
 
 export type StakeholderType = 'doctor' | 'business_partner' | 'employee' | 'distributor' | 'patient';
 

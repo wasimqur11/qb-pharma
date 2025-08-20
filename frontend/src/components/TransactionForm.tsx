@@ -8,7 +8,8 @@ import {
   UsersIcon,
   CreditCardIcon,
   BuildingOfficeIcon,
-  CalendarIcon
+  CalendarIcon,
+  CheckBadgeIcon
 } from '@heroicons/react/24/outline';
 import type { TransactionCategory, StakeholderType } from '../types';
 import { useStakeholders } from '../contexts/StakeholderContext';
@@ -35,7 +36,7 @@ interface TransactionFormProps {
 
 const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSubmit }) => {
   const { doctors, businessPartners, employees, distributors, patients } = useStakeholders();
-  const { transactions } = useTransactions();
+  const { transactions, getCashPosition } = useTransactions();
   // const { showError } = useToast();
   const [formData, setFormData] = useState<TransactionFormData>({
     category: 'pharmacy_sale',
@@ -90,12 +91,44 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Special validation for Settlement Point
+    if (formData.category === 'settlement_point') {
+      const currentCash = getCashPosition();
+      
+      // Debug info
+      console.log('Settlement Point Validation:', {
+        currentCash,
+        absoluteCash: Math.abs(currentCash),
+        amount: formData.amount,
+        parsedAmount: parseFloat(formData.amount)
+      });
+      
+      // Allow Settlement Point only if cash is within ₹50 of zero (more tolerant for testing)
+      if (Math.abs(currentCash) > 50) {
+        alert(`Settlement Point can only be created when cash position is close to zero.\n\nCurrent cash: ₹${currentCash.toLocaleString()}\nTolerance: ±₹50`);
+        return;
+      }
+      
+      // Force amount to be 0 for Settlement Point
+      if (parseFloat(formData.amount) !== 0) {
+        alert('Settlement Point amount must be ₹0');
+        return;
+      }
+    } else {
+      // Regular validation for non-Settlement Point transactions
+      if (!formData.amount || parseFloat(formData.amount) <= 0) {
+        alert('Please enter a valid amount greater than 0');
+        return;
+      }
+    }
+    
     if (selectedType?.requiresStakeholder && !formData.stakeholderId) {
       alert('Missing Stakeholder: Please select a stakeholder for this transaction type.');
       return;
     }
-    if (!formData.amount || !formData.description) {
-      alert('Missing Required Fields: Please fill in all required fields including amount and description.');
+    if (!formData.description) {
+      alert('Missing Required Fields: Please provide a description for this transaction.');
       return;
     }
 
@@ -121,7 +154,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
       ...prev,
       category,
       stakeholderId: undefined,
-      stakeholderType: undefined
+      stakeholderType: undefined,
+      // Auto-fill amount to 0 for Settlement Point
+      amount: category === 'settlement_point' ? '0' : prev.amount,
+      // Auto-fill description for Settlement Point
+      description: category === 'settlement_point' 
+        ? `Settlement Point - ${new Date().toLocaleDateString()}` 
+        : prev.description
     }));
   };
 
@@ -218,7 +257,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
                     {selectedType?.id === 'distributor_payment' && <TruckIcon className="h-3.5 w-3.5 text-gray-400" />}
                     {selectedType?.id === 'employee_payment' && <UsersIcon className="h-3.5 w-3.5 text-gray-400" />}
                     {selectedType?.id === 'sales_profit_distribution' && <BuildingOfficeIcon className="h-3.5 w-3.5 text-gray-400" />}
-                    {!['pharmacy_sale', 'consultation_fee', 'distributor_payment', 'employee_payment', 'sales_profit_distribution'].includes(selectedType?.id || '') && <CreditCardIcon className="h-3.5 w-3.5 text-gray-400" />}
+                    {selectedType?.id === 'settlement_point' && <CheckBadgeIcon className="h-3.5 w-3.5 text-emerald-400" />}
+                    {!['pharmacy_sale', 'consultation_fee', 'distributor_payment', 'employee_payment', 'sales_profit_distribution', 'settlement_point'].includes(selectedType?.id || '') && <CreditCardIcon className="h-3.5 w-3.5 text-gray-400" />}
                   </div>
                   <select
                     value={formData.category}
@@ -284,18 +324,27 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
             )}>
               {/* Amount */}
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1">Amount</label>
+                <label className="block text-xs font-medium text-gray-400 mb-1">
+                  Amount {formData.category === 'settlement_point' && <span className="text-emerald-400">(Auto: ₹0)</span>}
+                </label>
                 <div className="relative">
                   <span className="absolute left-2 top-1/2 transform -translate-y-1/2 text-xs text-gray-400">₹</span>
                   <input
                     type="number"
                     value={formData.amount}
                     onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
-                    className="w-full pl-6 pr-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
+                    className={clsx(
+                      "w-full pl-6 pr-2 py-1.5 border rounded text-white placeholder-gray-400 focus:outline-none focus:ring-1 text-xs",
+                      formData.category === 'settlement_point'
+                        ? "bg-gray-600 border-emerald-600 text-emerald-400 cursor-not-allowed"
+                        : "bg-gray-700 border-gray-600 focus:ring-blue-500"
+                    )}
                     placeholder="0.00"
                     min="0"
                     step="0.01"
                     required
+                    readOnly={formData.category === 'settlement_point'}
+                    title={formData.category === 'settlement_point' ? 'Settlement Point amount is automatically set to ₹0' : ''}
                   />
                 </div>
               </div>
