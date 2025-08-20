@@ -3,6 +3,8 @@ import type { Transaction, DashboardStats, PayableBalance, StakeholderType } fro
 import { 
   PHARMACY_REVENUE_CATEGORIES, 
   PHARMACY_EXPENSE_CATEGORIES,
+  PHARMACY_OPERATIONAL_EXPENSE_CATEGORIES,
+  PARTNER_DISTRIBUTION_CATEGORIES,
   DOCTOR_REVENUE_CATEGORIES,
   DOCTOR_EXPENSE_CATEGORIES,
   EXPENSE_CATEGORIES
@@ -32,6 +34,8 @@ interface TransactionContextType {
   getPharmacyRevenue: () => number;
   getDoctorRevenue: () => number;
   getPharmacyExpenses: () => number;
+  getPharmacyOperationalExpenses: () => number;
+  getPartnerDistributions: () => number;
   getDoctorExpenses: () => number;
   getTodayPharmacyRevenue: () => number;
   getTodayDoctorRevenue: () => number;
@@ -89,9 +93,14 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
 
   // Operations
   const addTransaction = (transactionData: Omit<Transaction, 'id' | 'createdAt'>) => {
+    // Generate a more robust unique ID
+    const timestamp = Date.now();
+    const randomSuffix = Math.random().toString(36).substr(2, 5);
+    const uniqueId = `${timestamp}-${randomSuffix}`;
+    
     const newTransaction: Transaction = {
       ...transactionData,
-      id: Date.now().toString(),
+      id: uniqueId,
       createdAt: new Date()
     };
     setTransactions(prev => [newTransaction, ...prev]);
@@ -137,9 +146,28 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
   };
 
   const updateTransaction = (id: string, updates: Partial<Transaction>) => {
-    setTransactions(prev => prev.map(transaction => 
-      transaction.id === id ? { ...transaction, ...updates } : transaction
-    ));
+    setTransactions(prev => {
+      const updatedTransactions = prev.map(transaction => {
+        if (transaction.id === id) {
+          // Create a completely new object to ensure React detects the change
+          return {
+            ...transaction,
+            ...updates,
+            // Ensure date is properly handled
+            date: updates.date instanceof Date ? updates.date : transaction.date
+          };
+        }
+        return transaction;
+      });
+      
+      // Verify exactly one transaction was updated
+      const changedCount = updatedTransactions.filter((t, index) => t !== prev[index]).length;
+      if (changedCount !== 1) {
+        console.warn(`updateTransaction: Expected 1 change, but ${changedCount} transactions were affected for ID ${id}`);
+      }
+      
+      return updatedTransactions;
+    });
   };
 
   const deleteTransaction = (id: string) => {
@@ -195,7 +223,19 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
 
   const getPharmacyExpenses = () => {
     return transactions
-      .filter(t => PHARMACY_EXPENSE_CATEGORIES.includes(t.category))
+      .filter(t => PHARMACY_OPERATIONAL_EXPENSE_CATEGORIES.includes(t.category))
+      .reduce((sum, t) => sum + t.amount, 0);
+  };
+
+  const getPharmacyOperationalExpenses = () => {
+    return transactions
+      .filter(t => PHARMACY_OPERATIONAL_EXPENSE_CATEGORIES.includes(t.category))
+      .reduce((sum, t) => sum + t.amount, 0);
+  };
+
+  const getPartnerDistributions = () => {
+    return transactions
+      .filter(t => PARTNER_DISTRIBUTION_CATEGORIES.includes(t.category))
       .reduce((sum, t) => sum + t.amount, 0);
   };
 
@@ -242,7 +282,32 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
   };
 
   const getPharmacyCashPosition = () => {
-    return getPharmacyRevenue() - getPharmacyExpenses();
+    // Formula: Total Sale - Distributor Payment - Sales Profit Distribution - Employee Payment - Clinic Expense + Patient Payment
+    const pharmacyRevenue = getPharmacyRevenue(); // Includes: pharmacy_sale + patient_payment + distributor_credit_note
+    
+    // Calculate all pharmacy-related expenses according to the specified formula
+    const distributorPayments = transactions
+      .filter(t => t.category === 'distributor_payment')
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    const salesProfitDistributions = transactions
+      .filter(t => t.category === 'sales_profit_distribution')
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    const employeePayments = transactions
+      .filter(t => t.category === 'employee_payment')
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    const clinicExpenses = transactions
+      .filter(t => t.category === 'clinic_expense')
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    const patientCreditSales = transactions
+      .filter(t => t.category === 'patient_credit_sale')
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    // Cash in Hand = Total Sale + Patient Payment - Distributor Payment - Sales Profit Distribution - Employee Payment - Clinic Expense - Patient Credit Sale
+    return pharmacyRevenue - distributorPayments - salesProfitDistributions - employeePayments - clinicExpenses - patientCreditSales;
   };
 
   const getDoctorCashPosition = () => {
@@ -299,22 +364,37 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
         });
       }
       
-      // Calculate profit share based on ownership percentage
+      // New Partner Outstanding Formula: (Pharmacy Cash in hand + Sales Profit Distribution) ÷ Number of Partners
       // Use period-filtered data if dates provided, otherwise use all-time data
-      let pharmacyRevenue, pharmacyExpenses;
+      let pharmacyCashInHand, totalSalesProfitDistribution;
       if (startDate && endDate) {
+        // Get period-filtered stats for pharmacy cash in hand
         const periodStats = getPeriodFilteredStats(startDate, endDate);
-        pharmacyRevenue = periodStats.pharmacyRevenue;
-        pharmacyExpenses = periodStats.pharmacyExpenses;
+        pharmacyCashInHand = periodStats.pharmacyCashPosition;
+        
+        // Calculate total sales profit distributions for the period
+        const periodTransactions = transactions.filter(t => {
+          const transactionDate = new Date(t.date);
+          return transactionDate >= startDate && transactionDate <= endDate;
+        });
+        
+        totalSalesProfitDistribution = periodTransactions
+          .filter(t => t.category === 'sales_profit_distribution')
+          .reduce((sum, t) => sum + t.amount, 0);
       } else {
-        pharmacyRevenue = getPharmacyRevenue();
-        pharmacyExpenses = getPharmacyExpenses();
+        // Use all-time data
+        pharmacyCashInHand = getPharmacyCashPosition();
+        
+        totalSalesProfitDistribution = transactions
+          .filter(t => t.category === 'sales_profit_distribution')
+          .reduce((sum, t) => sum + t.amount, 0);
       }
       
-      const totalProfit = pharmacyRevenue - pharmacyExpenses;
+      // Total profit available = Pharmacy Cash in Hand + Sales Profit Distribution
+      const totalAvailableProfit = pharmacyCashInHand + totalSalesProfitDistribution;
       
-      // Partner's share = Total Profit * Ownership Percentage
-      const totalEarned = (totalProfit * partner.ownershipPercentage) / 100;
+      // Each partner's earned share = Total Available Profit ÷ Number of Partners
+      const totalEarned = totalAvailableProfit / businessPartners.length;
       
       const totalPaid = partnerTransactions
         .filter(t => t.category === 'sales_profit_distribution')
@@ -468,7 +548,7 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
 
     const getPharmacyExpensesForPeriod = () => {
       return periodTransactions
-        .filter(t => PHARMACY_EXPENSE_CATEGORIES.includes(t.category))
+        .filter(t => PHARMACY_OPERATIONAL_EXPENSE_CATEGORIES.includes(t.category))
         .reduce((sum, t) => sum + t.amount, 0);
     };
 
@@ -497,7 +577,30 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
       pharmacyExpenses,
       doctorExpenses,
       totalExpenses,
-      pharmacyCashPosition: pharmacyRevenue - pharmacyExpenses,
+      pharmacyCashPosition: (() => {
+        // Apply same formula for period-filtered data: Total Sale - Distributor Payment - Sales Profit Distribution - Employee Payment - Clinic Expense + Patient Payment
+        const distributorPayments = periodTransactions
+          .filter(t => t.category === 'distributor_payment')
+          .reduce((sum, t) => sum + t.amount, 0);
+        
+        const salesProfitDistributions = periodTransactions
+          .filter(t => t.category === 'sales_profit_distribution')
+          .reduce((sum, t) => sum + t.amount, 0);
+        
+        const employeePayments = periodTransactions
+          .filter(t => t.category === 'employee_payment')
+          .reduce((sum, t) => sum + t.amount, 0);
+        
+        const clinicExpenses = periodTransactions
+          .filter(t => t.category === 'clinic_expense')
+          .reduce((sum, t) => sum + t.amount, 0);
+        
+        const patientCreditSales = periodTransactions
+          .filter(t => t.category === 'patient_credit_sale')
+          .reduce((sum, t) => sum + t.amount, 0);
+        
+        return pharmacyRevenue - distributorPayments - salesProfitDistributions - employeePayments - clinicExpenses - patientCreditSales;
+      })(),
       doctorCashPosition: doctorRevenue - doctorExpenses,
       cashPosition: (pharmacyRevenue + doctorRevenue) - totalExpenses,
       transactionCount: periodTransactions.length
@@ -535,9 +638,14 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
   };
 
   const addDistributorCreditPurchase = (distributorId: string, amount: number, description: string) => {
+    // Generate a more robust unique ID
+    const timestamp = Date.now();
+    const randomSuffix = Math.random().toString(36).substr(2, 5);
+    const uniqueId = `${timestamp}-${randomSuffix}`;
+    
     // Add internal tracking transaction (doesn't affect business transactions)
     const newTransaction: Transaction = {
-      id: Date.now().toString(),
+      id: uniqueId,
       category: 'distributor_credit_purchase',
       stakeholderId: distributorId,
       stakeholderType: 'distributor',
@@ -582,6 +690,8 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     getPharmacyRevenue,
     getDoctorRevenue,
     getPharmacyExpenses,
+    getPharmacyOperationalExpenses,
+    getPartnerDistributions,
     getDoctorExpenses,
     getTodayPharmacyRevenue,
     getTodayDoctorRevenue,
