@@ -27,6 +27,16 @@ export interface BusinessPartner {
   createdAt: Date;
 }
 
+// Simple Settlement Types
+export interface SettlementDistribution {
+  partnerId: string;
+  partnerName: string;
+  calculatedShare: number;
+  balanceAdjustment: number;
+  finalAmount: number;
+  newBalance: number;
+}
+
 export interface Employee {
   id: string;
   name: string;
@@ -183,6 +193,48 @@ export interface ConfigurationState {
   departments: Department[];
   isLoading: boolean;
   lastUpdated: Date | null;
+}
+
+// Settlement Equity Management Types
+export interface SettlementRecord {
+  settlementId: string;
+  settlementDate: Date;
+  owedAmount: number;              // What they should have received
+  actualAmount: number;            // What they actually received
+  equityChange: number;            // owedAmount - actualAmount
+  reason?: string;                 // Optional reason for difference
+}
+
+export interface PartnerSettlementEquity {
+  partnerId: string;
+  partnerName: string;
+  ownershipPercentage: number;
+  totalOwedAllTime: number;        // Total amount owed across all settlements
+  totalReceivedAllTime: number;    // Total amount actually received
+  currentEquity: number;           // totalOwed - totalReceived (can be + or -)
+  settlementHistory: SettlementRecord[];
+  lastUpdated: Date;
+}
+
+export interface PreSettlementAllocation {
+  partnerId: string;
+  partnerName: string;
+  ownershipPercentage: number;
+  calculatedShare: number;         // Auto-calculated based on ownership %
+  adjustedAmount: number;          // User-modified amount
+  equityAdjustment: number;        // adjustedAmount - calculatedShare
+  currentEquity: number;           // Their equity before this settlement
+  projectedEquity: number;        // Their equity after this settlement
+}
+
+export interface SettlementSession {
+  sessionId: string;
+  createdAt: Date;
+  availableCash: number;
+  allocations: PreSettlementAllocation[];
+  isProcessed: boolean;
+  settlementDate?: Date;
+  settlementPointId?: string;
 }
 
 // Authentication Types

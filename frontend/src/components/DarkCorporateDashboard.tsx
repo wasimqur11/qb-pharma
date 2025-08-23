@@ -13,6 +13,7 @@ import qbLogo from '../assets/qblogo.png';
 import TransactionForm from './TransactionForm';
 import EditTransactionForm from './EditTransactionForm';
 import StakeholderManagement from './StakeholderManagement';
+import SimpleSettlementWizard from './SimpleSettlementWizard';
 import AccountStatement from './AccountStatement';
 import PaymentProcessor from './PaymentProcessor';
 import TransactionHistory from './TransactionHistory';
@@ -44,6 +45,7 @@ const DarkCorporateDashboard: React.FC = () => {
   const [showEditTransactionForm, setShowEditTransactionForm] = useState(false);
   const [selectedTransactionForEdit, setSelectedTransactionForEdit] = useState<Transaction | null>(null);
   const [showPaymentProcessor, setShowPaymentProcessor] = useState(false);
+  const [showSimpleSettlementWizard, setShowSimpleSettlementWizard] = useState(false);
   
   const { 
     transactions, 
@@ -53,14 +55,15 @@ const DarkCorporateDashboard: React.FC = () => {
     getDistributorPaymentsDue,
     getPeriodFilteredStats,
     getLastSettlementPoint,
-    getDefaultDateRange
+    getDefaultDateRange,
+    getCashPosition
   } = useTransactions();
   
   const { doctors, businessPartners, employees, distributors, patients } = useStakeholders();
   
   const { user, logout } = useAuth();
   // const { showSuccess } = useToast();
-  const [dateRange, setDateRange] = useState(getDefaultDateRange('transaction'));
+  const [dateRange, setDateRange] = useState(getDefaultDateRange());
 
   // Report filter state - initialize with Settlement Point date range or fallback
   const [reportFilters, setReportFilters] = useState(() => {
@@ -115,11 +118,13 @@ const DarkCorporateDashboard: React.FC = () => {
   const toDate = new Date(dateRange.to);
   const periodStats = getPeriodFilteredStats(fromDate, toDate);
   
-  // Merge with all-time stats for non-filtered data (like payables)
+  // Get all-time stats for settlement decisions and payables
   const allTimeStats = getDashboardStats();
+  
+  // Merge with period-filtered data for dashboard display
   const stats: DashboardStats = {
     ...allTimeStats,
-    // Override with period-filtered data
+    // Override with period-filtered data for dashboard metrics
     todayRevenue: periodStats.totalRevenue, // Using period revenue as "current period revenue"
     totalExpenses: periodStats.totalExpenses,
     cashPosition: periodStats.cashPosition,
@@ -828,6 +833,53 @@ const DarkCorporateDashboard: React.FC = () => {
     color: '#ffffff'
   };
 
+  const SettlementAlert: React.FC = () => {
+    // Use all-time stats instead of filtered period data for settlement decisions
+    const allTimeStats = getDashboardStats();
+    const pharmacyCash = allTimeStats.pharmacyCashPosition;
+    const hasBusinessPartners = businessPartners.length > 0;
+    
+    // Check if there are actual partner dues to pay
+    const partnerPayables = allTimeStats.businessPartnerPayables;
+    const totalPartnerDues = partnerPayables.reduce((sum, p) => sum + p.netPayable, 0);
+    
+    // Show alert only when:
+    // 1. There's pharmacy cash available, AND
+    // 2. There are business partners, AND  
+    // 3. There are actual partner dues to pay
+    if (pharmacyCash <= 0 || !hasBusinessPartners || totalPartnerDues <= 0) return null;
+    
+    return (
+      <div className="bg-gradient-to-r from-emerald-900/30 to-green-900/30 border border-emerald-600/50 rounded-lg p-6 mb-6 shadow-lg">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="text-4xl animate-pulse">💰</div>
+            <div>
+              <h3 className="font-semibold text-emerald-400 text-xl">Settlement Opportunity Available</h3>
+              <p className="text-gray-300 mb-2">
+                Partner dues: <span className="font-mono text-emerald-400">{formatCurrency(totalPartnerDues)}</span> | Available cash: <span className="font-mono text-emerald-400">{formatCurrency(pharmacyCash)}</span>
+              </p>
+              <p className="text-sm text-emerald-300">
+                Pay partner dues, track equity adjustments, and create a Settlement Point
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-col gap-3">
+            <button 
+              onClick={() => setShowSimpleSettlementWizard(true)}
+              className="px-8 py-4 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium shadow-md hover:shadow-lg transform hover:scale-105 transition-transform text-lg"
+            >
+              🎯 Start Settlement
+            </button>
+            <p className="text-xs text-gray-400 text-center">
+              {businessPartners.length} partner{businessPartners.length !== 1 ? 's' : ''} ready
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
 
   const DateFilter: React.FC = () => (
     <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 mb-5 overflow-hidden">
@@ -1436,6 +1488,9 @@ const DarkCorporateDashboard: React.FC = () => {
 
     return (
       <div className="space-y-6">
+        {/* Settlement Alert */}
+        <SettlementAlert />
+        
         {/* Header with Export Button */}
         <div className="flex items-center justify-between">
           <div>
@@ -1756,6 +1811,13 @@ const DarkCorporateDashboard: React.FC = () => {
         isOpen={showPaymentProcessor}
         onClose={() => setShowPaymentProcessor(false)}
         onProcessPayments={handlePaymentProcessed}
+      />
+
+      {/* Simple Settlement Wizard */}
+      <SimpleSettlementWizard
+        isOpen={showSimpleSettlementWizard}
+        onClose={() => setShowSimpleSettlementWizard(false)}
+        availableCash={allTimeStats.pharmacyCashPosition}
       />
     </div>
   );

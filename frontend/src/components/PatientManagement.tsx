@@ -417,7 +417,8 @@ const PatientManagement: React.FC = () => {
         emergencyContact: data.emergencyContact || undefined,
         emergencyPhone: data.emergencyPhone || undefined,
         creditLimit: parseFloat(data.creditLimit),
-        notes: data.notes || undefined
+        notes: data.notes || undefined,
+        isActive: true
       });
     }
     setShowAddForm(false);

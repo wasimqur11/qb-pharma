@@ -11,7 +11,8 @@ import {
   UserGroupIcon,
   UsersIcon,
   TruckIcon,
-  BanknotesIcon
+  BanknotesIcon,
+  CheckBadgeIcon
 } from '@heroicons/react/24/outline';
 import { useStakeholders } from '../contexts/StakeholderContext';
 import { useTransactions } from '../contexts/TransactionContext';
@@ -240,7 +241,8 @@ const BusinessAccountStatement: React.FC = () => {
       patient_payment: CurrencyDollarIcon,
       patient_credit_sale: CurrencyDollarIcon,
       distributor_credit_purchase: TruckIcon,
-      distributor_credit_note: TruckIcon
+      distributor_credit_note: TruckIcon,
+      settlement_point: CheckBadgeIcon
     } as const;
     return iconMap[category] || CurrencyDollarIcon;
   };

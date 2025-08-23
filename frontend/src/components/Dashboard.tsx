@@ -208,7 +208,7 @@ const Dashboard: React.FC = () => {
           
           <PayableCard 
             title="Sales Partner Payables"
-            payables={stats.salesPartnerPayables}
+            payables={stats.businessPartnerPayables}
             icon={UsersIcon}
             accentColor="bg-blue-500"
           />

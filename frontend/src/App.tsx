@@ -4,6 +4,8 @@ import { AuthProvider } from './contexts/AuthContext'
 import { ConfigurationProvider } from './contexts/ConfigurationContext'
 import { StakeholderProvider } from './contexts/StakeholderContext'
 import { TransactionProvider } from './contexts/TransactionContext'
+import { SettlementEquityProvider } from './contexts/SettlementEquityContext'
+import { SimpleSettlementProvider } from './contexts/SimpleSettlementContext'
 // import { ToastProvider } from './contexts/ToastContext'
 
 function App() {
@@ -13,7 +15,11 @@ function App() {
         <ConfigurationProvider>
           <StakeholderProvider>
             <TransactionProvider>
-              <DarkCorporateDashboard />
+              <SettlementEquityProvider>
+                <SimpleSettlementProvider>
+                  <DarkCorporateDashboard />
+                </SimpleSettlementProvider>
+              </SettlementEquityProvider>
             </TransactionProvider>
           </StakeholderProvider>
         </ConfigurationProvider>

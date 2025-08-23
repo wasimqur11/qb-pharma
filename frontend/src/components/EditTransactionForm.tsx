@@ -52,17 +52,22 @@ const EditTransactionForm: React.FC<EditTransactionFormProps> = ({
   useEffect(() => {
     if (transaction) {
       setOriginalData(transaction);
+      
+      // Get the correct stakeholder type from transaction type configuration
+      const transactionTypeConfig = transactionTypes.find(t => t.id === transaction.category);
+      const expectedStakeholderType = transactionTypeConfig?.stakeholderType as StakeholderType || '';
+      
       setFormData({
         category: transaction.category,
         stakeholderId: transaction.stakeholderId || '',
-        stakeholderType: transaction.stakeholderType || '' as StakeholderType,
+        stakeholderType: transaction.stakeholderType || expectedStakeholderType,
         amount: transaction.amount.toString(),
         description: transaction.description,
         billNo: (transaction as any).billNo || '',
         date: transaction.date.toISOString().split('T')[0]
       });
     }
-  }, [transaction]);
+  }, [transaction, transactionTypes]);
 
   const getStakeholders = (type: StakeholderType) => {
     switch (type) {
@@ -118,26 +123,45 @@ const EditTransactionForm: React.FC<EditTransactionFormProps> = ({
       return;
     }
 
-    const updatedData: Partial<Transaction> = {
-      category: formData.category,
-      stakeholderId: formData.stakeholderId || undefined,
-      stakeholderType: formData.stakeholderType || undefined,
-      amount: parseFloat(formData.amount),
-      description: formData.description,
-      date: new Date(formData.date),
-      ...(formData.billNo && { billNo: formData.billNo })
-    };
+    // Only include fields that have actually changed
+    const updatedData: Partial<Transaction> = {};
+    
+    if (formData.category !== originalData?.category) {
+      updatedData.category = formData.category;
+    }
+    if (formData.stakeholderId !== (originalData?.stakeholderId || '')) {
+      updatedData.stakeholderId = formData.stakeholderId || undefined;
+    }
+    if (formData.stakeholderType !== (originalData?.stakeholderType || '')) {
+      updatedData.stakeholderType = formData.stakeholderType || undefined;
+    }
+    if (parseFloat(formData.amount) !== originalData?.amount) {
+      updatedData.amount = parseFloat(formData.amount);
+    }
+    if (formData.description !== originalData?.description) {
+      updatedData.description = formData.description;
+    }
+    if (formData.date !== originalData?.date.toISOString().split('T')[0]) {
+      updatedData.date = new Date(formData.date);
+    }
+    const originalBillNo = (originalData as any)?.billNo || '';
+    if (formData.billNo !== originalBillNo) {
+      if (formData.billNo) {
+        updatedData.billNo = formData.billNo;
+      }
+    }
 
     onSubmit(transaction.id, updatedData);
     onClose();
   };
 
   const handleCategoryChange = (category: TransactionCategory) => {
+    const newTransactionType = transactionTypes.find(t => t.id === category);
     setFormData(prev => ({
       ...prev,
       category,
       stakeholderId: '',
-      stakeholderType: '' as StakeholderType
+      stakeholderType: (newTransactionType?.stakeholderType || '') as StakeholderType
     }));
   };
 

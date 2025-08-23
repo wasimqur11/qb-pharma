@@ -356,7 +356,39 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
   };
 
   const getBusinessPartnerPayables = (startDate?: Date, endDate?: Date): PayableBalance[] => {
-    return businessPartners.map(partner => {
+    // Calculate total available profit first
+    let pharmacyCashInHand, totalSalesProfitDistribution;
+    if (startDate && endDate) {
+      // Get period-filtered stats for pharmacy cash in hand
+      const periodStats = getPeriodFilteredStats(startDate, endDate);
+      pharmacyCashInHand = periodStats.pharmacyCashPosition;
+      
+      // Calculate total sales profit distributions for the period
+      const periodTransactions = transactions.filter(t => {
+        const transactionDate = new Date(t.date);
+        return transactionDate >= startDate && transactionDate <= endDate;
+      });
+      
+      totalSalesProfitDistribution = periodTransactions
+        .filter(t => t.category === 'sales_profit_distribution')
+        .reduce((sum, t) => sum + t.amount, 0);
+    } else {
+      // Use all-time data
+      pharmacyCashInHand = getPharmacyCashPosition();
+      
+      totalSalesProfitDistribution = transactions
+        .filter(t => t.category === 'sales_profit_distribution')
+        .reduce((sum, t) => sum + t.amount, 0);
+    }
+    
+    const totalAvailableProfit = pharmacyCashInHand + totalSalesProfitDistribution;
+    
+    // Calculate shares with proper rounding distribution to ensure total equals exactly totalAvailableProfit
+    const baseShare = Math.floor(totalAvailableProfit / businessPartners.length);
+    const remainder = totalAvailableProfit - (baseShare * businessPartners.length);
+    
+    // Create partner data with properly distributed shares
+    const partnerShares = businessPartners.map((partner, index) => {
       // Filter transactions by date range if provided
       let partnerTransactions = transactions.filter(t => 
         t.stakeholderId === partner.id && t.stakeholderType === 'business_partner'
@@ -369,37 +401,8 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
         });
       }
       
-      // New Partner Outstanding Formula: (Pharmacy Cash in hand + Sales Profit Distribution) ÷ Number of Partners
-      // Use period-filtered data if dates provided, otherwise use all-time data
-      let pharmacyCashInHand, totalSalesProfitDistribution;
-      if (startDate && endDate) {
-        // Get period-filtered stats for pharmacy cash in hand
-        const periodStats = getPeriodFilteredStats(startDate, endDate);
-        pharmacyCashInHand = periodStats.pharmacyCashPosition;
-        
-        // Calculate total sales profit distributions for the period
-        const periodTransactions = transactions.filter(t => {
-          const transactionDate = new Date(t.date);
-          return transactionDate >= startDate && transactionDate <= endDate;
-        });
-        
-        totalSalesProfitDistribution = periodTransactions
-          .filter(t => t.category === 'sales_profit_distribution')
-          .reduce((sum, t) => sum + t.amount, 0);
-      } else {
-        // Use all-time data
-        pharmacyCashInHand = getPharmacyCashPosition();
-        
-        totalSalesProfitDistribution = transactions
-          .filter(t => t.category === 'sales_profit_distribution')
-          .reduce((sum, t) => sum + t.amount, 0);
-      }
-      
-      // Total profit available = Pharmacy Cash in Hand + Sales Profit Distribution
-      const totalAvailableProfit = pharmacyCashInHand + totalSalesProfitDistribution;
-      
-      // Each partner's earned share = Total Available Profit ÷ Number of Partners
-      const totalEarned = totalAvailableProfit / businessPartners.length;
+      // Assign share: first 'remainder' partners get baseShare + 1, others get baseShare
+      const totalEarned = baseShare + (index < remainder ? 1 : 0);
       
       const totalPaid = partnerTransactions
         .filter(t => t.category === 'sales_profit_distribution')
@@ -416,7 +419,9 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
         netPayable,
         lastUpdated: new Date()
       };
-    }).filter(payable => payable.netPayable > 0);
+    });
+    
+    return partnerShares.filter(payable => payable.netPayable > 0);
   };
 
   const getEmployeeSalaryDue = (): PayableBalance[] => {

@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
-import { ToastContainer, ToastData } from '../components/Toast';
+import React, { createContext, useContext, useState, useCallback } from 'react';
+import type { ReactNode } from 'react';
+import { ToastContainer } from '../components/Toast';
+import type { ToastData } from '../components/Toast';
 
 interface ToastContextType {
   showToast: (toast: Omit<ToastData, 'id'>) => void;

@@ -214,10 +214,10 @@ const StakeholderManagement: React.FC = () => {
       }
 
       // Check against existing data
-      const nameExists = currentData.some(existing => 
+      const nameExists = currentData.some((existing: any) => 
         existing.name.toLowerCase().trim() === item.name.toLowerCase().trim()
       );
-      const emailExists = currentData.some(existing => 
+      const emailExists = currentData.some((existing: any) => 
         existing.email.toLowerCase().trim() === item.email.toLowerCase().trim()
       );
       
