@@ -15,7 +15,7 @@ import {
 import type { Partner, Doctor, BusinessPartner, Employee, Distributor, Patient, StakeholderType } from '../types';
 import { useStakeholders } from '../contexts/StakeholderContext';
 import StakeholderForm from './StakeholderForm';
-import BulkUpload from './BulkUpload';
+import DistributorBulkUpload from './DistributorBulkUpload';
 import clsx from 'clsx';
 
 type StakeholderData = Partner | Doctor | BusinessPartner | Employee | Distributor | Patient;
@@ -173,109 +173,6 @@ const StakeholderManagement: React.FC = () => {
     }
   };
 
-  const handleBulkUpload = (uploadedData: any[]) => {
-    // Validation functions (same as in StakeholderForm)
-    const validateEmail = (email: string): boolean => {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      return emailRegex.test(email);
-    };
-
-    const validateIndianMobile = (phone: string): boolean => {
-      const cleanPhone = phone.replace(/[\s\-\+]/g, '');
-      const mobileRegex = /^(?:91)?[6-9]\d{9}$/;
-      return mobileRegex.test(cleanPhone);
-    };
-
-    const formatIndianMobile = (phone: string): string => {
-      const cleaned = phone.replace(/[^\d+]/g, '');
-      if (cleaned.startsWith('+91') && cleaned.length === 13) {
-        return `+91 ${cleaned.slice(3, 8)} ${cleaned.slice(8)}`;
-      } else if (cleaned.startsWith('91') && cleaned.length === 12) {
-        return `+91 ${cleaned.slice(2, 7)} ${cleaned.slice(7)}`;
-      } else if (cleaned.length === 10 && /^[6-9]/.test(cleaned)) {
-        return `+91 ${cleaned.slice(0, 5)} ${cleaned.slice(5)}`;
-      }
-      return phone;
-    };
-
-    // Validate email and phone formats
-    const invalidEmails: string[] = [];
-    const invalidPhones: string[] = [];
-    const duplicateNames: string[] = [];
-    const duplicateEmails: string[] = [];
-    
-    uploadedData.forEach(item => {
-      // Format validation
-      if (item.email && !validateEmail(item.email)) {
-        invalidEmails.push(item.email);
-      }
-      if (item.phone && !validateIndianMobile(item.phone)) {
-        invalidPhones.push(item.phone);
-      }
-
-      // Check against existing data
-      const nameExists = currentData.some((existing: any) => 
-        existing.name.toLowerCase().trim() === item.name.toLowerCase().trim()
-      );
-      const emailExists = currentData.some((existing: any) => 
-        existing.email.toLowerCase().trim() === item.email.toLowerCase().trim()
-      );
-      
-      if (nameExists) duplicateNames.push(item.name);
-      if (emailExists) duplicateEmails.push(item.email);
-    });
-    
-    if (invalidEmails.length > 0 || invalidPhones.length > 0 || duplicateNames.length > 0 || duplicateEmails.length > 0) {
-      let errorMessage = 'Upload failed due to validation errors:\n';
-      
-      if (invalidEmails.length > 0) {
-        errorMessage += `\nInvalid email addresses: ${invalidEmails.join(', ')}`;
-      }
-      if (invalidPhones.length > 0) {
-        errorMessage += `\nInvalid phone numbers: ${invalidPhones.join(', ')}`;
-        errorMessage += '\n(Must be Indian mobile numbers: 10 digits starting with 6,7,8,9)';
-      }
-      if (duplicateNames.length > 0) {
-        errorMessage += `\nNames already exist: ${duplicateNames.join(', ')}`;
-      }
-      if (duplicateEmails.length > 0) {
-        errorMessage += `\nEmails already exist: ${duplicateEmails.join(', ')}`;
-      }
-      errorMessage += '\n\nPlease correct these issues and try again.';
-      alert(errorMessage);
-      return;
-    }
-    
-    // Process and add items using context
-    uploadedData.forEach(item => {
-      const processedItem = {
-        ...item,
-        phone: item.phone ? formatIndianMobile(item.phone) : item.phone
-      };
-
-      switch (activeTab) {
-        case 'distributor':
-          addDistributor({
-            name: processedItem.name,
-            contactPerson: processedItem.contactPerson,
-            email: processedItem.email,
-            phone: processedItem.phone,
-            address: processedItem.address,
-            creditBalance: processedItem.creditBalance ? parseFloat(processedItem.creditBalance) : 0,
-            initialBalanceDate: processedItem.initialBalanceDate,
-            paymentSchedule: processedItem.paymentSchedule || 'weekly',
-            paymentPercentage: processedItem.paymentPercentage ? parseFloat(processedItem.paymentPercentage) : 10,
-            nextPaymentDue: processedItem.nextPaymentDue || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Default to 7 days from now
-            lastPaymentDate: processedItem.lastPaymentDate || undefined
-          });
-          break;
-        // Add other stakeholder types if needed for bulk upload in future
-      }
-    });
-    
-    setShowBulkUpload(false);
-    alert(`Successfully uploaded ${uploadedData.length} ${currentType?.label.toLowerCase()}`);
-  };
 
   const formatCurrency = (amount: number) => `₹${amount.toLocaleString()}`;
 
@@ -536,11 +433,9 @@ const StakeholderManagement: React.FC = () => {
         existingStakeholders={currentData}
       />
 
-      <BulkUpload
+      <DistributorBulkUpload
         isOpen={showBulkUpload}
         onClose={() => setShowBulkUpload(false)}
-        onUpload={handleBulkUpload}
-        uploadType="distributors"
       />
     </div>
   );

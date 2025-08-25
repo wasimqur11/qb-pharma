@@ -163,6 +163,66 @@ export const StakeholderProvider: React.FC<StakeholderProviderProps> = ({ childr
         nextPaymentDue: '2024-08-29', // Bi-weekly
         lastPaymentDate: '2024-08-15', // Two weeks ago
         createdAt: now
+      },
+      {
+        id: 'dist-004',
+        name: 'Multan Healthcare Supply',
+        contactPerson: 'Fatima Khalil',
+        email: 'fatima@multanhealthcare.com',
+        phone: '+92 61 4567 890',
+        address: 'Cantt Area, Multan',
+        creditBalance: 45000,
+        initialBalanceDate: '2024-01-01',
+        paymentSchedule: 'monthly',
+        paymentPercentage: 8,
+        nextPaymentDue: '2024-09-01', // Monthly
+        lastPaymentDate: '2024-08-01',
+        createdAt: now
+      },
+      {
+        id: 'dist-005',
+        name: 'Peshawar Medical Traders',
+        contactPerson: 'Ahmad Khan',
+        email: 'ahmad@peshawarmedi.com',
+        phone: '+92 91 5678 901',
+        address: 'University Town, Peshawar',
+        creditBalance: 80000,
+        initialBalanceDate: '2024-01-01',
+        paymentSchedule: 'bi-weekly',
+        paymentPercentage: 12,
+        nextPaymentDue: '2024-08-30',
+        lastPaymentDate: '2024-08-16',
+        createdAt: now
+      },
+      {
+        id: 'dist-006',
+        name: 'Quetta Pharma Distributors',
+        contactPerson: 'Zainab Baloch',
+        email: 'zainab@quettapharma.com',
+        phone: '+92 81 2345 678',
+        address: 'Jinnah Town, Quetta',
+        creditBalance: 35000,
+        initialBalanceDate: '2024-01-01',
+        paymentSchedule: 'weekly',
+        paymentPercentage: 15,
+        nextPaymentDue: '2024-08-26',
+        lastPaymentDate: '2024-08-19',
+        createdAt: now
+      },
+      {
+        id: 'dist-007',
+        name: 'Faisalabad Medicine Hub',
+        contactPerson: 'Usman Sheikh',
+        email: 'usman@faisalabadmedicine.com',
+        phone: '+92 41 3456 789',
+        address: 'Jaranwala Road, Faisalabad',
+        creditBalance: 55000,
+        initialBalanceDate: '2024-01-01',
+        paymentSchedule: 'monthly',
+        paymentPercentage: 10,
+        nextPaymentDue: '2024-09-05',
+        lastPaymentDate: '2024-08-05',
+        createdAt: now
       }
     ];
     
