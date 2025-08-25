@@ -102,6 +102,8 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50);
+  const [showAllDistributorCredits, setShowAllDistributorCredits] = useState(false);
+  const [distributorSearchTerm, setDistributorSearchTerm] = useState('');
 
   // Use context transactions if no prop transactions provided
   const allTransactions = useMemo(() => {
@@ -110,6 +112,22 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
 
   // Get dashboard stats for payables data
   const dashboardStats = useMemo(() => getDashboardStats(), [getDashboardStats]);
+
+  // Filter distributor credits based on search term
+  const filteredDistributorCredits = useMemo(() => {
+    if (!dashboardStats?.distributorCredits) return [];
+    if (!distributorSearchTerm) return dashboardStats.distributorCredits;
+    
+    const searchLower = distributorSearchTerm.toLowerCase();
+    return dashboardStats.distributorCredits.filter(credit => {
+      if (!credit) return false;
+      return (
+        credit.name?.toLowerCase().includes(searchLower) ||
+        credit.creditBalance?.toString().includes(distributorSearchTerm) ||
+        `${SYSTEM_CONFIG.CURRENCY_SYMBOL}${credit.creditBalance?.toLocaleString() || 0}`.toLowerCase().includes(searchLower)
+      );
+    });
+  }, [dashboardStats?.distributorCredits, distributorSearchTerm]);
 
   const getAllStakeholders = () => {
     const stakeholders = [
@@ -439,6 +457,17 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
     return { totalSum, revenueSum, expenseSum };
   }, [sortedTransactions]);
 
+  // Add error boundary
+  if (!dashboardStats) {
+    return (
+      <div className="space-y-5">
+        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 text-center">
+          <p className="text-gray-400">Loading dashboard data...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -672,29 +701,107 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
 
           {/* Distributor Credits */}
           <div className="bg-gray-750 border border-gray-600 rounded p-3">
-            <div className="flex items-center gap-2 mb-3">
-              <TruckIcon className="h-4 w-4 text-orange-400" />
-              <h4 className="text-sm font-medium text-white">Distributor Credits</h4>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <TruckIcon className="h-4 w-4 text-orange-400" />
+                <h4 className="text-sm font-medium text-white">Distributor Credits</h4>
+              </div>
+              {filteredDistributorCredits.length > 3 && (
+                <button
+                  onClick={() => setShowAllDistributorCredits(!showAllDistributorCredits)}
+                  className="text-xs text-blue-400 hover:text-blue-300 underline transition-colors"
+                >
+                  {showAllDistributorCredits ? 'Show Less' : `Show All (${filteredDistributorCredits.length})`}
+                </button>
+              )}
             </div>
-            {dashboardStats.distributorCredits.length > 0 ? (
+            
+            {/* Search Input */}
+            {(dashboardStats.distributorCredits?.length || 0) > 2 && (
+              <div className="relative mb-3">
+                <MagnifyingGlassIcon className="h-3 w-3 absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  value={distributorSearchTerm}
+                  onChange={(e) => {
+                    setDistributorSearchTerm(e.target.value);
+                    setShowAllDistributorCredits(false); // Reset to collapsed when searching
+                  }}
+                  placeholder="Search distributors..."
+                  className="w-full pl-7 pr-8 py-1.5 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
+                />
+                {distributorSearchTerm && (
+                  <button
+                    onClick={() => {
+                      setDistributorSearchTerm('');
+                      setShowAllDistributorCredits(false);
+                    }}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-300"
+                    title="Clear search"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            )}
+
+            {filteredDistributorCredits.length > 0 ? (
               <div className="space-y-2">
-                {dashboardStats.distributorCredits.slice(0, 3).map(credit => (
+                {(showAllDistributorCredits ? filteredDistributorCredits : filteredDistributorCredits.slice(0, 3)).map(credit => (
                   <div key={credit.id} className="flex justify-between items-center">
                     <span className="text-xs text-gray-300 truncate">{credit.name}</span>
                     <span className="text-xs font-medium text-orange-400">{formatCurrency(credit.creditBalance)}</span>
                   </div>
                 ))}
-                {dashboardStats.distributorCredits.length > 3 && (
-                  <p className="text-xs text-gray-500">+{dashboardStats.distributorCredits.length - 3} more</p>
+                {!showAllDistributorCredits && filteredDistributorCredits.length > 3 && (
+                  <button
+                    onClick={() => setShowAllDistributorCredits(true)}
+                    className="text-xs text-gray-500 hover:text-gray-400 transition-colors w-full text-center py-1 hover:bg-gray-700 rounded"
+                  >
+                    +{filteredDistributorCredits.length - 3} more - Click to view all
+                  </button>
                 )}
+                
+                {/* Search Results Info */}
+                {distributorSearchTerm && (
+                  <div className="pt-1 pb-1">
+                    <p className="text-xs text-gray-400 italic">
+                      {filteredDistributorCredits.length === dashboardStats.distributorCredits.length 
+                        ? `Showing all ${filteredDistributorCredits.length} distributors`
+                        : `Found ${filteredDistributorCredits.length} of ${dashboardStats.distributorCredits.length} distributors`
+                      }
+                    </p>
+                  </div>
+                )}
+                
                 <div className="pt-2 border-t border-gray-600">
                   <div className="flex justify-between">
-                    <span className="text-xs font-medium text-gray-300">Total Credits:</span>
+                    <span className="text-xs font-medium text-gray-300">
+                      {distributorSearchTerm ? 'Filtered Total:' : 'Total Credits:'}
+                    </span>
                     <span className="text-xs font-bold text-orange-400">
-                      {formatCurrency(dashboardStats.distributorCredits.reduce((sum, c) => sum + c.creditBalance, 0))}
+                      {formatCurrency(filteredDistributorCredits.reduce((sum, c) => sum + (c?.creditBalance || 0), 0))}
                     </span>
                   </div>
+                  {distributorSearchTerm && filteredDistributorCredits.length !== dashboardStats.distributorCredits.length && (
+                    <div className="flex justify-between mt-1">
+                      <span className="text-xs text-gray-500">All Credits:</span>
+                      <span className="text-xs text-gray-400">
+                        {formatCurrency((dashboardStats.distributorCredits || []).reduce((sum, c) => sum + (c?.creditBalance || 0), 0))}
+                      </span>
+                    </div>
+                  )}
                 </div>
+              </div>
+            ) : (dashboardStats.distributorCredits?.length || 0) > 0 ? (
+              <div className="text-center py-2">
+                <p className="text-xs text-gray-500">No distributors match "{distributorSearchTerm}"</p>
+                <button
+                  onClick={() => setDistributorSearchTerm('')}
+                  className="text-xs text-blue-400 hover:text-blue-300 underline mt-1"
+                >
+                  Clear search
+                </button>
               </div>
             ) : (
               <p className="text-xs text-gray-500">No outstanding credits</p>
