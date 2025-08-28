@@ -20,6 +20,10 @@ interface AuthContextType {
   
   // Permissions
   hasPermission: (requiredRole: UserRole) => boolean;
+  
+  // Stakeholder linking
+  getCurrentUserStakeholder: () => { stakeholderId: string; type: 'doctor' | 'business_partner' | 'distributor' } | null;
+  isStakeholderUser: () => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -43,14 +47,104 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     isLoading: true
   });
   
-  // Initialize with superadmin user
+  // Initialize with demo users for different roles
   const [users, setUsers] = useState<User[]>([
     {
       id: 'user-001',
       username: 'superadmin',
       role: 'super_admin',
       name: 'Super Administrator',
+      email: 'super@qbpharma.com',
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    },
+    {
+      id: 'user-002',
+      username: 'admin',
+      role: 'admin',
+      name: 'Unit Administrator',
       email: 'admin@qbpharma.com',
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    },
+    {
+      id: 'user-003',
+      username: 'operator1',
+      role: 'operator',
+      name: 'Data Entry Operator',
+      email: 'operator@qbpharma.com',
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    },
+    {
+      id: 'user-004',
+      username: 'doctor1',
+      role: 'doctor',
+      name: 'Dr. Ahmed Hassan',
+      email: 'ahmed.hassan@qbpharma.com',
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    },
+    {
+      id: 'user-005',
+      username: 'wasim',
+      role: 'partner',
+      name: 'Wasim Qureshi',
+      email: 'wasim.qureshi@qbpharma.com',
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    },
+    {
+      id: 'user-006', 
+      username: 'sarah',
+      role: 'partner',
+      name: 'Sarah Khan',
+      email: 'sarah.khan@qbpharma.com',
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    },
+    {
+      id: 'user-007',
+      username: 'ali',
+      role: 'partner', 
+      name: 'Ali Ahmed',
+      email: 'ali.ahmed@qbpharma.com',
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    },
+    {
+      id: 'user-008',
+      username: 'fatima',
+      role: 'partner',
+      name: 'Fatima Sheikh', 
+      email: 'fatima.sheikh@qbpharma.com',
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    },
+    {
+      id: 'user-009',
+      username: 'karachi_med',
+      role: 'distributor',
+      name: 'Karachi Medical Store',
+      email: 'info@karachimedical.com',
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    },
+    {
+      id: 'user-010',
+      username: 'lahore_pharma',
+      role: 'distributor',
+      name: 'Lahore Pharma Distributors',
+      email: 'contact@lahorepharma.com', 
       isActive: true,
       createdAt: new Date(),
       updatedAt: new Date()
@@ -59,7 +153,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   
   // User credentials storage (in production, this would be handled by backend)
   const [credentials] = useState<{ [username: string]: string }>({
-    'superadmin': 'admin123' // Default password for superadmin
+    'superadmin': 'admin123',
+    'admin': 'admin123', 
+    'operator1': 'operator123',
+    'doctor1': 'doctor123',
+    'wasim': 'wasim123',
+    'sarah': 'sarah123',
+    'ali': 'ali123', 
+    'fatima': 'fatima123',
+    'karachi_med': 'karachi123',
+    'lahore_pharma': 'lahore123'
+  });
+
+  // Stakeholder linking - maps user IDs to stakeholder IDs
+  const [stakeholderLinks] = useState<{ [userId: string]: { stakeholderId: string; type: 'doctor' | 'business_partner' | 'distributor' } }>({
+    'user-004': { stakeholderId: 'doc-001', type: 'doctor' },           // Dr. Ahmed Hassan
+    'user-005': { stakeholderId: 'bp-001', type: 'business_partner' },   // Wasim Qureshi
+    'user-006': { stakeholderId: 'bp-002', type: 'business_partner' },   // Sarah Khan
+    'user-007': { stakeholderId: 'bp-003', type: 'business_partner' },   // Ali Ahmed
+    'user-008': { stakeholderId: 'bp-004', type: 'business_partner' },   // Fatima Sheikh
+    'user-009': { stakeholderId: 'dist-001', type: 'distributor' },      // Karachi Medical Store
+    'user-010': { stakeholderId: 'dist-002', type: 'distributor' }       // Lahore Pharma Distributors
   });
 
   // Check for existing session on app load
@@ -196,6 +310,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return roleHierarchy[authState.user.role] >= roleHierarchy[requiredRole];
   };
 
+  // Get current user's linked stakeholder information
+  const getCurrentUserStakeholder = () => {
+    if (!authState.user) return null;
+    return stakeholderLinks[authState.user.id] || null;
+  };
+
+  // Check if current user is a stakeholder-linked user
+  const isStakeholderUser = (): boolean => {
+    if (!authState.user) return false;
+    return ['doctor', 'partner', 'distributor'].includes(authState.user.role);
+  };
+
+
   const contextValue: AuthContextType = {
     // Auth state
     isAuthenticated: authState.isAuthenticated,
@@ -213,7 +340,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     getAllUsers,
     
     // Permissions
-    hasPermission
+    hasPermission,
+    
+    // Stakeholder linking
+    getCurrentUserStakeholder,
+    isStakeholderUser
   };
 
   return (

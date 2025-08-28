@@ -8,6 +8,7 @@ import type { DashboardStats, PayableBalance, Transaction } from '../types';
 import { useTransactions } from '../contexts/TransactionContext';
 import { useStakeholders } from '../contexts/StakeholderContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useRoleBasedData } from '../hooks/useRoleBasedData';
 // import { useToast } from '../contexts/ToastContext';
 import qbLogo from '../assets/qblogo.png';
 import TransactionForm from './TransactionForm';
@@ -25,6 +26,7 @@ import DataImport from './DataImport';
 import DepartmentManagement from './DepartmentManagement';
 import PatientManagement from './PatientManagement';
 import ConfigurationManagement from './ConfigurationManagement';
+import UserProfileBanner from './UserProfileBanner';
 import { 
   CurrencyDollarIcon, BanknotesIcon, ChartBarIcon, UserGroupIcon,
   BuildingOfficeIcon, UsersIcon, TruckIcon, PlusIcon, CreditCardIcon,
@@ -62,7 +64,82 @@ const DarkCorporateDashboard: React.FC = () => {
   const { doctors, businessPartners, employees, distributors, patients } = useStakeholders();
   
   const { user, logout } = useAuth();
+  
+  // Use role-based filtered data
+  const { 
+    filteredTransactions, 
+    filteredDashboardStats, 
+    canAccessFeature, 
+    getAvailableTabs,
+    isStakeholderUser 
+  } = useRoleBasedData();
   // const { showSuccess } = useToast();
+  
+  // Define navigation items based on user role
+  const getNavigationItems = () => {
+    const allItems = {
+      primary: [
+        { id: 'dashboard', label: 'Dashboard', icon: Squares2X2Icon, category: 'dashboard', tooltip: 'Comprehensive business dashboard and analytics' },
+        { id: 'reports', label: 'Business Report', icon: DocumentTextIcon, category: 'reports', tooltip: 'Daily business analytics and financial insights' },
+      ],
+      management: [
+        { id: 'stakeholders', label: 'Stakeholders', icon: UsersIcon, category: 'management', tooltip: 'Manage doctors, partners, employees, and distributors' },
+        { id: 'patients', label: 'Patients', icon: UserIcon, category: 'management', tooltip: 'Patient management and credit tracking' },
+        { id: 'payment_estimation', label: 'Payment Estimation', icon: CurrencyDollarIcon, category: 'management', tooltip: 'Estimate distributor payments based on weekly sales' },
+        { id: 'data_import', label: 'Data Import', icon: DocumentArrowUpIcon, category: 'management', tooltip: 'Import transaction data from Excel/CSV files' },
+      ],
+      statements: [
+        { id: 'statements', label: 'Account Statement', icon: CreditCardIcon, category: 'statements', tooltip: 'View individual account statements' },
+        { id: 'business_statement', label: 'Business Statement', icon: BanknotesIcon, category: 'statements', tooltip: 'Comprehensive business partnership statement' },
+        { id: 'doctor_statement', label: 'Doctor Statement', icon: ChartBarIcon, category: 'statements', tooltip: 'Doctor commission and consultation statements' },
+        { id: 'distributor_statement', label: 'Distributor Statement', icon: TruckIcon, category: 'statements', tooltip: 'Distributor payment and credit statements' },
+      ],
+      system: [
+        { id: 'configuration', label: 'System Settings', icon: Cog6ToothIcon, category: 'system', tooltip: 'Configure system settings and preferences' },
+      ]
+    };
+
+    if (!isStakeholderUser) {
+      return allItems; // Admin/operator users see everything
+    }
+
+    // Filter based on stakeholder user role
+    switch (user?.role) {
+      case 'doctor':
+        return {
+          primary: [allItems.primary[0]], // Dashboard only
+          management: [],
+          statements: [allItems.statements[0], allItems.statements[2]], // Account & Doctor statements
+          system: []
+        };
+
+      case 'partner':
+        return {
+          primary: allItems.primary, // Dashboard & Business Report
+          management: [],
+          statements: [allItems.statements[0], allItems.statements[1]], // Account & Business statements
+          system: []
+        };
+
+      case 'distributor':
+        return {
+          primary: [allItems.primary[0]], // Dashboard only
+          management: [],
+          statements: [allItems.statements[0], allItems.statements[3]], // Account & Distributor statements
+          system: []
+        };
+
+      default:
+        return {
+          primary: [allItems.primary[0]],
+          management: [],
+          statements: [allItems.statements[0]],
+          system: []
+        };
+    }
+  };
+
+  const navigationItems = getNavigationItems();
   const [dateRange, setDateRange] = useState(getDefaultDateRange());
 
   // Report filter state - initialize with Settlement Point date range or fallback
@@ -119,7 +196,7 @@ const DarkCorporateDashboard: React.FC = () => {
   const periodStats = getPeriodFilteredStats(fromDate, toDate);
   
   // Get all-time stats for settlement decisions and payables
-  const allTimeStats = getDashboardStats();
+  const allTimeStats = filteredDashboardStats;
   
   // Merge with period-filtered data for dashboard display
   const stats: DashboardStats = {
@@ -562,10 +639,7 @@ const DarkCorporateDashboard: React.FC = () => {
       <div className="px-4 pb-0 border-b border-gray-800">
         <nav className="flex items-center gap-1 -mb-px overflow-x-auto scrollbar-hide">
           {/* Primary Navigation - Daily Operations */}
-          {[
-            { id: 'dashboard', label: 'Dashboard', icon: Squares2X2Icon, category: 'dashboard', tooltip: 'Comprehensive business dashboard and analytics' },
-            { id: 'reports', label: 'Business Report', icon: DocumentTextIcon, category: 'reports', tooltip: 'Daily business analytics and financial insights' },
-          ].map(item => (
+          {navigationItems.primary.map(item => (
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id as any)}
@@ -586,12 +660,13 @@ const DarkCorporateDashboard: React.FC = () => {
           <div className="mx-2 h-6 w-px bg-gray-700"></div>
           
           {/* Management - Frequent Operations */}
-          {[
-            { id: 'stakeholders', label: 'Stakeholders', icon: UsersIcon, category: 'management', tooltip: 'Manage doctors, partners, employees, and distributors' },
-            { id: 'patients', label: 'Patients', icon: UserIcon, category: 'management', tooltip: 'Patient management and credit tracking' },
-            { id: 'payment_estimation', label: 'Payment Estimation', icon: CurrencyDollarIcon, category: 'management', tooltip: 'Estimate distributor payments based on weekly sales' },
-            { id: 'data_import', label: 'Data Import', icon: DocumentArrowUpIcon, category: 'management', tooltip: 'Import transaction data from Excel/CSV files' },
-          ].map(item => (
+          {navigationItems.management.length > 0 && (
+            <>
+              {/* Separator */}
+              <div className="mx-2 h-6 w-px bg-gray-700"></div>
+            </>
+          )}
+          {navigationItems.management.map(item => (
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id as any)}
@@ -612,9 +687,13 @@ const DarkCorporateDashboard: React.FC = () => {
           <div className="mx-2 h-6 w-px bg-gray-700"></div>
           
           {/* Analysis & Statements - Periodic Review */}
-          {[
-            { id: 'statements', label: 'Statements', icon: DocumentArrowUpIcon, category: 'reports', tooltip: 'Detailed account statements and transaction history' },
-          ].map(item => (
+          {navigationItems.statements.length > 0 && (
+            <>
+              {/* Separator */}
+              <div className="mx-2 h-6 w-px bg-gray-700"></div>
+            </>
+          )}
+          {navigationItems.statements.map(item => (
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id as any)}
@@ -635,9 +714,13 @@ const DarkCorporateDashboard: React.FC = () => {
           <div className="mx-2 h-6 w-px bg-gray-700"></div>
           
           {/* Configuration - Administrative */}
-          {[
-            { id: 'configuration', label: 'Settings', icon: Cog6ToothIcon, category: 'settings', tooltip: 'System configuration and department management' },
-          ].map(item => (
+          {navigationItems.system.length > 0 && (
+            <>
+              {/* Separator */}
+              <div className="mx-2 h-6 w-px bg-gray-700"></div>
+            </>
+          )}
+          {navigationItems.system.map(item => (
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id as any)}
@@ -855,7 +938,7 @@ const DarkCorporateDashboard: React.FC = () => {
 
   const SettlementAlert: React.FC = () => {
     // Use all-time stats instead of filtered period data for settlement decisions
-    const allTimeStats = getDashboardStats();
+    const allTimeStats = filteredDashboardStats;
     const pharmacyCash = allTimeStats.pharmacyCashPosition;
     const hasBusinessPartners = businessPartners.length > 0;
     
@@ -1785,6 +1868,8 @@ const DarkCorporateDashboard: React.FC = () => {
       <Header />
       
       <main className="p-5 max-w-7xl mx-auto">
+        {/* User Profile Banner */}
+        <UserProfileBanner />
         <div className="mb-5">
           <h2 className="text-xl font-bold text-white capitalize">
             {activeTab.replace('_', ' ')}

@@ -237,8 +237,21 @@ export interface SettlementSession {
   settlementPointId?: string;
 }
 
+// Pharma Unit Management Types
+export interface PharmaUnit {
+  id: string;
+  name: string;
+  address: string;
+  contactEmail: string;
+  contactPhone: string;
+  licenseNumber: string;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // Authentication Types
-export type UserRole = 'super_admin' | 'admin' | 'manager' | 'user';
+export type UserRole = 'super_admin' | 'admin' | 'manager' | 'operator' | 'doctor' | 'partner' | 'distributor';
 
 export interface User {
   id: string;
@@ -246,14 +259,59 @@ export interface User {
   role: UserRole;
   name: string;
   email: string;
+  phone?: string;
+  pharmaUnitId?: string; // null for super_admin, required for others
+  pharmaUnitName?: string; // For display purposes
+  
+  // Role-specific linking
+  linkedStakeholderId?: string; // For doctor/partner/distributor roles
+  linkedStakeholderType?: StakeholderType; // For role-based data access
+  
+  // Access control
+  permissions: UserPermission[];
   isActive: boolean;
+  
+  // Audit fields
   lastLogin?: Date;
+  createdBy?: string;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface UserPermission {
+  module: PermissionModule;
+  actions: PermissionAction[];
+  scope: PermissionScope; // 'all', 'own', 'department', 'unit'
+  conditions?: Record<string, any>; // Additional filtering conditions
+}
+
+export type PermissionModule = 
+  | 'pharma_units' 
+  | 'users' 
+  | 'transactions' 
+  | 'stakeholders' 
+  | 'reports' 
+  | 'settlements' 
+  | 'dashboard'
+  | 'system_settings';
+
+export type PermissionAction = 'create' | 'read' | 'update' | 'delete' | 'export' | 'approve';
+
+export type PermissionScope = 'all' | 'own' | 'department' | 'unit' | 'none';
+
+export interface RoleTemplate {
+  role: UserRole;
+  displayName: string;
+  description: string;
+  defaultPermissions: UserPermission[];
+  requiresLinking: boolean; // true for doctor/partner/distributor
+  canCreateUsers: boolean;
+  sessionTimeout: number; // in minutes
 }
 
 export interface AuthState {
   isAuthenticated: boolean;
   user: User | null;
   isLoading: boolean;
+  currentPharmaUnit: PharmaUnit | null;
 }
