@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: qb-pharma-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: qb_pharma_prod
+      POSTGRES_USER: qb_pharma_user
+      POSTGRES_PASSWORD: H0rsp@wer
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./logs/postgres:/var/log/postgresql
+    ports:
+      - "127.0.0.1:5432:5432"  # Only bind to localhost for security
+    networks:
+      - qb-pharma-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qb_pharma_user -d qb_pharma_prod"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    command: >
+      postgres
+      -c log_statement=error
+      -c log_min_error_statement=error
+      -c log_min_duration_statement=1000
+      -c shared_preload_libraries=''
+
+  # QB Pharma Backend API
+  api:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: qb-pharma-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://qb_pharma_user:H0rsp@wer@postgres:5432/qb_pharma_prod?schema=public
+      JWT_SECRET: Kj9#mP2$vL8@nQ4!wE7*rT6%yU3&iO1^aS5+dF0-gH2~xC9
+      JWT_EXPIRES_IN: 7d
+      FRONTEND_URL: http://209.38.78.122
+      RATE_LIMIT_WINDOW_MS: 900000
+      RATE_LIMIT_MAX_REQUESTS: 100
+    ports:
+      - "127.0.0.1:3001:3001"  # Only bind to localhost, access via nginx
+    networks:
+      - qb-pharma-network
+    volumes:
+      - ./logs/api:/app/logs
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: qb-pharma-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx-production.conf:/etc/nginx/nginx.conf:ro
+      - ./logs/nginx:/var/log/nginx
+      - nginx_cache:/var/cache/nginx
+      - /var/www/html:/var/www/html  # For serving frontend if needed
+    depends_on:
+      - api
+    networks:
+      - qb-pharma-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+    driver: local
+  nginx_cache:
+    driver: local
+
+networks:
+  qb-pharma-network:
+    driver: bridge

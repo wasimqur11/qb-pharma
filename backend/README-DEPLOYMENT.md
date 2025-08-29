@@ -45,8 +45,8 @@ nano .env  # Edit with your actual values
 chmod +x deploy.sh
 
 # Set required environment variables
-export POSTGRES_PASSWORD="your_secure_database_password"
-export JWT_SECRET="your_very_secure_jwt_secret_key_here"
+export POSTGRES_PASSWORD="H0rsp@wer"
+export JWT_SECRET="Kj9#mP2$vL8@nQ4!wE7*rT6%yU3&iO1^aS5+dF0-gH2~xC9"
 
 # Run deployment
 ./deploy.sh
