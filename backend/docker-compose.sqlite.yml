@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  # QB Pharma Backend API with SQLite
+  api:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: qb-pharma-api-sqlite
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_PROVIDER: sqlite
+      DATABASE_URL: "file:./data/qb-pharma.db"
+      JWT_SECRET: Kj9#mP2$vL8@nQ4!wE7*rT6%yU3&iO1^aS5+dF0-gH2~xC9
+      JWT_EXPIRES_IN: 7d
+      FRONTEND_URL: http://209.38.78.122
+      RATE_LIMIT_WINDOW_MS: 900000
+      RATE_LIMIT_MAX_REQUESTS: 100
+    ports:
+      - "127.0.0.1:3001:3001"  # Only bind to localhost, access via nginx
+    networks:
+      - qb-pharma-network
+    volumes:
+      - ./data:/app/data  # SQLite database file storage
+      - ./logs/api:/app/logs
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: qb-pharma-nginx-sqlite
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx-production.conf:/etc/nginx/nginx.conf:ro
+      - ./logs/nginx:/var/log/nginx
+      - nginx_cache:/var/cache/nginx
+      - /var/www/html:/var/www/html  # For serving frontend if needed
+    depends_on:
+      - api
+    networks:
+      - qb-pharma-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  nginx_cache:
+    driver: local
+
+networks:
+  qb-pharma-network:
+    driver: bridge
