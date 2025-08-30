@@ -1,0 +1,223 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User Management
+model PharmaUnit {
+  id            String   @id @default(cuid())
+  name          String
+  address       String
+  contactEmail  String
+  contactPhone  String
+  licenseNumber String   @unique
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  users         User[]
+  doctors       Doctor[]
+  businessPartners BusinessPartner[]
+  employees     Employee[]
+  distributors  Distributor[]
+  patients      Patient[]
+
+  @@map("pharma_units")
+}
+
+model User {
+  id                    String    @id @default(cuid())
+  username              String    @unique
+  email                 String    @unique
+  passwordHash          String
+  name                  String
+  phone                 String?
+  role                  String
+  pharmaUnitId          String?
+  linkedStakeholderId   String?
+  linkedStakeholderType String?
+  isActive              Boolean   @default(true)
+  lastLogin             DateTime?
+  createdBy             String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  // Relations
+  pharmaUnit            PharmaUnit? @relation(fields: [pharmaUnitId], references: [id])
+  createdTransactions   Transaction[] @relation("TransactionCreatedBy")
+  userPermissions       UserPermission[]
+
+  @@map("users")
+}
+
+model UserPermission {
+  id         String            @id @default(cuid())
+  userId     String
+  module     String
+  actions    String
+  scope      String
+  conditions String?
+  createdAt  DateTime          @default(now())
+
+  // Relations
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_permissions")
+}
+
+// Stakeholders
+model Doctor {
+  id               String   @id @default(cuid())
+  name             String
+  consultationFee  Float
+  commissionRate   Float
+  email            String
+  phone            String
+  pharmaUnitId     String
+  createdAt        DateTime @default(now())
+
+  // Relations
+  pharmaUnit       PharmaUnit @relation(fields: [pharmaUnitId], references: [id])
+
+  @@map("doctors")
+}
+
+model BusinessPartner {
+  id                   String   @id @default(cuid())
+  name                 String
+  ownershipPercentage  Float
+  email                String
+  phone                String
+  pharmaUnitId         String
+  createdAt            DateTime @default(now())
+
+  // Relations
+  pharmaUnit           PharmaUnit @relation(fields: [pharmaUnitId], references: [id])
+  settlementRecords    SettlementRecord[]
+
+  @@map("business_partners")
+}
+
+model Employee {
+  id               String            @id @default(cuid())
+  name             String
+  salary           Float
+  department       String
+  email            String
+  phone            String
+  salaryDueDate    String
+  lastPaidDate     String?
+  salaryFrequency  String            @default("monthly")
+  pharmaUnitId     String
+  createdAt        DateTime          @default(now())
+
+  // Relations
+  pharmaUnit       PharmaUnit        @relation(fields: [pharmaUnitId], references: [id])
+
+  @@map("employees")
+}
+
+model Distributor {
+  id                   String            @id @default(cuid())
+  name                 String
+  contactPerson        String
+  email                String
+  phone                String
+  address              String
+  creditBalance        Float             @default(0)
+  initialBalanceDate   String?
+  paymentSchedule      String
+  paymentPercentage    Float
+  nextPaymentDue       String
+  lastPaymentDate      String?
+  pharmaUnitId         String
+  createdAt            DateTime          @default(now())
+
+  // Relations
+  pharmaUnit           PharmaUnit        @relation(fields: [pharmaUnitId], references: [id])
+
+  @@map("distributors")
+}
+
+model Patient {
+  id               String    @id @default(cuid())
+  name             String
+  email            String?
+  phone            String
+  address          String?
+  dateOfBirth      String?
+  emergencyContact String?
+  emergencyPhone   String?
+  creditLimit      Float     @default(0)
+  currentCredit    Float     @default(0)
+  lastVisit        DateTime?
+  notes            String?
+  isActive         Boolean   @default(true)
+  pharmaUnitId     String
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  // Relations
+  pharmaUnit       PharmaUnit @relation(fields: [pharmaUnitId], references: [id])
+
+  @@map("patients")
+}
+
+// Transactions
+model Transaction {
+  id                String              @id @default(cuid())
+  category          String
+  stakeholderId     String?
+  stakeholderType   String?
+  amount            Float
+  description       String
+  billNo            String?
+  date              DateTime
+  createdBy         String
+  pharmaUnitId      String
+  createdAt         DateTime            @default(now())
+
+  // Relations
+  pharmaUnit        PharmaUnit          @relation(fields: [pharmaUnitId], references: [id])
+  creator           User                @relation("TransactionCreatedBy", fields: [createdBy], references: [id])
+
+  @@map("transactions")
+}
+
+// Settlement Management
+model SettlementRecord {
+  id              String          @id @default(cuid())
+  settlementId    String
+  partnerId       String
+  settlementDate  DateTime
+  owedAmount      Float
+  actualAmount    Float
+  equityChange    Float
+  reason          String?
+  createdAt       DateTime        @default(now())
+
+  // Relations
+  partner         BusinessPartner @relation(fields: [partnerId], references: [id])
+
+  @@map("settlement_records")
+}
+
+// Configuration
+model Department {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("departments")
+}

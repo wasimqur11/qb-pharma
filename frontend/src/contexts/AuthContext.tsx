@@ -207,28 +207,61 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const login = async (username: string, password: string): Promise<boolean> => {
     setAuthState(prev => ({ ...prev, isLoading: true }));
     
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // Check credentials
-    const user = users.find(u => u.username === username && u.isActive);
-    const isValidPassword = credentials[username] === password;
-    
-    if (user && isValidPassword) {
-      const updatedUser = { ...user, lastLogin: new Date() };
+    try {
+      // Import apiClient dynamically to avoid circular dependency
+      const { default: apiClient } = await import('../utils/apiClient');
       
-      // Save to localStorage for persistence
-      localStorage.setItem('qb_pharma_user', JSON.stringify(updatedUser));
-      localStorage.setItem('qb_pharma_auth', 'true');
+      // Call backend API
+      const response = await apiClient.login({ username, password });
       
-      setAuthState({
-        isAuthenticated: true,
-        user: updatedUser,
-        isLoading: false
-      });
+      if (response.success && response.data) {
+        const { user, token } = response.data;
+        
+        // Save to localStorage for persistence
+        localStorage.setItem('qb_pharma_user', JSON.stringify(user));
+        localStorage.setItem('qb_pharma_auth', 'true');
+        localStorage.setItem('qb_pharma_token', token);
+        
+        setAuthState({
+          isAuthenticated: true,
+          user: { ...user, lastLogin: new Date() },
+          isLoading: false
+        });
+        
+        return true;
+      } else {
+        console.error('Login failed:', response.error);
+        
+        setAuthState({
+          isAuthenticated: false,
+          user: null,
+          isLoading: false
+        });
+        
+        return false;
+      }
+    } catch (error) {
+      console.error('Login error:', error);
       
-      return true;
-    } else {
+      // Fallback to mock authentication for development
+      const user = users.find(u => u.username === username && u.isActive);
+      const isValidPassword = credentials[username] === password;
+      
+      if (user && isValidPassword) {
+        const updatedUser = { ...user, lastLogin: new Date() };
+        
+        localStorage.setItem('qb_pharma_user', JSON.stringify(updatedUser));
+        localStorage.setItem('qb_pharma_auth', 'true');
+        
+        setAuthState({
+          isAuthenticated: true,
+          user: updatedUser,
+          isLoading: false
+        });
+        
+        return true;
+      }
+      
       setAuthState({
         isAuthenticated: false,
         user: null,
@@ -240,9 +273,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const logout = () => {
-    // Clear localStorage
+    // Clear localStorage and API client token
     localStorage.removeItem('qb_pharma_user');
     localStorage.removeItem('qb_pharma_auth');
+    localStorage.removeItem('qb_pharma_token');
+    
+    // Clear API client token
+    import('../utils/apiClient').then(({ default: apiClient }) => {
+      apiClient.clearToken();
+    });
     
     setAuthState({
       isAuthenticated: false,
