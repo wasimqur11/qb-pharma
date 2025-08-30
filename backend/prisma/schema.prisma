@@ -29,7 +29,6 @@ model PharmaUnit {
   employees     Employee[]
   distributors  Distributor[]
   patients      Patient[]
-  transactions  Transaction[]
 
   @@map("pharma_units")
 }
@@ -87,7 +86,6 @@ model Doctor {
 
   // Relations
   pharmaUnit       PharmaUnit @relation(fields: [pharmaUnitId], references: [id])
-  transactions     Transaction[]
 
   @@map("doctors")
 }
@@ -103,7 +101,6 @@ model BusinessPartner {
 
   // Relations
   pharmaUnit           PharmaUnit @relation(fields: [pharmaUnitId], references: [id])
-  transactions         Transaction[]
   settlementRecords    SettlementRecord[]
 
   @@map("business_partners")
@@ -124,7 +121,6 @@ model Employee {
 
   // Relations
   pharmaUnit       PharmaUnit        @relation(fields: [pharmaUnitId], references: [id])
-  transactions     Transaction[]
 
   @@map("employees")
 }
@@ -147,7 +143,6 @@ model Distributor {
 
   // Relations
   pharmaUnit           PharmaUnit        @relation(fields: [pharmaUnitId], references: [id])
-  transactions         Transaction[]
 
   @@map("distributors")
 }
@@ -172,7 +167,6 @@ model Patient {
 
   // Relations
   pharmaUnit       PharmaUnit @relation(fields: [pharmaUnitId], references: [id])
-  transactions     Transaction[]
 
   @@map("patients")
 }
@@ -194,11 +188,6 @@ model Transaction {
   // Relations
   pharmaUnit        PharmaUnit          @relation(fields: [pharmaUnitId], references: [id])
   creator           User                @relation("TransactionCreatedBy", fields: [createdBy], references: [id])
-  doctor            Doctor?             @relation(fields: [stakeholderId], references: [id])
-  businessPartner   BusinessPartner?    @relation(fields: [stakeholderId], references: [id])
-  employee          Employee?           @relation(fields: [stakeholderId], references: [id])
-  distributor       Distributor?        @relation(fields: [stakeholderId], references: [id])
-  patient           Patient?            @relation(fields: [stakeholderId], references: [id])
 
   @@map("transactions")
 }
