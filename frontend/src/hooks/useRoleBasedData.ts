@@ -177,7 +177,7 @@ export const useRoleBasedData = () => {
   const canAccessFeature = (feature: string): boolean => {
     if (!user || !isStakeholderUser()) return true;
 
-    const restrictedFeatures = {
+    const restrictedFeatures: { [key: string]: boolean } = {
       'stakeholder_management': false,
       'user_management': false,
       'system_settings': false,
