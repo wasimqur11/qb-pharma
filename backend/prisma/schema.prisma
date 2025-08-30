@@ -29,6 +29,7 @@ model PharmaUnit {
   employees     Employee[]
   distributors  Distributor[]
   patients      Patient[]
+  transactions  Transaction[]
 
   @@map("pharma_units")
 }
