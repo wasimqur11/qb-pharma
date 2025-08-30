@@ -2,8 +2,9 @@
 // This file configures the API base URL for different environments
 
 const API_CONFIG = {
-  // For development and production on the same server
-  baseURL: 'http://localhost:3001',
+  // For production - use relative URLs to go through nginx proxy
+  // For development - use direct backend URL
+  baseURL: process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : '',
   
   // API endpoints
   endpoints: {
