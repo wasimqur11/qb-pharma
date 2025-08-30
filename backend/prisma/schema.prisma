@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = env("DATABASE_PROVIDER") // "sqlite" for development, "postgresql" for production
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -40,10 +40,10 @@ model User {
   passwordHash          String
   name                  String
   phone                 String?
-  role                  UserRole
+  role                  String
   pharmaUnitId          String?
   linkedStakeholderId   String?
-  linkedStakeholderType StakeholderType?
+  linkedStakeholderType String?
   isActive              Boolean   @default(true)
   lastLogin             DateTime?
   createdBy             String?
@@ -61,10 +61,10 @@ model User {
 model UserPermission {
   id         String            @id @default(cuid())
   userId     String
-  module     PermissionModule
-  actions    PermissionAction[]
-  scope      PermissionScope
-  conditions Json?
+  module     String
+  actions    String
+  scope      String
+  conditions String?
   createdAt  DateTime          @default(now())
 
   // Relations
@@ -113,9 +113,9 @@ model Employee {
   department       String
   email            String
   phone            String
-  salaryDueDate    String            // YYYY-MM-DD format
-  lastPaidDate     String?           // YYYY-MM-DD format
-  salaryFrequency  SalaryFrequency   @default(monthly)
+  salaryDueDate    String
+  lastPaidDate     String?
+  salaryFrequency  String            @default("monthly")
   pharmaUnitId     String
   createdAt        DateTime          @default(now())
 
@@ -133,11 +133,11 @@ model Distributor {
   phone                String
   address              String
   creditBalance        Float             @default(0)
-  initialBalanceDate   String?           // YYYY-MM-DD format
-  paymentSchedule      PaymentSchedule
+  initialBalanceDate   String?
+  paymentSchedule      String
   paymentPercentage    Float
-  nextPaymentDue       String            // YYYY-MM-DD format
-  lastPaymentDate      String?           // YYYY-MM-DD format
+  nextPaymentDue       String
+  lastPaymentDate      String?
   pharmaUnitId         String
   createdAt            DateTime          @default(now())
 
@@ -153,7 +153,7 @@ model Patient {
   email            String?
   phone            String
   address          String?
-  dateOfBirth      String?   // YYYY-MM-DD format
+  dateOfBirth      String?
   emergencyContact String?
   emergencyPhone   String?
   creditLimit      Float     @default(0)
@@ -174,9 +174,9 @@ model Patient {
 // Transactions
 model Transaction {
   id                String              @id @default(cuid())
-  category          TransactionCategory
+  category          String
   stakeholderId     String?
-  stakeholderType   StakeholderType?
+  stakeholderType   String?
   amount            Float
   description       String
   billNo            String?
@@ -220,78 +220,4 @@ model Department {
   updatedAt   DateTime @updatedAt
 
   @@map("departments")
-}
-
-// Enums
-enum UserRole {
-  super_admin
-  admin
-  manager
-  operator
-  doctor
-  partner
-  distributor
-}
-
-enum StakeholderType {
-  doctor
-  business_partner
-  employee
-  distributor
-  patient
-}
-
-enum TransactionCategory {
-  pharmacy_sale
-  consultation_fee
-  distributor_payment
-  distributor_credit_purchase
-  distributor_credit_note
-  doctor_expense
-  sales_profit_distribution
-  employee_payment
-  clinic_expense
-  patient_credit_sale
-  patient_payment
-  settlement_point
-}
-
-enum PermissionModule {
-  pharma_units
-  users
-  transactions
-  stakeholders
-  reports
-  settlements
-  dashboard
-  system_settings
-}
-
-enum PermissionAction {
-  create
-  read
-  update
-  delete
-  export
-  approve
-}
-
-enum PermissionScope {
-  all
-  own
-  department
-  unit
-  none
-}
-
-enum SalaryFrequency {
-  monthly
-  bi_weekly
-  weekly
-}
-
-enum PaymentSchedule {
-  weekly
-  bi_weekly
-  monthly
 }
