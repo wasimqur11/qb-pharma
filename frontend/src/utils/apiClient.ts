@@ -209,27 +209,27 @@ class ApiClient {
   // Stakeholder methods
   async getDoctors(): Promise<ApiResponse<any[]>> {
     const response = await this.get('/api/stakeholders/doctors');
-    return response.success ? { ...response, data: response.data?.stakeholders || [] } : response;
+    return response.success ? { ...response, data: (response.data as any)?.stakeholders || [] } : { ...response, data: [] };
   }
 
   async getBusinessPartners(): Promise<ApiResponse<any[]>> {
     const response = await this.get('/api/stakeholders/business-partners');
-    return response.success ? { ...response, data: response.data?.stakeholders || [] } : response;
+    return response.success ? { ...response, data: (response.data as any)?.stakeholders || [] } : { ...response, data: [] };
   }
 
   async getDistributors(): Promise<ApiResponse<any[]>> {
     const response = await this.get('/api/stakeholders/distributors');
-    return response.success ? { ...response, data: response.data?.stakeholders || [] } : response;
+    return response.success ? { ...response, data: (response.data as any)?.stakeholders || [] } : { ...response, data: [] };
   }
 
   async getEmployees(): Promise<ApiResponse<any[]>> {
     const response = await this.get('/api/stakeholders/employees');
-    return response.success ? { ...response, data: response.data?.stakeholders || [] } : response;
+    return response.success ? { ...response, data: (response.data as any)?.stakeholders || [] } : { ...response, data: [] };
   }
 
   async getPatients(): Promise<ApiResponse<any[]>> {
     const response = await this.get('/api/stakeholders/patients');
-    return response.success ? { ...response, data: response.data?.stakeholders || [] } : response;
+    return response.success ? { ...response, data: (response.data as any)?.stakeholders || [] } : { ...response, data: [] };
   }
 
   // Generic stakeholder CRUD
