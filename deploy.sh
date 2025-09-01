@@ -1,6 +1,6 @@
 #!/bin/bash
 # QB Pharma Deployment Script
-# This script handles all the deployment issues discovered and fixes them automatically
+# This script handles both fresh deployments and updates automatically
 
 set -e  # Exit on any error
 
@@ -12,35 +12,60 @@ handle_error() {
     exit 1
 }
 
-# Step 1: Navigate to project directory
-cd ~/qb-pharma || handle_error "Could not find qb-pharma directory"
+# Configuration - UPDATE THESE VALUES
+REPO_URL="https://github.com/wasimqur11/qb-pharma.git"
+PROJECT_DIR="~/qb-pharma"
+BRANCH="main"
 
-echo "📥 Step 1: Pulling latest changes from Git..."
+# Step 1: Handle Git repository (clone or update)
+echo "📥 Step 1: Setting up Git repository..."
 
-# Step 2: Handle local conflicts and pull changes
-echo "🔧 Handling potential conflicts..."
-
-# Remove database file that might cause conflicts
-if [ -f "backend/prisma/data/qb-pharma.db" ]; then
-    echo "Backing up existing database..."
-    cp backend/prisma/data/qb-pharma.db backend/prisma/data/qb-pharma.db.backup.$(date +%Y%m%d_%H%M%S)
-    rm backend/prisma/data/qb-pharma.db
+if [ -d "$PROJECT_DIR" ]; then
+    echo "🔄 Project directory exists - updating existing deployment..."
+    cd ~/qb-pharma || handle_error "Could not access qb-pharma directory"
+    
+    # Check if it's a git repository
+    if [ -d ".git" ]; then
+        echo "🔧 Handling potential conflicts..."
+        
+        # Remove database file that might cause conflicts
+        if [ -f "backend/prisma/data/qb-pharma.db" ]; then
+            echo "Backing up existing database..."
+            cp backend/prisma/data/qb-pharma.db backend/prisma/data/qb-pharma.db.backup.$(date +%Y%m%d_%H%M%S)
+            rm backend/prisma/data/qb-pharma.db
+        fi
+        
+        # Reset any local schema changes
+        if [ -f "backend/prisma/schema.prisma" ]; then
+            git checkout -- backend/prisma/schema.prisma 2>/dev/null || true
+        fi
+        
+        # Stash any other local changes
+        git stash push -m "Auto-stash before deployment" 2>/dev/null || true
+        
+        # Pull latest changes
+        git pull origin $BRANCH || handle_error "Failed to pull changes from Git"
+        echo "✅ Successfully pulled latest changes"
+    else
+        handle_error "Directory exists but is not a Git repository"
+    fi
+else
+    echo "📦 Fresh deployment - cloning repository..."
+    cd ~ || handle_error "Could not access home directory"
+    
+    # Clone the repository
+    git clone $REPO_URL qb-pharma || handle_error "Failed to clone repository"
+    cd qb-pharma || handle_error "Could not access cloned directory"
+    
+    # Switch to the correct branch if not main
+    if [ "$BRANCH" != "main" ]; then
+        git checkout $BRANCH || handle_error "Failed to checkout branch $BRANCH"
+    fi
+    
+    echo "✅ Successfully cloned repository"
 fi
 
-# Reset any local schema changes
-if [ -f "backend/prisma/schema.prisma" ]; then
-    git checkout -- backend/prisma/schema.prisma 2>/dev/null || true
-fi
-
-# Stash any other local changes
-git stash push -m "Auto-stash before deployment" 2>/dev/null || true
-
-# Pull latest changes
-git pull origin main || handle_error "Failed to pull changes from Git"
-
-echo "✅ Successfully pulled latest changes"
-
-# Step 3: Install dependencies
+# Step 2: Install dependencies
 echo "📦 Step 2: Installing dependencies..."
 cd backend && npm install || handle_error "Failed to install backend dependencies"
 cd ../frontend && npm install || handle_error "Failed to install frontend dependencies"
@@ -58,8 +83,8 @@ npx prisma generate || handle_error "Failed to generate Prisma client"
 # Setup database
 npx prisma db push || handle_error "Failed to setup database schema"
 
-# Create admin user if it doesn't exist
-echo "👤 Creating admin user..."
+# Ensure admin user always exists (create or update)
+echo "👤 Setting up admin user..."
 node -e "
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
@@ -67,13 +92,6 @@ const prisma = new PrismaClient();
 
 async function setupAdmin() {
   try {
-    // Check if admin exists
-    const existingAdmin = await prisma.user.findUnique({ where: { username: 'admin' } });
-    if (existingAdmin) {
-      console.log('Admin user already exists');
-      return;
-    }
-
     // Create pharma unit if it doesn't exist
     await prisma.pharmaUnit.upsert({
       where: { id: 'pharma-001' },
@@ -89,10 +107,19 @@ async function setupAdmin() {
       }
     });
 
-    // Create admin user
+    // Always ensure admin user exists with correct credentials
     const passwordHash = await bcrypt.hash('admin123', 10);
-    await prisma.user.create({
-      data: {
+    await prisma.user.upsert({
+      where: { username: 'admin' },
+      update: {
+        passwordHash: passwordHash,
+        name: 'System Administrator',
+        role: 'super_admin',
+        email: 'admin@qbpharma.com',
+        pharmaUnitId: 'pharma-001',
+        isActive: true
+      },
+      create: {
         id: 'user-001',
         username: 'admin',
         email: 'admin@qbpharma.com',
@@ -104,20 +131,17 @@ async function setupAdmin() {
       }
     });
     
-    console.log('✅ Admin user created successfully');
+    console.log('✅ Admin user ensured successfully');
   } catch (error) {
-    if (error.code === 'P2002') {
-      console.log('Admin user already exists');
-    } else {
-      console.error('Error creating admin user:', error.message);
-    }
+    console.error('Error setting up admin user:', error.message);
+    throw error;
   } finally {
     await prisma.\$disconnect();
   }
 }
 
 setupAdmin();
-" || echo "⚠️  Admin user setup completed with warnings"
+" || handle_error "Failed to setup admin user"
 
 cd ..
 echo "✅ Database setup completed"
