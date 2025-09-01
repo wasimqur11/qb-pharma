@@ -76,25 +76,37 @@ echo "✅ Dependencies installed"
 # Step 3: Setup environment variables
 echo "🔧 Step 3: Setting up environment variables..."
 
+# Get server IP for local communication
+SERVER_IP=$(hostname -I | awk '{print $1}')
+if [ -z "$SERVER_IP" ]; then
+    SERVER_IP="127.0.0.1"
+fi
+
 # Create backend .env file
 cat > backend/.env << EOF
 NODE_ENV=production
 PORT=3001
+# Bind to all interfaces for local network access
+HOST=0.0.0.0
 DATABASE_URL="file:./prisma/data/qb-pharma.db"
-JWT_SECRET=your-super-secure-jwt-secret-change-this-in-production
-FRONTEND_URL=http://localhost:3000
+JWT_SECRET=your-super-secure-jwt-secret-change-this-in-production-$(date +%s)
+# Allow frontend from nginx proxy
+FRONTEND_URL=http://localhost
 RATE_LIMIT_WINDOW_MS=900000
-RATE_LIMIT_MAX_REQUESTS=100
+RATE_LIMIT_MAX_REQUESTS=1000
+# CORS settings for local communication
+CORS_ORIGIN=http://localhost,http://$SERVER_IP,http://127.0.0.1:3000
 EOF
 
-# Create frontend .env file if it doesn't exist
-if [ ! -f "frontend/.env" ]; then
-    cat > frontend/.env << EOF
-VITE_API_URL=http://localhost:3001
+# Create frontend .env file for build time
+cat > frontend/.env << EOF
+# Use relative URLs for API calls (handled by nginx proxy)
+VITE_API_URL=""
 VITE_APP_NAME=QB Pharma
 VITE_NODE_ENV=production
+# Local communication settings
+VITE_LOCAL_API=true
 EOF
-fi
 
 echo "✅ Environment variables configured"
 
@@ -198,22 +210,35 @@ echo "🌐 Step 6: Setting up web server..."
 if command -v nginx >/dev/null 2>&1; then
     echo "Setting up nginx configuration..."
     
-    # Create nginx config for qb-pharma
+    # Create nginx config for qb-pharma with local communication optimization
     sudo tee /etc/nginx/sites-available/qb-pharma > /dev/null << EOF
 server {
     listen 80;
-    server_name localhost;
+    server_name localhost $SERVER_IP;
     root $(pwd)/frontend/dist;
     index index.html;
+
+    # Optimize for local communication
+    client_max_body_size 20M;
+    
+    # Security headers for local deployment
+    add_header X-Frame-Options SAMEORIGIN;
+    add_header X-Content-Type-Options nosniff;
 
     # Handle client-side routing (SPA)
     location / {
         try_files \$uri \$uri/ /index.html;
+        # Cache static assets locally
+        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+        }
     }
 
-    # API proxy to backend
+    # API proxy to backend (local communication)
     location /api/ {
-        proxy_pass http://localhost:3001;
+        # Use local loopback for fastest communication
+        proxy_pass http://127.0.0.1:3001;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -222,13 +247,20 @@ server {
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_cache_bypass \$http_upgrade;
+        
+        # Local communication optimizations
+        proxy_connect_timeout 5s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+        proxy_buffering off;
     }
 
-    # Health check endpoint
+    # Health check endpoint (local)
     location /health {
-        proxy_pass http://localhost:3001/health;
+        proxy_pass http://127.0.0.1:3001/health;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
+        access_log off;
     }
 }
 EOF
@@ -266,9 +298,10 @@ pkill -f "serve.*frontend" 2>/dev/null || true
 # Wait for processes to stop
 sleep 2
 
-# Start backend
+# Start backend with local network binding
 echo "Starting backend..."
 cd backend
+echo "Backend binding to all interfaces (0.0.0.0:3001) for local communication..."
 nohup npm start > ../logs/backend.log 2>&1 &
 BACKEND_PID=$!
 cd ..
