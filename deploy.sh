@@ -73,8 +73,33 @@ cd ..
 
 echo "✅ Dependencies installed"
 
+# Step 3: Setup environment variables
+echo "🔧 Step 3: Setting up environment variables..."
+
+# Create backend .env file
+cat > backend/.env << EOF
+NODE_ENV=production
+PORT=3001
+DATABASE_URL="file:./prisma/data/qb-pharma.db"
+JWT_SECRET=your-super-secure-jwt-secret-change-this-in-production
+FRONTEND_URL=http://localhost:3000
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX_REQUESTS=100
+EOF
+
+# Create frontend .env file if it doesn't exist
+if [ ! -f "frontend/.env" ]; then
+    cat > frontend/.env << EOF
+VITE_API_URL=http://localhost:3001
+VITE_APP_NAME=QB Pharma
+VITE_NODE_ENV=production
+EOF
+fi
+
+echo "✅ Environment variables configured"
+
 # Step 4: Database setup
-echo "🗄️  Step 3: Setting up database..."
+echo "🗄️  Step 4: Setting up database..."
 cd backend
 
 # Generate Prisma client
@@ -147,7 +172,7 @@ cd ..
 echo "✅ Database setup completed"
 
 # Step 5: Build applications
-echo "🔨 Step 4: Building applications..."
+echo "🔨 Step 5: Building applications..."
 
 # Build frontend (skip TypeScript errors)
 echo "Building frontend..."
@@ -166,13 +191,77 @@ fi
 
 echo "✅ Applications built successfully"
 
-# Step 6: Kill existing processes and restart
-echo "🔄 Step 5: Restarting services..."
+# Step 6: Setup web server for frontend
+echo "🌐 Step 6: Setting up web server..."
 
-# Kill existing Node processes
+# Check if nginx is installed
+if command -v nginx >/dev/null 2>&1; then
+    echo "Setting up nginx configuration..."
+    
+    # Create nginx config for qb-pharma
+    sudo tee /etc/nginx/sites-available/qb-pharma > /dev/null << EOF
+server {
+    listen 80;
+    server_name localhost;
+    root $(pwd)/frontend/dist;
+    index index.html;
+
+    # Handle client-side routing (SPA)
+    location / {
+        try_files \$uri \$uri/ /index.html;
+    }
+
+    # API proxy to backend
+    location /api/ {
+        proxy_pass http://localhost:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+    }
+
+    # Health check endpoint
+    location /health {
+        proxy_pass http://localhost:3001/health;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+    }
+}
+EOF
+
+    # Enable the site
+    sudo ln -sf /etc/nginx/sites-available/qb-pharma /etc/nginx/sites-enabled/qb-pharma 2>/dev/null || true
+    
+    # Test nginx configuration
+    sudo nginx -t || handle_error "Nginx configuration test failed"
+    
+    # Reload nginx
+    sudo systemctl reload nginx || handle_error "Failed to reload nginx"
+    
+    echo "✅ Nginx configured and reloaded"
+    WEB_SERVER="nginx"
+    WEB_URL="http://localhost"
+else
+    echo "⚠️  Nginx not found. Installing serve for frontend..."
+    npm install -g serve 2>/dev/null || echo "Could not install serve globally"
+    WEB_SERVER="serve"
+    WEB_URL="http://localhost:3000"
+fi
+
+echo "✅ Web server setup completed"
+
+# Step 7: Kill existing processes and restart
+echo "🔄 Step 7: Restarting services..."
+
+# Kill existing processes
 echo "Stopping existing services..."
 pkill -f "node.*qb-pharma" 2>/dev/null || true
 pkill -f "npm.*start" 2>/dev/null || true
+pkill -f "serve.*frontend" 2>/dev/null || true
 
 # Wait for processes to stop
 sleep 2
@@ -194,11 +283,30 @@ else
     handle_error "Backend failed to start"
 fi
 
-# Step 7: Create logs directory if it doesn't exist
+# Start frontend if not using nginx
+if [ "$WEB_SERVER" = "serve" ]; then
+    echo "Starting frontend with serve..."
+    cd frontend
+    nohup serve -s dist -l 3000 > ../logs/frontend.log 2>&1 &
+    FRONTEND_PID=$!
+    cd ..
+    
+    # Wait for frontend to start
+    sleep 3
+    
+    # Check if frontend is running
+    if curl -f http://localhost:3000 >/dev/null 2>&1; then
+        echo "✅ Frontend started successfully on port 3000"
+    else
+        echo "⚠️  Frontend may not be responding yet"
+    fi
+fi
+
+# Step 8: Create logs directory if it doesn't exist
 mkdir -p logs
 
-# Step 8: Final verification
-echo "🧪 Step 6: Final verification..."
+# Step 9: Final verification
+echo "🧪 Step 8: Final verification..."
 
 # Test login
 echo "Testing login API..."
@@ -232,25 +340,46 @@ echo ""
 echo "🎉 Deployment completed successfully!"
 echo ""
 echo "📋 Service Status:"
-echo "   Backend:  http://localhost:3001 ✅"
-echo "   Health:   http://localhost:3001/health"
-echo "   Admin:    username: admin, password: admin123"
+echo "   Backend:   http://localhost:3001 ✅"
+echo "   Frontend:  $WEB_URL ✅"
+echo "   Health:    http://localhost:3001/health"
+echo "   Web Server: $WEB_SERVER"
+echo "   Admin:     username: admin, password: admin123"
 echo ""
 echo "📁 Files:"
 echo "   Frontend: ./frontend/dist/"
 echo "   Backend:  ./backend/dist/"
 echo "   Database: ./backend/prisma/data/qb-pharma.db"
 echo "   Logs:     ./logs/backend.log"
+if [ "$WEB_SERVER" = "serve" ]; then
+echo "             ./logs/frontend.log"
+fi
+echo "   Env:      ./backend/.env, ./frontend/.env"
+echo ""
+echo "🌐 Access your application:"
+echo "   Website:  $WEB_URL"
+echo "   API:      http://localhost:3001/api"
+echo "   Health:   http://localhost:3001/health"
 echo ""
 echo "🔍 To check status:"
 echo "   ps aux | grep node"
 echo "   curl http://localhost:3001/health"
+if [ "$WEB_SERVER" = "nginx" ]; then
+echo "   sudo nginx -t"
+echo "   sudo systemctl status nginx"
+fi
 echo ""
 echo "🛑 To stop services:"
 echo "   pkill -f 'node.*qb-pharma'"
+if [ "$WEB_SERVER" = "serve" ]; then
+echo "   pkill -f 'serve.*frontend'"
+fi
 echo ""
 
 # Save process IDs for later reference
 echo "BACKEND_PID=$BACKEND_PID" > .deployment_pids
+if [ "$WEB_SERVER" = "serve" ] && [ ! -z "$FRONTEND_PID" ]; then
+    echo "FRONTEND_PID=$FRONTEND_PID" >> .deployment_pids
+fi
 
 echo "✅ All deployment issues have been resolved!"
