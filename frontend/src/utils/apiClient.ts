@@ -193,7 +193,9 @@ class ApiClient {
   }
 
   async createTransaction(transactionData: any): Promise<ApiResponse<any>> {
-    return this.post('/api/transactions', transactionData);
+    // Filter out fields that backend will set automatically
+    const { createdBy, id, createdAt, ...cleanData } = transactionData;
+    return this.post('/api/transactions', cleanData);
   }
 
   async updateTransaction(id: string, transactionData: any): Promise<ApiResponse<any>> {
@@ -206,36 +208,41 @@ class ApiClient {
 
   // Stakeholder methods
   async getDoctors(): Promise<ApiResponse<any[]>> {
-    return this.get('/api/doctors');
+    const response = await this.get('/api/stakeholders/doctors');
+    return response.success ? { ...response, data: response.data?.stakeholders || [] } : response;
   }
 
   async getBusinessPartners(): Promise<ApiResponse<any[]>> {
-    return this.get('/api/business-partners');
+    const response = await this.get('/api/stakeholders/business-partners');
+    return response.success ? { ...response, data: response.data?.stakeholders || [] } : response;
   }
 
   async getDistributors(): Promise<ApiResponse<any[]>> {
-    return this.get('/api/distributors');
+    const response = await this.get('/api/stakeholders/distributors');
+    return response.success ? { ...response, data: response.data?.stakeholders || [] } : response;
   }
 
   async getEmployees(): Promise<ApiResponse<any[]>> {
-    return this.get('/api/employees');
+    const response = await this.get('/api/stakeholders/employees');
+    return response.success ? { ...response, data: response.data?.stakeholders || [] } : response;
   }
 
   async getPatients(): Promise<ApiResponse<any[]>> {
-    return this.get('/api/patients');
+    const response = await this.get('/api/stakeholders/patients');
+    return response.success ? { ...response, data: response.data?.stakeholders || [] } : response;
   }
 
   // Generic stakeholder CRUD
   async createStakeholder(type: string, data: any): Promise<ApiResponse<any>> {
-    return this.post(`/api/${type}`, data);
+    return this.post(`/api/stakeholders/${type}`, data);
   }
 
   async updateStakeholder(type: string, id: string, data: any): Promise<ApiResponse<any>> {
-    return this.put(`/api/${type}/${id}`, data);
+    return this.put(`/api/stakeholders/${type}/${id}`, data);
   }
 
   async deleteStakeholder(type: string, id: string): Promise<ApiResponse<any>> {
-    return this.delete(`/api/${type}/${id}`);
+    return this.delete(`/api/stakeholders/${type}/${id}`);
   }
 }
 

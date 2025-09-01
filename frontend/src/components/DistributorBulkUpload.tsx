@@ -278,13 +278,13 @@ const DistributorBulkUpload: React.FC<DistributorBulkUploadProps> = ({ isOpen, o
       
       if (result.success && result.data) {
         // Add distributors to the system
-        result.data.forEach(distributorData => {
+        for (const distributorData of result.data) {
           const nextPaymentDue = new Date();
           nextPaymentDue.setDate(nextPaymentDue.getDate() + 
             (distributorData.paymentSchedule === 'weekly' ? 7 : 
              distributorData.paymentSchedule === 'bi-weekly' ? 14 : 30));
 
-          addDistributor({
+          await addDistributor({
             name: distributorData.name,
             contactPerson: distributorData.contactPerson,
             email: distributorData.email,
@@ -295,7 +295,7 @@ const DistributorBulkUpload: React.FC<DistributorBulkUploadProps> = ({ isOpen, o
             paymentPercentage: distributorData.paymentPercentage,
             nextPaymentDue: nextPaymentDue.toISOString().split('T')[0]
           });
-        });
+        }
       }
     } catch (error) {
       setUploadResult({

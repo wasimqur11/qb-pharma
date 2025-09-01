@@ -76,62 +76,63 @@ const StakeholderManagement: React.FC = () => {
     item.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleStakeholderSubmit = (data: any) => {
-    if (editingItem) {
-      // Update existing
-      switch (activeTab) {
-        case 'doctor':
-          updateDoctor(editingItem.id, data);
-          break;
-        case 'business_partner':
-          updateBusinessPartner(editingItem.id, data);
-          break;
-        case 'employee':
-          updateEmployee(editingItem.id, data);
-          break;
-        case 'distributor':
-          updateDistributor(editingItem.id, data);
-          break;
-      }
-      setEditingItem(null);
-    } else {
-      // Add new
-      switch (activeTab) {
-        case 'doctor':
-          addDoctor({
-            name: data.name,
-            email: data.email,
-            phone: data.phone,
-            consultationFee: parseFloat(data.consultationFee),
-            commissionRate: parseFloat(data.commissionRate)
-          });
-          break;
-        case 'business_partner':
-          addBusinessPartner({
-            name: data.name,
-            email: data.email,
-            phone: data.phone,
-            ownershipPercentage: parseFloat(data.ownershipPercentage)
-          });
-          break;
-        case 'employee':
-          const employeeData = {
-            name: data.name,
-            email: data.email,
-            phone: data.phone,
-            department: data.department,
-            salary: parseFloat(data.salary),
-            salaryDueDate: data.salaryDueDate,
-            lastPaidDate: data.lastPaidDate || undefined,
-            salaryFrequency: data.salaryFrequency as 'monthly' | 'bi-weekly' | 'weekly'
-          };
-          console.log('Adding employee with data:', employeeData);
-          addEmployee(employeeData);
-          console.log('Employee added successfully');
-          break;
-        case 'distributor':
-          addDistributor({
-            name: data.name,
+  const handleStakeholderSubmit = async (data: any) => {
+    try {
+      if (editingItem) {
+        // Update existing
+        switch (activeTab) {
+          case 'doctor':
+            await updateDoctor(editingItem.id, data);
+            break;
+          case 'business_partner':
+            await updateBusinessPartner(editingItem.id, data);
+            break;
+          case 'employee':
+            await updateEmployee(editingItem.id, data);
+            break;
+          case 'distributor':
+            await updateDistributor(editingItem.id, data);
+            break;
+        }
+        setEditingItem(null);
+      } else {
+        // Add new
+        switch (activeTab) {
+          case 'doctor':
+            await addDoctor({
+              name: data.name,
+              email: data.email,
+              phone: data.phone,
+              consultationFee: parseFloat(data.consultationFee),
+              commissionRate: parseFloat(data.commissionRate)
+            });
+            break;
+          case 'business_partner':
+            await addBusinessPartner({
+              name: data.name,
+              email: data.email,
+              phone: data.phone,
+              ownershipPercentage: parseFloat(data.ownershipPercentage)
+            });
+            break;
+          case 'employee':
+            const employeeData = {
+              name: data.name,
+              email: data.email,
+              phone: data.phone,
+              department: data.department,
+              salary: parseFloat(data.salary),
+              salaryDueDate: data.salaryDueDate,
+              lastPaidDate: data.lastPaidDate || undefined,
+              salaryFrequency: data.salaryFrequency as 'monthly' | 'bi-weekly' | 'weekly'
+            };
+            console.log('Adding employee with data:', employeeData);
+            await addEmployee(employeeData);
+            console.log('Employee added successfully');
+            break;
+          case 'distributor':
+            await addDistributor({
+              name: data.name,
             contactPerson: data.contactPerson,
             email: data.email,
             phone: data.phone,
@@ -142,11 +143,15 @@ const StakeholderManagement: React.FC = () => {
             paymentPercentage: parseFloat(data.paymentPercentage),
             nextPaymentDue: data.nextPaymentDue,
             lastPaymentDate: data.lastPaymentDate || undefined
-          });
-          break;
+            });
+            break;
+        }
       }
+      setShowAddForm(false);
+    } catch (error) {
+      console.error('Error saving stakeholder:', error);
+      alert('Failed to save stakeholder. Please try again.');
     }
-    setShowAddForm(false);
   };
 
   const handleEdit = (item: any) => {
@@ -154,21 +159,26 @@ const StakeholderManagement: React.FC = () => {
     setShowAddForm(true);
   };
 
-  const handleDelete = (itemId: string) => {
+  const handleDelete = async (itemId: string) => {
     if (confirm('Are you sure you want to delete this record?')) {
-      switch (activeTab) {
-        case 'doctor':
-          deleteDoctor(itemId);
-          break;
-        case 'business_partner':
-          deleteBusinessPartner(itemId);
-          break;
-        case 'employee':
-          deleteEmployee(itemId);
-          break;
-        case 'distributor':
-          deleteDistributor(itemId);
-          break;
+      try {
+        switch (activeTab) {
+          case 'doctor':
+            await deleteDoctor(itemId);
+            break;
+          case 'business_partner':
+            await deleteBusinessPartner(itemId);
+            break;
+          case 'employee':
+            await deleteEmployee(itemId);
+            break;
+          case 'distributor':
+            await deleteDistributor(itemId);
+            break;
+        }
+      } catch (error) {
+        console.error('Error deleting stakeholder:', error);
+        alert('Failed to delete stakeholder. Please try again.');
       }
     }
   };

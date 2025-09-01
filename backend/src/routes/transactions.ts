@@ -20,7 +20,10 @@ const CreateTransactionSchema = z.object({
   amount: z.number().positive('Amount must be positive'),
   description: z.string().min(1, 'Description is required'),
   billNo: z.string().optional(),
-  date: z.string().datetime('Invalid date format')
+  date: z.union([
+    z.string().datetime('Invalid date format'),
+    z.date().transform(date => date.toISOString())
+  ])
 });
 
 const UpdateTransactionSchema = z.object({
@@ -109,12 +112,7 @@ router.get('/', requirePermission('transactions', 'read'), async (req: Authentic
               username: true,
               name: true
             }
-          },
-          doctor: true,
-          businessPartner: true,
-          employee: true,
-          distributor: true,
-          patient: true
+          }
         },
         orderBy: {
           date: 'desc'
@@ -131,13 +129,7 @@ router.get('/', requirePermission('transactions', 'read'), async (req: Authentic
       category: transaction.category,
       stakeholderId: transaction.stakeholderId,
       stakeholderType: transaction.stakeholderType,
-      stakeholderName: 
-        transaction.doctor?.name ||
-        transaction.businessPartner?.name ||
-        transaction.employee?.name ||
-        transaction.distributor?.name ||
-        transaction.patient?.name ||
-        null,
+      stakeholderName: null, // We'll need to fetch this separately if needed
       amount: transaction.amount,
       description: transaction.description,
       billNo: transaction.billNo,
@@ -232,12 +224,7 @@ router.post('/', requirePermission('transactions', 'create'), async (req: Authen
             username: true,
             name: true
           }
-        },
-        doctor: true,
-        businessPartner: true,
-        employee: true,
-        distributor: true,
-        patient: true
+        }
       }
     });
     
@@ -247,13 +234,7 @@ router.post('/', requirePermission('transactions', 'create'), async (req: Authen
       category: transaction.category,
       stakeholderId: transaction.stakeholderId,
       stakeholderType: transaction.stakeholderType,
-      stakeholderName: 
-        transaction.doctor?.name ||
-        transaction.businessPartner?.name ||
-        transaction.employee?.name ||
-        transaction.distributor?.name ||
-        transaction.patient?.name ||
-        null,
+      stakeholderName: null, // We'll need to fetch this separately if needed
       amount: transaction.amount,
       description: transaction.description,
       billNo: transaction.billNo,
@@ -301,12 +282,7 @@ router.get('/:id', requirePermission('transactions', 'read'), async (req: Authen
             username: true,
             name: true
           }
-        },
-        doctor: true,
-        businessPartner: true,
-        employee: true,
-        distributor: true,
-        patient: true
+        }
       }
     });
     
@@ -342,13 +318,7 @@ router.get('/:id', requirePermission('transactions', 'read'), async (req: Authen
       category: transaction.category,
       stakeholderId: transaction.stakeholderId,
       stakeholderType: transaction.stakeholderType,
-      stakeholderName: 
-        transaction.doctor?.name ||
-        transaction.businessPartner?.name ||
-        transaction.employee?.name ||
-        transaction.distributor?.name ||
-        transaction.patient?.name ||
-        null,
+      stakeholderName: null, // We'll need to fetch this separately if needed
       amount: transaction.amount,
       description: transaction.description,
       billNo: transaction.billNo,
@@ -446,12 +416,7 @@ router.put('/:id', requirePermission('transactions', 'update'), async (req: Auth
             username: true,
             name: true
           }
-        },
-        doctor: true,
-        businessPartner: true,
-        employee: true,
-        distributor: true,
-        patient: true
+        }
       }
     });
     
@@ -461,13 +426,7 @@ router.put('/:id', requirePermission('transactions', 'update'), async (req: Auth
       category: updatedTransaction.category,
       stakeholderId: updatedTransaction.stakeholderId,
       stakeholderType: updatedTransaction.stakeholderType,
-      stakeholderName: 
-        updatedTransaction.doctor?.name ||
-        updatedTransaction.businessPartner?.name ||
-        updatedTransaction.employee?.name ||
-        updatedTransaction.distributor?.name ||
-        updatedTransaction.patient?.name ||
-        null,
+      stakeholderName: null, // We'll need to fetch this separately if needed
       amount: updatedTransaction.amount,
       description: updatedTransaction.description,
       billNo: updatedTransaction.billNo,
@@ -538,6 +497,65 @@ router.delete('/:id', requirePermission('transactions', 'delete'), async (req: A
   } catch (error) {
     console.error('Delete transaction error:', error);
     res.status(500).json({ error: 'Failed to delete transaction' });
+  }
+});
+
+// Batch create transactions for data import
+router.post('/batch', requirePermission('transactions', 'create'), async (req: AuthenticatedRequest, res) => {
+  try {
+    const transactions = req.body.transactions;
+    
+    if (!Array.isArray(transactions) || transactions.length === 0) {
+      return res.status(400).json({ error: 'Transactions array is required' });
+    }
+
+    // Validate all transactions
+    const validatedTransactions = [];
+    const errors = [];
+
+    for (let i = 0; i < transactions.length; i++) {
+      try {
+        const transactionData = CreateTransactionSchema.parse(transactions[i]);
+        validatedTransactions.push({
+          ...transactionData,
+          createdBy: req.user!.id,
+          pharmaUnitId: req.user?.pharmaUnitId || 'pharma-001',
+          date: new Date(transactionData.date)
+        });
+      } catch (error) {
+        errors.push({ index: i, error: error instanceof z.ZodError ? error.errors : 'Invalid transaction data' });
+      }
+    }
+
+    // Create all valid transactions in a single database transaction
+    const results = await prisma.$transaction(
+      validatedTransactions.map(data =>
+        prisma.transaction.create({
+          data,
+          include: {
+            pharmaUnit: true,
+            creator: {
+              select: {
+                id: true,
+                username: true,
+                name: true
+              }
+            }
+          }
+        })
+      )
+    );
+
+    res.status(201).json({
+      message: `Successfully created ${results.length} transactions`,
+      created: results.length,
+      errors: errors.length,
+      errorDetails: errors
+    });
+
+  } catch (error) {
+    console.error('Batch create transactions error:', error);
+    res.status(500).json({ error: 'Failed to create transactions' });
   }
 });
 

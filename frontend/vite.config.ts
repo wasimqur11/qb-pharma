@@ -6,5 +6,17 @@ export default defineConfig({
   plugins: [react()],
   esbuild: {
     logOverride: { 'this-is-undefined-in-esm': 'silent' }
+  },
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true
+      },
+      '/health': {
+        target: 'http://localhost:3001',
+        changeOrigin: true
+      }
+    }
   }
 })

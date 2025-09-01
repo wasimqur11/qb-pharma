@@ -394,34 +394,39 @@ const PatientManagement: React.FC = () => {
     return matchesSearch && matchesStatus;
   });
 
-  const handlePatientSubmit = (data: PatientFormData) => {
-    if (editingPatient) {
-      updatePatient(editingPatient.id, {
-        ...data,
-        creditLimit: parseFloat(data.creditLimit),
-        email: data.email || undefined,
-        address: data.address || undefined,
-        dateOfBirth: data.dateOfBirth || undefined,
-        emergencyContact: data.emergencyContact || undefined,
-        emergencyPhone: data.emergencyPhone || undefined,
-        notes: data.notes || undefined
-      });
-      setEditingPatient(null);
-    } else {
-      addPatient({
-        name: data.name,
-        email: data.email || undefined,
-        phone: data.phone,
-        address: data.address || undefined,
-        dateOfBirth: data.dateOfBirth || undefined,
-        emergencyContact: data.emergencyContact || undefined,
-        emergencyPhone: data.emergencyPhone || undefined,
-        creditLimit: parseFloat(data.creditLimit),
-        notes: data.notes || undefined,
-        isActive: true
-      });
+  const handlePatientSubmit = async (data: PatientFormData) => {
+    try {
+      if (editingPatient) {
+        await updatePatient(editingPatient.id, {
+          ...data,
+          creditLimit: parseFloat(data.creditLimit),
+          email: data.email || undefined,
+          address: data.address || undefined,
+          dateOfBirth: data.dateOfBirth || undefined,
+          emergencyContact: data.emergencyContact || undefined,
+          emergencyPhone: data.emergencyPhone || undefined,
+          notes: data.notes || undefined
+        });
+        setEditingPatient(null);
+      } else {
+        await addPatient({
+          name: data.name,
+          email: data.email || undefined,
+          phone: data.phone,
+          address: data.address || undefined,
+          dateOfBirth: data.dateOfBirth || undefined,
+          emergencyContact: data.emergencyContact || undefined,
+          emergencyPhone: data.emergencyPhone || undefined,
+          creditLimit: parseFloat(data.creditLimit),
+          notes: data.notes || undefined,
+          isActive: true
+        });
+      }
+      setShowAddForm(false);
+    } catch (error) {
+      console.error('Error saving patient:', error);
+      alert('Failed to save patient. Please try again.');
     }
-    setShowAddForm(false);
   };
 
   const handleEdit = (patient: Patient) => {

@@ -106,12 +106,7 @@ router.get('/overview', requirePermission('dashboard', 'read'), async (req: Auth
         include: {
           creator: {
             select: { username: true, name: true }
-          },
-          doctor: { select: { name: true } },
-          businessPartner: { select: { name: true } },
-          employee: { select: { name: true } },
-          distributor: { select: { name: true } },
-          patient: { select: { name: true } }
+          }
         },
         orderBy: { createdAt: 'desc' },
         take: 10
@@ -133,13 +128,7 @@ router.get('/overview', requirePermission('dashboard', 'read'), async (req: Auth
     const formattedTransactions = recentTransactions.map(transaction => ({
       id: transaction.id,
       category: transaction.category,
-      stakeholderName: 
-        transaction.doctor?.name ||
-        transaction.businessPartner?.name ||
-        transaction.employee?.name ||
-        transaction.distributor?.name ||
-        transaction.patient?.name ||
-        'N/A',
+      stakeholderName: 'N/A',
       amount: transaction.amount,
       description: transaction.description,
       date: transaction.date,

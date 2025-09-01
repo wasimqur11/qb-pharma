@@ -1,6 +1,8 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import type { Doctor, BusinessPartner, Employee, Distributor, Patient } from '../types';
+import apiClient from '../utils/apiClient';
+import { useAuth } from './AuthContext';
 
 interface StakeholderContextType {
   // Data
@@ -10,32 +12,38 @@ interface StakeholderContextType {
   distributors: Distributor[];
   patients: Patient[];
   
+  // Loading state
+  isLoading: boolean;
+  
+  // Data loading
+  loadAllData: () => Promise<void>;
+  
   // Doctor operations
-  addDoctor: (doctor: Omit<Doctor, 'id' | 'createdAt'>) => void;
-  updateDoctor: (id: string, updates: Partial<Doctor>) => void;
-  deleteDoctor: (id: string) => void;
+  addDoctor: (doctor: Omit<Doctor, 'id' | 'createdAt'>) => Promise<void>;
+  updateDoctor: (id: string, updates: Partial<Doctor>) => Promise<void>;
+  deleteDoctor: (id: string) => Promise<void>;
   
   // Business Partner operations
-  addBusinessPartner: (partner: Omit<BusinessPartner, 'id' | 'createdAt'>) => void;
-  updateBusinessPartner: (id: string, updates: Partial<BusinessPartner>) => void;
-  deleteBusinessPartner: (id: string) => void;
+  addBusinessPartner: (partner: Omit<BusinessPartner, 'id' | 'createdAt'>) => Promise<void>;
+  updateBusinessPartner: (id: string, updates: Partial<BusinessPartner>) => Promise<void>;
+  deleteBusinessPartner: (id: string) => Promise<void>;
   
   // Employee operations
-  addEmployee: (employee: Omit<Employee, 'id' | 'createdAt'>) => void;
-  updateEmployee: (id: string, updates: Partial<Employee>) => void;
-  deleteEmployee: (id: string) => void;
-  updateEmployeeSalaryDueDate: (employeeId: string) => void;
+  addEmployee: (employee: Omit<Employee, 'id' | 'createdAt'>) => Promise<void>;
+  updateEmployee: (id: string, updates: Partial<Employee>) => Promise<void>;
+  deleteEmployee: (id: string) => Promise<void>;
+  updateEmployeeSalaryDueDate: (employeeId: string) => Promise<void>;
   
   // Distributor operations
-  addDistributor: (distributor: Omit<Distributor, 'id' | 'createdAt'>) => void;
-  updateDistributor: (id: string, updates: Partial<Distributor>) => void;
-  deleteDistributor: (id: string) => void;
+  addDistributor: (distributor: Omit<Distributor, 'id' | 'createdAt'>) => Promise<void>;
+  updateDistributor: (id: string, updates: Partial<Distributor>) => Promise<void>;
+  deleteDistributor: (id: string) => Promise<void>;
   
   // Patient operations
-  addPatient: (patient: Omit<Patient, 'id' | 'createdAt' | 'updatedAt' | 'currentCredit'>) => void;
-  updatePatient: (id: string, updates: Partial<Patient>) => void;
-  deletePatient: (id: string) => void;
-  togglePatientStatus: (id: string) => void;
+  addPatient: (patient: Omit<Patient, 'id' | 'createdAt' | 'updatedAt' | 'currentCredit'>) => Promise<void>;
+  updatePatient: (id: string, updates: Partial<Patient>) => Promise<void>;
+  deletePatient: (id: string) => Promise<void>;
+  togglePatientStatus: (id: string) => Promise<void>;
   
   // Utility functions
   getDoctorById: (id: string) => Doctor | undefined;
@@ -64,389 +72,303 @@ interface StakeholderProviderProps {
 }
 
 export const StakeholderProvider: React.FC<StakeholderProviderProps> = ({ children }) => {
-  // Initialize with dummy data for testing
-  const initializeDummyData = () => {
-    const now = new Date();
-    
-    // 1 Doctor
-    const dummyDoctors: Doctor[] = [
-      {
-        id: 'doc-001',
-        name: 'Dr. Ahmed Hassan',
-        consultationFee: 2000,
-        commissionRate: 10,
-        email: 'ahmed.hassan@qbpharma.com',
-        phone: '+91 98765 43210',
-        createdAt: now
+  // State management
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [businessPartners, setBusinessPartners] = useState<BusinessPartner[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [distributors, setDistributors] = useState<Distributor[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+
+  // Load all stakeholder data from backend database
+  const loadAllData = async () => {
+    if (!isAuthenticated || authLoading) {
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      console.log('Loading stakeholder data from database...');
+      
+      const [doctorsRes, partnersRes, employeesRes, distributorsRes, patientsRes] = await Promise.all([
+        apiClient.getDoctors(),
+        apiClient.getBusinessPartners(),
+        apiClient.getEmployees(),
+        apiClient.getDistributors(),
+        apiClient.getPatients()
+      ]);
+
+      // Set data from backend
+      if (doctorsRes.success) {
+        setDoctors(doctorsRes.data || []);
+        console.log('Loaded', doctorsRes.data?.length || 0, 'doctors');
       }
-    ];
-    
-    // 4 Business Partners (25% each)
-    const dummyBusinessPartners: BusinessPartner[] = [
-      {
-        id: 'bp-001',
-        name: 'Wasim Qureshi',
-        ownershipPercentage: 25,
-        email: 'wasim.qureshi@qbpharma.com',
-        phone: '+91 98765 43211',
-        createdAt: now
-      },
-      {
-        id: 'bp-002',
-        name: 'Sarah Khan',
-        ownershipPercentage: 25,
-        email: 'sarah.khan@qbpharma.com',
-        phone: '+91 98765 43212',
-        createdAt: now
-      },
-      {
-        id: 'bp-003',
-        name: 'Ali Ahmed',
-        ownershipPercentage: 25,
-        email: 'ali.ahmed@qbpharma.com',
-        phone: '+91 98765 43213',
-        createdAt: now
-      },
-      {
-        id: 'bp-004',
-        name: 'Fatima Sheikh',
-        ownershipPercentage: 25,
-        email: 'fatima.sheikh@qbpharma.com',
-        phone: '+91 98765 43214',
-        createdAt: now
+      if (partnersRes.success) {
+        setBusinessPartners(partnersRes.data || []);
+        console.log('Loaded', partnersRes.data?.length || 0, 'business partners');
       }
-    ];
-    
-    // 3 Distributors with specified balances and payment schedules
-    const dummyDistributors: Distributor[] = [
-      {
-        id: 'dist-001',
-        name: 'Karachi Medical Supplies',
-        contactPerson: 'Muhammad Tariq',
-        email: 'tariq@karachimedical.com',
-        phone: '+92 21 1234 5678',
-        address: 'Block 5, Gulshan-e-Iqbal, Karachi',
-        creditBalance: 50000,
-        initialBalanceDate: '2024-01-01',
-        paymentSchedule: 'weekly',
-        paymentPercentage: 10,
-        nextPaymentDue: '2024-08-22', // Next Friday
-        lastPaymentDate: '2024-08-15', // Last Friday
-        createdAt: now
-      },
-      {
-        id: 'dist-002',
-        name: 'Lahore Pharma Distribution',
-        contactPerson: 'Aisha Malik',
-        email: 'aisha@lahorepharma.com',
-        phone: '+92 42 9876 5432',
-        address: 'DHA Phase 3, Lahore',
-        creditBalance: 60000,
-        initialBalanceDate: '2024-01-01',
-        paymentSchedule: 'weekly',
-        paymentPercentage: 12,
-        nextPaymentDue: '2024-08-23', // Next Friday
-        lastPaymentDate: '2024-08-16', // Last Friday
-        createdAt: now
-      },
-      {
-        id: 'dist-003',
-        name: 'Islamabad Medicine Hub',
-        contactPerson: 'Hassan Ali',
-        email: 'hassan@islamabadmed.com',
-        phone: '+92 51 5555 1234',
-        address: 'F-7 Markaz, Islamabad',
-        creditBalance: 70000,
-        initialBalanceDate: '2024-01-01',
-        paymentSchedule: 'bi-weekly',
-        paymentPercentage: 15,
-        nextPaymentDue: '2024-08-29', // Bi-weekly
-        lastPaymentDate: '2024-08-15', // Two weeks ago
-        createdAt: now
-      },
-      {
-        id: 'dist-004',
-        name: 'Multan Healthcare Supply',
-        contactPerson: 'Fatima Khalil',
-        email: 'fatima@multanhealthcare.com',
-        phone: '+92 61 4567 890',
-        address: 'Cantt Area, Multan',
-        creditBalance: 45000,
-        initialBalanceDate: '2024-01-01',
-        paymentSchedule: 'monthly',
-        paymentPercentage: 8,
-        nextPaymentDue: '2024-09-01', // Monthly
-        lastPaymentDate: '2024-08-01',
-        createdAt: now
-      },
-      {
-        id: 'dist-005',
-        name: 'Peshawar Medical Traders',
-        contactPerson: 'Ahmad Khan',
-        email: 'ahmad@peshawarmedi.com',
-        phone: '+92 91 5678 901',
-        address: 'University Town, Peshawar',
-        creditBalance: 80000,
-        initialBalanceDate: '2024-01-01',
-        paymentSchedule: 'bi-weekly',
-        paymentPercentage: 12,
-        nextPaymentDue: '2024-08-30',
-        lastPaymentDate: '2024-08-16',
-        createdAt: now
-      },
-      {
-        id: 'dist-006',
-        name: 'Quetta Pharma Distributors',
-        contactPerson: 'Zainab Baloch',
-        email: 'zainab@quettapharma.com',
-        phone: '+92 81 2345 678',
-        address: 'Jinnah Town, Quetta',
-        creditBalance: 35000,
-        initialBalanceDate: '2024-01-01',
-        paymentSchedule: 'weekly',
-        paymentPercentage: 15,
-        nextPaymentDue: '2024-08-26',
-        lastPaymentDate: '2024-08-19',
-        createdAt: now
-      },
-      {
-        id: 'dist-007',
-        name: 'Faisalabad Medicine Hub',
-        contactPerson: 'Usman Sheikh',
-        email: 'usman@faisalabadmedicine.com',
-        phone: '+92 41 3456 789',
-        address: 'Jaranwala Road, Faisalabad',
-        creditBalance: 55000,
-        initialBalanceDate: '2024-01-01',
-        paymentSchedule: 'monthly',
-        paymentPercentage: 10,
-        nextPaymentDue: '2024-09-05',
-        lastPaymentDate: '2024-08-05',
-        createdAt: now
+      if (employeesRes.success) {
+        setEmployees(employeesRes.data || []);
+        console.log('Loaded', employeesRes.data?.length || 0, 'employees');
       }
-    ];
-    
-    // 1 Employee
-    const dummyEmployees: Employee[] = [
-      {
-        id: 'emp-001',
-        name: 'Zainab Hussain',
-        salary: 8000,
-        department: 'Operations',
-        email: 'zainab.hussain@qbpharma.com',
-        phone: '+91 98765 43215',
-        salaryDueDate: '2024-09-01', // Next month due
-        lastPaidDate: '2024-08-01', // Last paid 
-        salaryFrequency: 'monthly',
-        createdAt: now
+      if (distributorsRes.success) {
+        setDistributors(distributorsRes.data || []);
+        console.log('Loaded', distributorsRes.data?.length || 0, 'distributors');
       }
-    ];
-    
-    // Sample Patients
-    const dummyPatients: Patient[] = [
-      {
-        id: 'pat-001',
-        name: 'Omar Sheikh',
-        email: 'omar.sheikh@email.com',
-        phone: '+91 98765 43216',
-        address: 'Block A, Defence Phase 2',
-        dateOfBirth: '1985-06-15',
-        emergencyContact: 'Ayesha Sheikh',
-        emergencyPhone: '+91 98765 43217',
-        creditLimit: 5000,
-        currentCredit: 0,
-        lastVisit: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // 7 days ago
-        notes: 'Regular customer, diabetic patient',
-        isActive: true,
-        createdAt: now,
-        updatedAt: now
-      },
-      {
-        id: 'pat-002',
-        name: 'Mariam Ali',
-        email: 'mariam.ali@email.com',
-        phone: '+91 98765 43218',
-        address: 'Gulberg III, Lahore',
-        dateOfBirth: '1990-03-22',
-        emergencyContact: 'Ahmed Ali',
-        emergencyPhone: '+91 98765 43219',
-        creditLimit: 3000,
-        currentCredit: 1200,
-        lastVisit: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
-        notes: 'Pregnant, requires prenatal vitamins',
-        isActive: true,
-        createdAt: now,
-        updatedAt: now
-      },
-      {
-        id: 'pat-003',
-        name: 'Khalid Rahman',
-        phone: '+91 98765 43220',
-        creditLimit: 2000,
-        currentCredit: 0,
-        lastVisit: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 30 days ago
-        notes: 'Elderly patient, hypertension medication',
-        isActive: true,
-        createdAt: now,
-        updatedAt: now
+      if (patientsRes.success) {
+        setPatients(patientsRes.data || []);
+        console.log('Loaded', patientsRes.data?.length || 0, 'patients');
       }
-    ];
-    
-    return {
-      doctors: dummyDoctors,
-      businessPartners: dummyBusinessPartners,
-      distributors: dummyDistributors,
-      employees: dummyEmployees,
-      patients: dummyPatients
-    };
+      
+      console.log('Stakeholder data loaded from database');
+    } catch (error) {
+      console.error('Failed to load stakeholder data:', error);
+      // Set empty arrays on error
+      setDoctors([]);
+      setBusinessPartners([]);
+      setEmployees([]);
+      setDistributors([]);
+      setPatients([]);
+    } finally {
+      setIsLoading(false);
+    }
   };
-  
-  const dummyData = initializeDummyData();
-  
-  const [doctors, setDoctors] = useState<Doctor[]>(dummyData.doctors);
-  const [businessPartners, setBusinessPartners] = useState<BusinessPartner[]>(dummyData.businessPartners);
-  const [employees, setEmployees] = useState<Employee[]>(dummyData.employees);
-  const [distributors, setDistributors] = useState<Distributor[]>(dummyData.distributors);
-  const [patients, setPatients] = useState<Patient[]>(dummyData.patients);
+
+  // Load data when user is authenticated
+  useEffect(() => {
+    if (isAuthenticated && !authLoading) {
+      loadAllData();
+    }
+  }, [isAuthenticated, authLoading]);
 
   // Doctor operations
-  const addDoctor = (doctorData: Omit<Doctor, 'id' | 'createdAt'>) => {
-    const newDoctor: Doctor = {
-      ...doctorData,
-      id: Date.now().toString(),
-      createdAt: new Date()
-    };
-    setDoctors(prev => [...prev, newDoctor]);
+  const addDoctor = async (doctorData: Omit<Doctor, 'id' | 'createdAt'>) => {
+    try {
+      const response = await apiClient.createStakeholder('doctors', doctorData);
+      if (response.success) {
+        setDoctors(prev => [...prev, response.data]);
+      } else {
+        console.error('Failed to add doctor:', response.error);
+      }
+    } catch (error) {
+      console.error('Failed to add doctor:', error);
+    }
   };
 
-  const updateDoctor = (id: string, updates: Partial<Doctor>) => {
-    setDoctors(prev => prev.map(doctor => 
-      doctor.id === id ? { ...doctor, ...updates } : doctor
-    ));
+  const updateDoctor = async (id: string, updates: Partial<Doctor>) => {
+    try {
+      const response = await apiClient.updateStakeholder('doctors', id, updates);
+      if (response.success) {
+        setDoctors(prev => prev.map(doctor => 
+          doctor.id === id ? { ...doctor, ...updates } : doctor
+        ));
+      } else {
+        console.error('Failed to update doctor:', response.error);
+      }
+    } catch (error) {
+      console.error('Failed to update doctor:', error);
+    }
   };
 
-  const deleteDoctor = (id: string) => {
-    setDoctors(prev => prev.filter(doctor => doctor.id !== id));
+  const deleteDoctor = async (id: string) => {
+    try {
+      const response = await apiClient.deleteStakeholder('doctors', id);
+      if (response.success) {
+        setDoctors(prev => prev.filter(doctor => doctor.id !== id));
+      } else {
+        console.error('Failed to delete doctor:', response.error);
+      }
+    } catch (error) {
+      console.error('Failed to delete doctor:', error);
+    }
   };
 
   // Business Partner operations
-  const addBusinessPartner = (partnerData: Omit<BusinessPartner, 'id' | 'createdAt'>) => {
-    const newPartner: BusinessPartner = {
-      ...partnerData,
-      id: Date.now().toString(),
-      createdAt: new Date()
-    };
-    setBusinessPartners(prev => [...prev, newPartner]);
+  const addBusinessPartner = async (partnerData: Omit<BusinessPartner, 'id' | 'createdAt'>) => {
+    try {
+      const response = await apiClient.createStakeholder('business-partners', partnerData);
+      if (response.success) {
+        setBusinessPartners(prev => [...prev, response.data]);
+      } else {
+        console.error('Failed to add business partner:', response.error);
+      }
+    } catch (error) {
+      console.error('Failed to add business partner:', error);
+    }
   };
 
-  const updateBusinessPartner = (id: string, updates: Partial<BusinessPartner>) => {
-    setBusinessPartners(prev => prev.map(partner => 
-      partner.id === id ? { ...partner, ...updates } : partner
-    ));
+  const updateBusinessPartner = async (id: string, updates: Partial<BusinessPartner>) => {
+    try {
+      const response = await apiClient.updateStakeholder('business-partners', id, updates);
+      if (response.success) {
+        setBusinessPartners(prev => prev.map(partner => 
+          partner.id === id ? { ...partner, ...updates } : partner
+        ));
+      } else {
+        console.error('Failed to update business partner:', response.error);
+      }
+    } catch (error) {
+      console.error('Failed to update business partner:', error);
+    }
   };
 
-  const deleteBusinessPartner = (id: string) => {
-    setBusinessPartners(prev => prev.filter(partner => partner.id !== id));
+  const deleteBusinessPartner = async (id: string) => {
+    try {
+      const response = await apiClient.deleteStakeholder('business-partners', id);
+      if (response.success) {
+        setBusinessPartners(prev => prev.filter(partner => partner.id !== id));
+      } else {
+        console.error('Failed to delete business partner:', response.error);
+      }
+    } catch (error) {
+      console.error('Failed to delete business partner:', error);
+    }
   };
 
   // Employee operations
-  const addEmployee = (employeeData: Omit<Employee, 'id' | 'createdAt'>) => {
-    const newEmployee: Employee = {
-      ...employeeData,
-      id: Date.now().toString(),
-      createdAt: new Date()
-    };
-    setEmployees(prev => [...prev, newEmployee]);
+  const addEmployee = async (employeeData: Omit<Employee, 'id' | 'createdAt'>) => {
+    try {
+      const response = await apiClient.createStakeholder('employees', employeeData);
+      if (response.success) {
+        setEmployees(prev => [...prev, response.data]);
+      } else {
+        console.error('Failed to add employee:', response.error);
+      }
+    } catch (error) {
+      console.error('Failed to add employee:', error);
+    }
   };
 
-  const updateEmployee = (id: string, updates: Partial<Employee>) => {
-    setEmployees(prev => prev.map(employee => 
-      employee.id === id ? { ...employee, ...updates } : employee
-    ));
+  const updateEmployee = async (id: string, updates: Partial<Employee>) => {
+    try {
+      const response = await apiClient.updateStakeholder('employees', id, updates);
+      if (response.success) {
+        setEmployees(prev => prev.map(employee => 
+          employee.id === id ? { ...employee, ...updates } : employee
+        ));
+      } else {
+        console.error('Failed to update employee:', response.error);
+      }
+    } catch (error) {
+      console.error('Failed to update employee:', error);
+    }
   };
 
-  const deleteEmployee = (id: string) => {
-    setEmployees(prev => prev.filter(employee => employee.id !== id));
+  const deleteEmployee = async (id: string) => {
+    try {
+      const response = await apiClient.deleteStakeholder('employees', id);
+      if (response.success) {
+        setEmployees(prev => prev.filter(employee => employee.id !== id));
+      } else {
+        console.error('Failed to delete employee:', response.error);
+      }
+    } catch (error) {
+      console.error('Failed to delete employee:', error);
+    }
   };
 
-  // Helper function to update salary due date after payment
-  const updateEmployeeSalaryDueDate = (employeeId: string) => {
-    setEmployees(prevEmployees => {
-      return prevEmployees.map(employee => {
-        if (employee.id !== employeeId) return employee;
-
-        const currentDueDate = new Date(employee.salaryDueDate);
-        const nextDueDate = new Date(currentDueDate);
-
-        // Calculate next due date based on frequency
-        if (employee.salaryFrequency === 'monthly') {
-          nextDueDate.setMonth(nextDueDate.getMonth() + 1);
-        } else if (employee.salaryFrequency === 'bi-weekly') {
-          nextDueDate.setDate(nextDueDate.getDate() + 14);
-        } else if (employee.salaryFrequency === 'weekly') {
-          nextDueDate.setDate(nextDueDate.getDate() + 7);
-        }
-
-        return {
-          ...employee,
-          salaryDueDate: nextDueDate.toISOString().split('T')[0],
-          lastPaidDate: new Date().toISOString().split('T')[0]
-        };
+  const updateEmployeeSalaryDueDate = async (employeeId: string) => {
+    const employee = employees.find(emp => emp.id === employeeId);
+    if (employee) {
+      const today = new Date();
+      const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, today.getDate());
+      await updateEmployee(employeeId, { 
+        lastPaidDate: today.toISOString().split('T')[0],
+        salaryDueDate: nextMonth.toISOString().split('T')[0]
       });
-    });
+    }
   };
 
   // Distributor operations
-  const addDistributor = (distributorData: Omit<Distributor, 'id' | 'createdAt'>) => {
-    const newDistributor: Distributor = {
-      ...distributorData,
-      id: Date.now().toString(),
-      createdAt: new Date()
-    };
-    setDistributors(prev => [...prev, newDistributor]);
+  const addDistributor = async (distributorData: Omit<Distributor, 'id' | 'createdAt'>) => {
+    try {
+      const response = await apiClient.createStakeholder('distributors', distributorData);
+      if (response.success) {
+        setDistributors(prev => [...prev, response.data]);
+      } else {
+        console.error('Failed to add distributor:', response.error);
+      }
+    } catch (error) {
+      console.error('Failed to add distributor:', error);
+    }
   };
 
-  const updateDistributor = (id: string, updates: Partial<Distributor>) => {
-    setDistributors(prev => prev.map(distributor => 
-      distributor.id === id ? { ...distributor, ...updates } : distributor
-    ));
+  const updateDistributor = async (id: string, updates: Partial<Distributor>) => {
+    try {
+      const response = await apiClient.updateStakeholder('distributors', id, updates);
+      if (response.success) {
+        setDistributors(prev => prev.map(distributor => 
+          distributor.id === id ? { ...distributor, ...updates } : distributor
+        ));
+      } else {
+        console.error('Failed to update distributor:', response.error);
+      }
+    } catch (error) {
+      console.error('Failed to update distributor:', error);
+    }
   };
 
-  const deleteDistributor = (id: string) => {
-    setDistributors(prev => prev.filter(distributor => distributor.id !== id));
+  const deleteDistributor = async (id: string) => {
+    try {
+      const response = await apiClient.deleteStakeholder('distributors', id);
+      if (response.success) {
+        setDistributors(prev => prev.filter(distributor => distributor.id !== id));
+      } else {
+        console.error('Failed to delete distributor:', response.error);
+      }
+    } catch (error) {
+      console.error('Failed to delete distributor:', error);
+    }
   };
 
   // Patient operations
-  const addPatient = (patientData: Omit<Patient, 'id' | 'createdAt' | 'updatedAt' | 'currentCredit'>) => {
-    const newPatient: Patient = {
-      ...patientData,
-      id: Date.now().toString(),
-      currentCredit: 0,
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
-    setPatients(prev => [...prev, newPatient]);
+  const addPatient = async (patientData: Omit<Patient, 'id' | 'createdAt' | 'updatedAt' | 'currentCredit'>) => {
+    try {
+      const response = await apiClient.createStakeholder('patients', patientData);
+      if (response.success) {
+        setPatients(prev => [...prev, response.data]);
+      } else {
+        console.error('Failed to add patient:', response.error);
+      }
+    } catch (error) {
+      console.error('Failed to add patient:', error);
+    }
   };
 
-  const updatePatient = (id: string, updates: Partial<Patient>) => {
-    setPatients(prev => prev.map(patient => 
-      patient.id === id 
-        ? { ...patient, ...updates, updatedAt: new Date() }
-        : patient
-    ));
+  const updatePatient = async (id: string, updates: Partial<Patient>) => {
+    try {
+      const response = await apiClient.updateStakeholder('patients', id, updates);
+      if (response.success) {
+        setPatients(prev => prev.map(patient => 
+          patient.id === id ? { ...patient, ...updates } : patient
+        ));
+      } else {
+        console.error('Failed to update patient:', response.error);
+      }
+    } catch (error) {
+      console.error('Failed to update patient:', error);
+    }
   };
 
-  const deletePatient = (id: string) => {
-    setPatients(prev => prev.filter(patient => patient.id !== id));
+  const deletePatient = async (id: string) => {
+    try {
+      const response = await apiClient.deleteStakeholder('patients', id);
+      if (response.success) {
+        setPatients(prev => prev.filter(patient => patient.id !== id));
+      } else {
+        console.error('Failed to delete patient:', response.error);
+      }
+    } catch (error) {
+      console.error('Failed to delete patient:', error);
+    }
   };
 
-  const togglePatientStatus = (id: string) => {
-    setPatients(prev => prev.map(patient => 
-      patient.id === id 
-        ? { ...patient, isActive: !patient.isActive, updatedAt: new Date() }
-        : patient
-    ));
+  const togglePatientStatus = async (id: string) => {
+    const patient = patients.find(p => p.id === id);
+    if (patient) {
+      await updatePatient(id, { isActive: !patient.isActive });
+    }
   };
 
   // Utility functions
@@ -457,9 +379,7 @@ export const StakeholderProvider: React.FC<StakeholderProviderProps> = ({ childr
   const getPatientById = (id: string) => patients.find(patient => patient.id === id);
 
   // Stats
-  const getTotalStakeholders = () => 
-    doctors.length + businessPartners.length + employees.length + distributors.length + patients.length;
-  
+  const getTotalStakeholders = () => doctors.length + businessPartners.length + employees.length + distributors.length + patients.length;
   const getActivePatients = () => patients.filter(patient => patient.isActive);
 
   const contextValue: StakeholderContextType = {
@@ -470,31 +390,47 @@ export const StakeholderProvider: React.FC<StakeholderProviderProps> = ({ childr
     distributors,
     patients,
     
-    // Operations
+    // Loading state
+    isLoading,
+    
+    // Data loading
+    loadAllData,
+    
+    // Doctor operations
     addDoctor,
     updateDoctor,
     deleteDoctor,
+    
+    // Business Partner operations
     addBusinessPartner,
     updateBusinessPartner,
     deleteBusinessPartner,
+    
+    // Employee operations
     addEmployee,
     updateEmployee,
     deleteEmployee,
     updateEmployeeSalaryDueDate,
+    
+    // Distributor operations
     addDistributor,
     updateDistributor,
     deleteDistributor,
+    
+    // Patient operations
     addPatient,
     updatePatient,
     deletePatient,
     togglePatientStatus,
     
-    // Utilities
+    // Utility functions
     getDoctorById,
     getBusinessPartnerById,
     getEmployeeById,
     getDistributorById,
     getPatientById,
+    
+    // Stats
     getTotalStakeholders,
     getActivePatients
   };

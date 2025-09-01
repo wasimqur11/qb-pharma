@@ -1,43 +1,37 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "sqlite"
-  url      = "file:./dev.db"
+  url      = env("DATABASE_URL")
 }
 
-// User Management
 model PharmaUnit {
-  id            String   @id @default(cuid())
-  name          String
-  address       String
-  contactEmail  String
-  contactPhone  String
-  licenseNumber String   @unique
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  // Relations
-  users         User[]
-  doctors       Doctor[]
+  id               String            @id @default(cuid())
+  name             String
+  address          String
+  contactEmail     String
+  contactPhone     String
+  licenseNumber    String            @unique
+  isActive         Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
   businessPartners BusinessPartner[]
-  employees     Employee[]
-  distributors  Distributor[]
-  patients      Patient[]
-  transactions  Transaction[]
+  distributors     Distributor[]
+  doctors          Doctor[]
+  employees        Employee[]
+  patients         Patient[]
+  transactions     Transaction[]
+  users            User[]
 
   @@map("pharma_units")
 }
 
 model User {
-  id                    String    @id @default(cuid())
-  username              String    @unique
-  email                 String    @unique
+  id                    String           @id @default(cuid())
+  username              String           @unique
+  email                 String           @unique
   passwordHash          String
   name                  String
   phone                 String?
@@ -45,111 +39,98 @@ model User {
   pharmaUnitId          String?
   linkedStakeholderId   String?
   linkedStakeholderType String?
-  isActive              Boolean   @default(true)
+  isActive              Boolean          @default(true)
   lastLogin             DateTime?
   createdBy             String?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
-
-  // Relations
-  pharmaUnit            PharmaUnit? @relation(fields: [pharmaUnitId], references: [id])
-  createdTransactions   Transaction[] @relation("TransactionCreatedBy")
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  createdTransactions   Transaction[]    @relation("TransactionCreatedBy")
   userPermissions       UserPermission[]
+  pharmaUnit            PharmaUnit?      @relation(fields: [pharmaUnitId], references: [id])
 
   @@map("users")
 }
 
 model UserPermission {
-  id         String            @id @default(cuid())
+  id         String   @id @default(cuid())
   userId     String
   module     String
   actions    String
   scope      String
   conditions String?
-  createdAt  DateTime          @default(now())
-
-  // Relations
-  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_permissions")
 }
 
-// Stakeholders
 model Doctor {
-  id               String   @id @default(cuid())
-  name             String
-  consultationFee  Float
-  commissionRate   Float
-  email            String
-  phone            String
-  pharmaUnitId     String
-  createdAt        DateTime @default(now())
-
-  // Relations
-  pharmaUnit       PharmaUnit @relation(fields: [pharmaUnitId], references: [id])
+  id              String     @id @default(cuid())
+  name            String
+  consultationFee Float
+  commissionRate  Float
+  email           String
+  phone           String
+  pharmaUnitId    String
+  createdAt       DateTime   @default(now())
+  pharmaUnit      PharmaUnit @relation(fields: [pharmaUnitId], references: [id])
 
   @@map("doctors")
 }
 
 model BusinessPartner {
-  id                   String   @id @default(cuid())
-  name                 String
-  ownershipPercentage  Float
-  email                String
-  phone                String
-  pharmaUnitId         String
-  createdAt            DateTime @default(now())
-
-  // Relations
-  pharmaUnit           PharmaUnit @relation(fields: [pharmaUnitId], references: [id])
-  settlementRecords    SettlementRecord[]
+  id                  String             @id @default(cuid())
+  name                String
+  ownershipPercentage Float
+  email               String
+  phone               String
+  pharmaUnitId        String
+  createdAt           DateTime           @default(now())
+  pharmaUnit          PharmaUnit         @relation(fields: [pharmaUnitId], references: [id])
+  settlementRecords   SettlementRecord[]
 
   @@map("business_partners")
 }
 
 model Employee {
-  id               String            @id @default(cuid())
-  name             String
-  salary           Float
-  department       String
-  email            String
-  phone            String
-  salaryDueDate    String
-  lastPaidDate     String?
-  salaryFrequency  String            @default("monthly")
-  pharmaUnitId     String
-  createdAt        DateTime          @default(now())
-
-  // Relations
-  pharmaUnit       PharmaUnit        @relation(fields: [pharmaUnitId], references: [id])
+  id              String     @id @default(cuid())
+  name            String
+  salary          Float
+  department      String
+  email           String
+  phone           String
+  salaryDueDate   String
+  lastPaidDate    String?
+  salaryFrequency String     @default("monthly")
+  pharmaUnitId    String
+  createdAt       DateTime   @default(now())
+  pharmaUnit      PharmaUnit @relation(fields: [pharmaUnitId], references: [id])
 
   @@map("employees")
 }
 
 model Distributor {
-  id                   String            @id @default(cuid())
-  name                 String
-  contactPerson        String
-  email                String
-  phone                String
-  address              String
-  creditBalance        Float             @default(0)
-  initialBalanceDate   String?
-  paymentSchedule      String
-  paymentPercentage    Float
-  nextPaymentDue       String
-  lastPaymentDate      String?
-  pharmaUnitId         String
-  createdAt            DateTime          @default(now())
-
-  // Relations
-  pharmaUnit           PharmaUnit        @relation(fields: [pharmaUnitId], references: [id])
+  id                 String     @id @default(cuid())
+  name               String
+  contactPerson      String
+  email              String
+  phone              String
+  address            String
+  creditBalance      Float      @default(0)
+  initialBalanceDate String?
+  paymentSchedule    String
+  paymentPercentage  Float
+  nextPaymentDue     String
+  lastPaymentDate    String?
+  pharmaUnitId       String
+  createdAt          DateTime   @default(now())
+  pharmaUnit         PharmaUnit @relation(fields: [pharmaUnitId], references: [id])
 
   @@map("distributors")
 }
 
 model Patient {
-  id               String    @id @default(cuid())
+  id               String     @id @default(cuid())
   name             String
   email            String?
   phone            String
@@ -157,61 +138,52 @@ model Patient {
   dateOfBirth      String?
   emergencyContact String?
   emergencyPhone   String?
-  creditLimit      Float     @default(0)
-  currentCredit    Float     @default(0)
+  creditLimit      Float      @default(0)
+  currentCredit    Float      @default(0)
   lastVisit        DateTime?
   notes            String?
-  isActive         Boolean   @default(true)
+  isActive         Boolean    @default(true)
   pharmaUnitId     String
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-
-  // Relations
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
   pharmaUnit       PharmaUnit @relation(fields: [pharmaUnitId], references: [id])
 
   @@map("patients")
 }
 
-// Transactions
 model Transaction {
-  id                String              @id @default(cuid())
-  category          String
-  stakeholderId     String?
-  stakeholderType   String?
-  amount            Float
-  description       String
-  billNo            String?
-  date              DateTime
-  createdBy         String
-  pharmaUnitId      String
-  createdAt         DateTime            @default(now())
-
-  // Relations
-  pharmaUnit        PharmaUnit          @relation(fields: [pharmaUnitId], references: [id])
-  creator           User                @relation("TransactionCreatedBy", fields: [createdBy], references: [id])
+  id              String     @id @default(cuid())
+  category        String
+  stakeholderId   String?
+  stakeholderType String?
+  amount          Float
+  description     String
+  billNo          String?
+  date            DateTime
+  createdBy       String
+  pharmaUnitId    String
+  createdAt       DateTime   @default(now())
+  creator         User       @relation("TransactionCreatedBy", fields: [createdBy], references: [id])
+  pharmaUnit      PharmaUnit @relation(fields: [pharmaUnitId], references: [id])
 
   @@map("transactions")
 }
 
-// Settlement Management
 model SettlementRecord {
-  id              String          @id @default(cuid())
-  settlementId    String
-  partnerId       String
-  settlementDate  DateTime
-  owedAmount      Float
-  actualAmount    Float
-  equityChange    Float
-  reason          String?
-  createdAt       DateTime        @default(now())
-
-  // Relations
-  partner         BusinessPartner @relation(fields: [partnerId], references: [id])
+  id             String          @id @default(cuid())
+  settlementId   String
+  partnerId      String
+  settlementDate DateTime
+  owedAmount     Float
+  actualAmount   Float
+  equityChange   Float
+  reason         String?
+  createdAt      DateTime        @default(now())
+  partner        BusinessPartner @relation(fields: [partnerId], references: [id])
 
   @@map("settlement_records")
 }
 
-// Configuration
 model Department {
   id          String   @id @default(cuid())
   name        String   @unique

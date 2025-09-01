@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import type { Transaction, DashboardStats, PayableBalance, StakeholderType } from '../types';
 import { 
@@ -11,13 +11,19 @@ import {
   EXPENSE_CATEGORIES
 } from '../constants/transactionTypes';
 import { useStakeholders } from './StakeholderContext';
+import { useAuth } from './AuthContext';
+import apiClient from '../utils/apiClient';
 
 interface TransactionContextType {
   // Data
   transactions: Transaction[];
+  isLoading: boolean;
+  
+  // Data loading
+  loadTransactions: () => Promise<void>;
   
   // Operations
-  addTransaction: (transaction: Omit<Transaction, 'id' | 'createdAt'>) => void;
+  addTransaction: (transaction: Omit<Transaction, 'id' | 'createdAt'>) => Promise<void>;
   updateTransaction: (id: string, updates: Partial<Transaction>) => void;
   deleteTransaction: (id: string) => void;
   
@@ -92,91 +98,196 @@ interface TransactionProviderProps {
 }
 
 export const TransactionProvider: React.FC<TransactionProviderProps> = ({ children }) => {
-  // Start with empty transactions - stakeholders are pre-loaded for testing
+  // State management
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const { doctors, businessPartners, employees, distributors, patients, updateEmployeeSalaryDueDate, updateDistributor, updatePatient } = useStakeholders();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+
+  // Load transactions from backend database
+  const loadTransactions = async () => {
+    if (!isAuthenticated || authLoading) {
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      console.log('Loading transactions from database...');
+      
+      const response = await apiClient.getTransactions();
+      if (response.success) {
+        // Handle new response structure with pagination
+        const transactionsData = response.data?.transactions || response.data || [];
+        // Convert date strings to Date objects
+        const parsedTransactions = transactionsData.map((t: any) => ({
+          ...t,
+          date: new Date(t.date),
+          createdAt: new Date(t.createdAt)
+        }));
+        setTransactions(parsedTransactions);
+        console.log('Loaded', parsedTransactions?.length || 0, 'transactions from database');
+      } else {
+        console.error('Failed to load transactions:', response.error);
+        setTransactions([]);
+      }
+    } catch (error) {
+      console.error('Error loading transactions:', error);
+      setTransactions([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Load transactions when user is authenticated
+  useEffect(() => {
+    if (isAuthenticated && !authLoading) {
+      loadTransactions();
+    }
+  }, [isAuthenticated, authLoading]);
 
   // Operations
-  const addTransaction = (transactionData: Omit<Transaction, 'id' | 'createdAt'>) => {
-    // Generate a more robust unique ID
-    const timestamp = Date.now();
-    const randomSuffix = Math.random().toString(36).substr(2, 5);
-    const uniqueId = `${timestamp}-${randomSuffix}`;
-    
-    const newTransaction: Transaction = {
-      ...transactionData,
-      id: uniqueId,
-      createdAt: new Date()
-    };
-    setTransactions(prev => [newTransaction, ...prev]);
+  const addTransaction = async (transactionData: Omit<Transaction, 'id' | 'createdAt'>) => {
+    try {
+      console.log('Creating transaction in database...');
+      
+      // Save to backend database
+      const response = await apiClient.createTransaction(transactionData);
+      
+      if (response.success) {
+        const newTransaction = {
+          ...response.data,
+          date: new Date(response.data.date),
+          createdAt: new Date(response.data.createdAt)
+        };
+        
+        // Add to local state for immediate UI update
+        setTransactions(prev => [newTransaction, ...prev]);
+        
+        console.log('Transaction created successfully:', newTransaction.id);
+        
+        // Continue with existing business logic for stakeholder updates
+        await handleStakeholderUpdates(newTransaction);
+      } else {
+        console.error('Failed to create transaction:', response.error);
+        throw new Error(response.error || 'Failed to create transaction');
+      }
+    } catch (error) {
+      console.error('Error adding transaction:', error);
+      throw error;
+    }
+  };
+
+  // Handle stakeholder-specific updates after transaction creation
+  const handleStakeholderUpdates = async (transaction: Transaction) => {
     
     // Auto-update employee salary due date if this is an employee payment
-    if (newTransaction.category === 'employee_payment' && newTransaction.stakeholderId) {
-      updateEmployeeSalaryDueDate(newTransaction.stakeholderId);
+    if (transaction.category === 'employee_payment' && transaction.stakeholderId) {
+      try {
+        await updateEmployeeSalaryDueDate(transaction.stakeholderId);
+      } catch (error) {
+        console.error('Failed to update employee salary due date:', error);
+      }
     }
     
     // Auto-update distributor credit balance if this is a credit purchase or credit note
-    if ((newTransaction.category === 'distributor_credit_purchase' || newTransaction.category === 'distributor_credit_note') && newTransaction.stakeholderId) {
+    if ((transaction.category === 'distributor_credit_purchase' || transaction.category === 'distributor_credit_note') && transaction.stakeholderId) {
       // Use callback to get current distributor state to avoid stale closure
-      const currentDistributor = distributors.find(d => d.id === newTransaction.stakeholderId);
+      const currentDistributor = distributors.find(d => d.id === transaction.stakeholderId);
       if (currentDistributor) {
-        const balanceChange = newTransaction.category === 'distributor_credit_purchase' 
-          ? newTransaction.amount  // Add for credit purchase
-          : -newTransaction.amount; // Subtract for credit note (return)
-        updateDistributor(newTransaction.stakeholderId, {
-          creditBalance: Math.max(0, currentDistributor.creditBalance + balanceChange)
-        });
+        const balanceChange = transaction.category === 'distributor_credit_purchase' 
+          ? transaction.amount  // Add for credit purchase
+          : -transaction.amount; // Subtract for credit note (return)
+        try {
+          await updateDistributor(transaction.stakeholderId, {
+            creditBalance: Math.max(0, currentDistributor.creditBalance + balanceChange)
+          });
+        } catch (error) {
+          console.error('Failed to update distributor credit balance:', error);
+        }
       }
     }
 
     // Auto-update patient credit balance if this is a credit sale
-    if (newTransaction.category === 'patient_credit_sale' && newTransaction.stakeholderId) {
-      const currentPatient = patients.find(p => p.id === newTransaction.stakeholderId);
+    if (transaction.category === 'patient_credit_sale' && transaction.stakeholderId) {
+      const currentPatient = patients.find(p => p.id === transaction.stakeholderId);
       if (currentPatient) {
-        updatePatient(newTransaction.stakeholderId, {
-          currentCredit: currentPatient.currentCredit + newTransaction.amount
-        });
+        try {
+          await updatePatient(transaction.stakeholderId, {
+            currentCredit: currentPatient.currentCredit + transaction.amount
+          });
+        } catch (error) {
+          console.error('Failed to update patient credit balance:', error);
+        }
       }
     }
 
     // Auto-update patient credit balance if this is a payment (reduce their outstanding credit)
-    if (newTransaction.category === 'patient_payment' && newTransaction.stakeholderId) {
-      const currentPatient = patients.find(p => p.id === newTransaction.stakeholderId);
+    if (transaction.category === 'patient_payment' && transaction.stakeholderId) {
+      const currentPatient = patients.find(p => p.id === transaction.stakeholderId);
       if (currentPatient) {
-        updatePatient(newTransaction.stakeholderId, {
-          currentCredit: Math.max(0, currentPatient.currentCredit - newTransaction.amount)
-        });
+        try {
+          await updatePatient(transaction.stakeholderId, {
+            currentCredit: Math.max(0, currentPatient.currentCredit - transaction.amount)
+          });
+        } catch (error) {
+          console.error('Failed to update patient credit balance:', error);
+        }
       }
     }
   };
 
-  const updateTransaction = (id: string, updates: Partial<Transaction>) => {
-    setTransactions(prev => {
-      const updatedTransactions = prev.map(transaction => {
-        if (transaction.id === id) {
-          // Create a completely new object to ensure React detects the change
-          return {
-            ...transaction,
-            ...updates,
-            // Ensure date is properly handled
-            date: updates.date instanceof Date ? updates.date : transaction.date
-          };
-        }
-        return transaction;
-      });
+  const updateTransaction = async (id: string, updates: Partial<Transaction>) => {
+    try {
+      console.log('Updating transaction in database:', id);
       
-      // Verify exactly one transaction was updated
-      const changedCount = updatedTransactions.filter((t, index) => t !== prev[index]).length;
-      if (changedCount !== 1) {
-        console.warn(`updateTransaction: Expected 1 change, but ${changedCount} transactions were affected for ID ${id}`);
+      const response = await apiClient.updateTransaction(id, updates);
+      
+      if (response.success) {
+        // Update local state
+        setTransactions(prev => {
+          const updatedTransactions = prev.map(transaction => {
+            if (transaction.id === id) {
+              return {
+                ...transaction,
+                ...updates,
+                // Ensure date is properly handled
+                date: updates.date instanceof Date ? updates.date : transaction.date
+              };
+            }
+            return transaction;
+          });
+          return updatedTransactions;
+        });
+        
+        console.log('Transaction updated successfully:', id);
+      } else {
+        console.error('Failed to update transaction:', response.error);
+        throw new Error(response.error || 'Failed to update transaction');
       }
-      
-      return updatedTransactions;
-    });
+    } catch (error) {
+      console.error('Error updating transaction:', error);
+      throw error;
+    }
   };
 
-  const deleteTransaction = (id: string) => {
-    setTransactions(prev => prev.filter(transaction => transaction.id !== id));
+  const deleteTransaction = async (id: string) => {
+    try {
+      console.log('Deleting transaction from database:', id);
+      
+      const response = await apiClient.deleteTransaction(id);
+      
+      if (response.success) {
+        // Remove from local state
+        setTransactions(prev => prev.filter(transaction => transaction.id !== id));
+        console.log('Transaction deleted successfully:', id);
+      } else {
+        console.error('Failed to delete transaction:', response.error);
+        throw new Error(response.error || 'Failed to delete transaction');
+      }
+    } catch (error) {
+      console.error('Error deleting transaction:', error);
+      throw error;
+    }
   };
 
   // Analytics - Separated by Business Type
@@ -714,6 +825,10 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
   const contextValue: TransactionContextType = {
     // Data
     transactions,
+    isLoading,
+    
+    // Data loading
+    loadTransactions,
     
     // Operations
     addTransaction,

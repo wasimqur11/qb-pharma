@@ -448,13 +448,18 @@ const DarkCorporateDashboard: React.FC = () => {
     setShowEditTransactionForm(true);
   };
 
-  const handleEditTransactionSubmit = (transactionId: string, updatedData: Partial<Transaction>) => {
-    updateTransaction(transactionId, updatedData);
-    setShowEditTransactionForm(false);
-    setSelectedTransactionForEdit(null);
-    
-    // Show success message
-    alert('Transaction Updated: The transaction has been updated successfully.');
+  const handleEditTransactionSubmit = async (transactionId: string, updatedData: Partial<Transaction>) => {
+    try {
+      await updateTransaction(transactionId, updatedData);
+      setShowEditTransactionForm(false);
+      setSelectedTransactionForEdit(null);
+      
+      // Show success message
+      alert('Transaction Updated: The transaction has been updated successfully.');
+    } catch (error) {
+      console.error('Error updating transaction:', error);
+      alert('Error updating transaction. Please try again.');
+    }
   };
 
   const handlePaymentProcessed = (batch: any) => {

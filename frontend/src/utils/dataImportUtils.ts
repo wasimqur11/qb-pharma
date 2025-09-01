@@ -70,7 +70,7 @@ export function parseCSVData(csvContent: string): ExcelRowData[] {
 }
 
 /**
- * Parse a CSV line handling quoted values with commas
+ * Parse a CSV line handling quoted values with commas and empty cells
  */
 function parseCSVLine(line: string): string[] {
   const columns: string[] = [];
@@ -91,6 +91,12 @@ function parseCSVLine(line: string): string[] {
   }
   
   columns.push(current.trim());
+  
+  // Ensure we have at least 7 columns (pad with empty strings if needed)
+  while (columns.length < 7) {
+    columns.push('');
+  }
+  
   return columns;
 }
 
@@ -305,19 +311,42 @@ function categorizeExpense(amount: number, remarks: string, date: Date, id: numb
 function parseDate(dateString: string): Date | null {
   if (!dateString) return null;
   
-  // Handle DD-MMM-YYYY format (e.g., "01-Jun-2025")
+  // Handle DD-MMM-YYYY and DD-MMM-YY formats (e.g., "01-Jun-2025" or "01-Jun-25")
   const monthNames = {
     'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
     'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
   };
   
+  // Try 4-digit year first
   const ddMmmYyyy = /^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/;
-  const match = dateString.match(ddMmmYyyy);
-  if (match) {
-    const [, dayStr, monthStr, yearStr] = match;
+  const match4 = dateString.match(ddMmmYyyy);
+  if (match4) {
+    const [, dayStr, monthStr, yearStr] = match4;
     const day = parseInt(dayStr);
     const month = monthNames[monthStr as keyof typeof monthNames];
     const year = parseInt(yearStr);
+    
+    if (month !== undefined) {
+      return new Date(year, month, day);
+    }
+  }
+  
+  // Try 2-digit year (e.g., "01-Jun-25")
+  const ddMmmYy = /^(\d{1,2})-([A-Za-z]{3})-(\d{2})$/;
+  const match2 = dateString.match(ddMmmYy);
+  if (match2) {
+    const [, dayStr, monthStr, yearStr] = match2;
+    const day = parseInt(dayStr);
+    const month = monthNames[monthStr as keyof typeof monthNames];
+    let year = parseInt(yearStr);
+    
+    // Convert 2-digit year to 4-digit year
+    // Assume years 00-49 are 2000-2049, years 50-99 are 1950-1999
+    if (year < 50) {
+      year += 2000;
+    } else {
+      year += 1900;
+    }
     
     if (month !== undefined) {
       return new Date(year, month, day);

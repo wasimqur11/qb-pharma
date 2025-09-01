@@ -211,7 +211,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Import apiClient dynamically to avoid circular dependency
       const { default: apiClient } = await import('../utils/apiClient');
       
-      // Call backend API
+      // Call backend API for authentication
       const response = await apiClient.login({ username, password });
       
       if (response.success && response.data) {
@@ -242,25 +242,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     } catch (error) {
       console.error('Login error:', error);
-      
-      // Fallback to mock authentication for development
-      const user = users.find(u => u.username === username && u.isActive);
-      const isValidPassword = credentials[username] === password;
-      
-      if (user && isValidPassword) {
-        const updatedUser = { ...user, lastLogin: new Date() };
-        
-        localStorage.setItem('qb_pharma_user', JSON.stringify(updatedUser));
-        localStorage.setItem('qb_pharma_auth', 'true');
-        
-        setAuthState({
-          isAuthenticated: true,
-          user: updatedUser,
-          isLoading: false
-        });
-        
-        return true;
-      }
       
       setAuthState({
         isAuthenticated: false,

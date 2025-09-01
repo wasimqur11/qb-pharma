@@ -15,7 +15,12 @@
     "lint": "eslint src --ext .ts",
     "test": "jest"
   },
-  "keywords": ["pharma", "management", "api", "healthcare"],
+  "keywords": [
+    "pharma",
+    "management",
+    "api",
+    "healthcare"
+  ],
   "author": "QB Pharma Team",
   "license": "MIT",
   "dependencies": {
@@ -27,6 +32,7 @@
     "express-rate-limit": "^7.4.1",
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
+    "sqlite3": "^5.1.7",
     "zod": "^3.23.8"
   },
   "devDependencies": {

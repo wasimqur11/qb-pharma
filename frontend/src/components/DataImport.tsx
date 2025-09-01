@@ -51,9 +51,10 @@ const DataImport: React.FC = () => {
     }
   };
 
-  const handleImport = () => {
+  const handleImport = async () => {
     if (!importResult) return;
 
+    setIsProcessing(true);
     try {
       console.log('Starting import of', importResult.transactions.length, 'transactions');
       
@@ -61,15 +62,16 @@ const DataImport: React.FC = () => {
       let successCount = 0;
       let errorCount = 0;
       
-      importResult.transactions.forEach((transaction, index) => {
+      for (const [index, transaction] of importResult.transactions.entries()) {
         try {
-          addTransaction(transaction);
+          await addTransaction(transaction);
           successCount++;
+          console.log(`Imported transaction ${index + 1}/${importResult.transactions.length}`);
         } catch (err) {
           console.error(`Error importing transaction ${index + 1}:`, err);
           errorCount++;
         }
-      });
+      }
 
       console.log(`Import completed: ${successCount} successful, ${errorCount} failed`);
       
@@ -83,6 +85,8 @@ const DataImport: React.FC = () => {
     } catch (error) {
       console.error('Import error:', error);
       alert(`Error importing data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
