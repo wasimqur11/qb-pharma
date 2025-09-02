@@ -1,6 +1,6 @@
 #!/bin/bash
-# QB Pharma Deployment Script
-# This script handles both fresh deployments and updates automatically
+# QB Pharma Deployment Script - Updated for Production
+# Handles both fresh deployments and updates with enhanced error handling
 
 set -e  # Exit on any error
 
@@ -9,41 +9,52 @@ echo "🚀 Starting QB Pharma Deployment..."
 # Function to handle errors
 handle_error() {
     echo "❌ Error: $1"
+    echo "📋 Checking system status..."
+    echo "Backend processes: $(pgrep -f "node.*qb-pharma" | wc -l)"
+    echo "Nginx status: $(systemctl is-active nginx 2>/dev/null || echo 'not running')"
     exit 1
 }
 
+# Function to display system info
+display_system_info() {
+    echo "🖥️  System Information:"
+    echo "   OS: $(lsb_release -d 2>/dev/null | cut -f2- || uname -s)"
+    echo "   Node: $(node --version 2>/dev/null || echo 'not installed')"
+    echo "   npm: $(npm --version 2>/dev/null || echo 'not installed')"
+    echo "   nginx: $(nginx -v 2>&1 | head -1 || echo 'not installed')"
+    echo ""
+}
+
 # Configuration - UPDATE THESE VALUES
-REPO_URL="https://github.com/wasimqur11/qb-pharma.git"
-PROJECT_DIR="~/qb-pharma"
+REPO_URL="git@github.com:wasimqur11/qb-pharma.git"
+PROJECT_DIR="/root/qb-pharma"
 BRANCH="main"
+
+# Display system info
+display_system_info
 
 # Step 1: Handle Git repository (clone or update)
 echo "📥 Step 1: Setting up Git repository..."
 
 if [ -d "$PROJECT_DIR" ]; then
     echo "🔄 Project directory exists - updating existing deployment..."
-    cd ~/qb-pharma || handle_error "Could not access qb-pharma directory"
+    cd $PROJECT_DIR || handle_error "Could not access qb-pharma directory"
     
     # Check if it's a git repository
     if [ -d ".git" ]; then
-        echo "🔧 Handling potential conflicts..."
+        echo "🔧 Handling potential conflicts and updates..."
         
-        # Remove database file that might cause conflicts
+        # Backup database if it exists
         if [ -f "backend/prisma/data/qb-pharma.db" ]; then
             echo "Backing up existing database..."
-            cp backend/prisma/data/qb-pharma.db backend/prisma/data/qb-pharma.db.backup.$(date +%Y%m%d_%H%M%S)
-            rm backend/prisma/data/qb-pharma.db
+            mkdir -p backend/prisma/data/backups
+            cp backend/prisma/data/qb-pharma.db backend/prisma/data/backups/qb-pharma.db.backup.$(date +%Y%m%d_%H%M%S)
         fi
         
-        # Reset any local schema changes
-        if [ -f "backend/prisma/schema.prisma" ]; then
-            git checkout -- backend/prisma/schema.prisma 2>/dev/null || true
-        fi
+        # Stash any local changes
+        git stash push -m "Auto-stash before deployment $(date)" 2>/dev/null || true
         
-        # Stash any other local changes
-        git stash push -m "Auto-stash before deployment" 2>/dev/null || true
-        
-        # Pull latest changes
+        # Pull latest changes with SSH
         git pull origin $BRANCH || handle_error "Failed to pull changes from Git"
         echo "✅ Successfully pulled latest changes"
     else
@@ -51,11 +62,11 @@ if [ -d "$PROJECT_DIR" ]; then
     fi
 else
     echo "📦 Fresh deployment - cloning repository..."
-    cd ~ || handle_error "Could not access home directory"
+    cd $(dirname $PROJECT_DIR) || handle_error "Could not access parent directory"
     
-    # Clone the repository
-    git clone $REPO_URL qb-pharma || handle_error "Failed to clone repository"
-    cd qb-pharma || handle_error "Could not access cloned directory"
+    # Clone the repository using SSH
+    git clone $REPO_URL $(basename $PROJECT_DIR) || handle_error "Failed to clone repository"
+    cd $PROJECT_DIR || handle_error "Could not access cloned directory"
     
     # Switch to the correct branch if not main
     if [ "$BRANCH" != "main" ]; then
@@ -67,44 +78,60 @@ fi
 
 # Step 2: Install dependencies
 echo "📦 Step 2: Installing dependencies..."
-cd backend && npm install || handle_error "Failed to install backend dependencies"
-cd ../frontend && npm install || handle_error "Failed to install frontend dependencies"
+
+# Check Node.js version
+NODE_VERSION=$(node --version | cut -d'v' -f2)
+REQUIRED_NODE="18"
+if ! node -pe "process.exit(parseInt(process.version.slice(1)) >= $REQUIRED_NODE ? 0 : 1)" 2>/dev/null; then
+    handle_error "Node.js version $REQUIRED_NODE or higher is required. Found: v$NODE_VERSION"
+fi
+
+# Install backend dependencies
+echo "Installing backend dependencies..."
+cd backend
+npm ci --only=production || npm install || handle_error "Failed to install backend dependencies"
+
+# Install frontend dependencies
+echo "Installing frontend dependencies..."
+cd ../frontend
+npm ci --only=production || npm install || handle_error "Failed to install frontend dependencies"
 cd ..
 
-echo "✅ Dependencies installed"
+echo "✅ Dependencies installed successfully"
 
 # Step 3: Setup environment variables
 echo "🔧 Step 3: Setting up environment variables..."
 
 # Get server IP for local communication
-SERVER_IP=$(hostname -I | awk '{print $1}')
+SERVER_IP=$(hostname -I | awk '{print $1}' | tr -d ' ')
 if [ -z "$SERVER_IP" ]; then
     SERVER_IP="127.0.0.1"
 fi
+
+# Generate secure JWT secret
+JWT_SECRET="qb-pharma-jwt-$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)-$(date +%s)"
 
 # Create backend .env file
 cat > backend/.env << EOF
 NODE_ENV=production
 PORT=3001
-# Bind to all interfaces for local network access
 HOST=0.0.0.0
 DATABASE_URL="file:./prisma/data/qb-pharma.db"
-JWT_SECRET=your-super-secure-jwt-secret-change-this-in-production-$(date +%s)
-# Allow frontend from nginx proxy
+JWT_SECRET=$JWT_SECRET
 FRONTEND_URL=http://localhost
 RATE_LIMIT_WINDOW_MS=900000
 RATE_LIMIT_MAX_REQUESTS=1000
-# CORS settings for local communication
 CORS_ORIGIN=http://localhost,http://$SERVER_IP,http://127.0.0.1:3000
+# Prisma settings
+PRISMA_HIDE_UPDATE_MESSAGE=true
+PRISMA_TELEMETRY_INFORMATION=false
 EOF
 
-# Create frontend .env file for build time
+# Create frontend .env file
 cat > frontend/.env << EOF
-# Use relative URLs for API calls (handled by nginx proxy)
-VITE_API_URL=""
+VITE_API_URL="/api"
 VITE_APP_NAME=QB Pharma
 VITE_NODE_ENV=production
-# Local communication settings
 VITE_LOCAL_API=true
 EOF
 
@@ -114,13 +141,16 @@ echo "✅ Environment variables configured"
 echo "🗄️  Step 4: Setting up database..."
 cd backend
 
+# Ensure data directory exists
+mkdir -p prisma/data
+
 # Generate Prisma client
 npx prisma generate || handle_error "Failed to generate Prisma client"
 
-# Setup database
-npx prisma db push || handle_error "Failed to setup database schema"
+# Setup database schema
+npx prisma db push --accept-data-loss || handle_error "Failed to setup database schema"
 
-# Ensure admin user always exists (create or update)
+# Setup admin user
 echo "👤 Setting up admin user..."
 node -e "
 const { PrismaClient } = require('@prisma/client');
@@ -129,8 +159,8 @@ const prisma = new PrismaClient();
 
 async function setupAdmin() {
   try {
-    // Create pharma unit if it doesn't exist
-    await prisma.pharmaUnit.upsert({
+    // Create pharma unit
+    const pharmaUnit = await prisma.pharmaUnit.upsert({
       where: { id: 'pharma-001' },
       update: {},
       create: {
@@ -144,12 +174,12 @@ async function setupAdmin() {
       }
     });
 
-    // Always ensure admin user exists with correct credentials
-    const passwordHash = await bcrypt.hash('admin123', 10);
-    await prisma.user.upsert({
+    // Create admin user
+    const passwordHash = await bcrypt.hash('admin123', 12);
+    const user = await prisma.user.upsert({
       where: { username: 'admin' },
       update: {
-        passwordHash: passwordHash,
+        passwordHash,
         name: 'System Administrator',
         role: 'super_admin',
         email: 'admin@qbpharma.com',
@@ -160,7 +190,7 @@ async function setupAdmin() {
         id: 'user-001',
         username: 'admin',
         email: 'admin@qbpharma.com',
-        passwordHash: passwordHash,
+        passwordHash,
         name: 'System Administrator',
         role: 'super_admin',
         pharmaUnitId: 'pharma-001',
@@ -168,9 +198,11 @@ async function setupAdmin() {
       }
     });
     
-    console.log('✅ Admin user ensured successfully');
+    console.log('✅ Admin user setup completed');
+    console.log('   Username: admin');
+    console.log('   Password: admin123');
   } catch (error) {
-    console.error('Error setting up admin user:', error.message);
+    console.error('❌ Error setting up admin user:', error.message);
     throw error;
   } finally {
     await prisma.\$disconnect();
@@ -186,59 +218,89 @@ echo "✅ Database setup completed"
 # Step 5: Build applications
 echo "🔨 Step 5: Building applications..."
 
-# Build frontend (skip TypeScript errors)
-echo "Building frontend..."
-cd frontend
-npx vite build --mode production || handle_error "Failed to build frontend"
+# Build backend
+echo "Building backend..."
+cd backend
+npm run build || handle_error "Failed to build backend"
+
+# Verify backend build
+if [ ! -f "dist/index.js" ]; then
+    handle_error "Backend build failed - dist/index.js not found"
+fi
 cd ..
 
-# Backend is already compiled, but let's make sure compiled files exist
-if [ ! -f "backend/dist/index.js" ]; then
-    echo "Backend compiled files missing, attempting to build..."
-    cd backend
-    # Use existing compiled files or try to build
-    npm run build 2>/dev/null || echo "⚠️  Using existing compiled backend files"
-    cd ..
+# Build frontend
+echo "Building frontend..."
+cd frontend
+npm run build || handle_error "Failed to build frontend"
+
+# Verify frontend build
+if [ ! -d "dist" ] || [ ! -f "dist/index.html" ]; then
+    handle_error "Frontend build failed - dist directory or index.html not found"
 fi
+cd ..
 
 echo "✅ Applications built successfully"
 
-# Step 6: Setup web server for frontend
-echo "🌐 Step 6: Setting up web server..."
+# Step 6: Setup nginx web server
+echo "🌐 Step 6: Setting up nginx web server..."
 
-# Check if nginx is installed
-if command -v nginx >/dev/null 2>&1; then
-    echo "Setting up nginx configuration..."
-    
-    # Create nginx config for qb-pharma with local communication optimization
-    sudo tee /etc/nginx/sites-available/qb-pharma > /dev/null << EOF
+# Install nginx if not present
+if ! command -v nginx >/dev/null 2>&1; then
+    echo "Installing nginx..."
+    apt-get update && apt-get install -y nginx || handle_error "Failed to install nginx"
+fi
+
+# Create nginx configuration
+sudo tee /etc/nginx/sites-available/qb-pharma > /dev/null << EOF
 server {
-    listen 80;
-    server_name localhost $SERVER_IP;
-    root $(pwd)/frontend/dist;
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name localhost $SERVER_IP _;
+    root $PROJECT_DIR/frontend/dist;
     index index.html;
 
-    # Optimize for local communication
-    client_max_body_size 20M;
-    
-    # Security headers for local deployment
-    add_header X-Frame-Options SAMEORIGIN;
-    add_header X-Content-Type-Options nosniff;
+    # Security headers
+    add_header X-Frame-Options SAMEORIGIN always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    # Client settings
+    client_max_body_size 50M;
+    client_body_timeout 60s;
+    client_header_timeout 60s;
+
+    # Gzip compression
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types
+        text/plain
+        text/css
+        text/xml
+        text/javascript
+        application/json
+        application/javascript
+        application/xml+rss
+        application/atom+xml
+        image/svg+xml;
 
     # Handle client-side routing (SPA)
     location / {
         try_files \$uri \$uri/ /index.html;
-        # Cache static assets locally
-        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+        
+        # Cache static assets
+        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)\$ {
             expires 1y;
             add_header Cache-Control "public, immutable";
+            access_log off;
         }
     }
 
-    # API proxy to backend (local communication)
+    # API proxy to backend
     location /api/ {
-        # Use local loopback for fastest communication
-        proxy_pass http://127.0.0.1:3001;
+        proxy_pass http://127.0.0.1:3001/api/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -248,171 +310,190 @@ server {
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_cache_bypass \$http_upgrade;
         
-        # Local communication optimizations
-        proxy_connect_timeout 5s;
+        # Timeouts
+        proxy_connect_timeout 10s;
         proxy_send_timeout 60s;
         proxy_read_timeout 60s;
         proxy_buffering off;
     }
 
-    # Health check endpoint (local)
+    # Health check endpoint
     location /health {
         proxy_pass http://127.0.0.1:3001/health;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         access_log off;
     }
+
+    # Deny access to sensitive files
+    location ~ /\\.(?!well-known\\/) {
+        deny all;
+    }
+    
+    location ~ \\.(env|log|backup)\$ {
+        deny all;
+    }
 }
 EOF
 
-    # Enable the site
-    sudo ln -sf /etc/nginx/sites-available/qb-pharma /etc/nginx/sites-enabled/qb-pharma 2>/dev/null || true
-    
-    # Test nginx configuration
-    sudo nginx -t || handle_error "Nginx configuration test failed"
-    
-    # Reload nginx
-    sudo systemctl reload nginx || handle_error "Failed to reload nginx"
-    
-    echo "✅ Nginx configured and reloaded"
-    WEB_SERVER="nginx"
-    WEB_URL="http://localhost"
-else
-    echo "⚠️  Nginx not found. Installing serve for frontend..."
-    npm install -g serve 2>/dev/null || echo "Could not install serve globally"
-    WEB_SERVER="serve"
-    WEB_URL="http://localhost:3000"
-fi
+# Remove default nginx site
+sudo rm -f /etc/nginx/sites-enabled/default
 
-echo "✅ Web server setup completed"
+# Enable qb-pharma site
+sudo ln -sf /etc/nginx/sites-available/qb-pharma /etc/nginx/sites-enabled/qb-pharma
 
-# Step 7: Kill existing processes and restart
-echo "🔄 Step 7: Restarting services..."
+# Test nginx configuration
+sudo nginx -t || handle_error "Nginx configuration test failed"
 
-# Kill existing processes
-echo "Stopping existing services..."
+# Start/restart nginx
+sudo systemctl enable nginx || true
+sudo systemctl restart nginx || handle_error "Failed to restart nginx"
+
+echo "✅ Nginx configured and started"
+
+# Step 7: Create systemd service for backend
+echo "⚙️  Step 7: Setting up systemd service..."
+
+sudo tee /etc/systemd/system/qb-pharma-backend.service > /dev/null << EOF
+[Unit]
+Description=QB Pharma Backend API
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=$PROJECT_DIR/backend
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=10
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=qb-pharma-backend
+
+# Security settings
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=$PROJECT_DIR/backend/prisma/data
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Reload systemd and enable service
+sudo systemctl daemon-reload
+sudo systemctl enable qb-pharma-backend.service
+
+echo "✅ Systemd service created"
+
+# Step 8: Start services
+echo "🔄 Step 8: Starting services..."
+
+# Stop any existing processes
+echo "Stopping existing processes..."
+sudo systemctl stop qb-pharma-backend.service 2>/dev/null || true
 pkill -f "node.*qb-pharma" 2>/dev/null || true
-pkill -f "npm.*start" 2>/dev/null || true
-pkill -f "serve.*frontend" 2>/dev/null || true
 
-# Wait for processes to stop
-sleep 2
+# Wait for cleanup
+sleep 3
 
-# Start backend with local network binding
-echo "Starting backend..."
-cd backend
-echo "Backend binding to all interfaces (0.0.0.0:3001) for local communication..."
-nohup npm start > ../logs/backend.log 2>&1 &
-BACKEND_PID=$!
-cd ..
+# Start backend service
+echo "Starting QB Pharma backend service..."
+sudo systemctl start qb-pharma-backend.service || handle_error "Failed to start backend service"
 
 # Wait for backend to start
 sleep 5
 
-# Check if backend is running
+# Verify backend is running
 if curl -f http://localhost:3001/health >/dev/null 2>&1; then
-    echo "✅ Backend started successfully on port 3001"
+    echo "✅ Backend service started successfully"
 else
-    handle_error "Backend failed to start"
-fi
-
-# Start frontend if not using nginx
-if [ "$WEB_SERVER" = "serve" ]; then
-    echo "Starting frontend with serve..."
-    cd frontend
-    nohup serve -s dist -l 3000 > ../logs/frontend.log 2>&1 &
-    FRONTEND_PID=$!
-    cd ..
-    
-    # Wait for frontend to start
-    sleep 3
-    
-    # Check if frontend is running
-    if curl -f http://localhost:3000 >/dev/null 2>&1; then
-        echo "✅ Frontend started successfully on port 3000"
+    echo "⚠️  Backend may still be starting..."
+    sleep 5
+    if curl -f http://localhost:3001/health >/dev/null 2>&1; then
+        echo "✅ Backend service is now running"
     else
-        echo "⚠️  Frontend may not be responding yet"
+        handle_error "Backend service failed to start"
     fi
 fi
 
-# Step 8: Create logs directory if it doesn't exist
-mkdir -p logs
+echo "✅ Services started successfully"
 
-# Step 9: Final verification
-echo "🧪 Step 8: Final verification..."
+# Step 9: Final verification and testing
+echo "🧪 Step 9: Final verification..."
 
-# Test login
-echo "Testing login API..."
+# Test login API
+echo "Testing authentication API..."
 LOGIN_RESPONSE=$(curl -s -X POST "http://localhost:3001/api/auth/login" \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123"}') || handle_error "Login API test failed"
+  -d '{"username":"admin","password":"admin123"}' \
+  --max-time 10) || handle_error "Login API test failed"
 
 if echo "$LOGIN_RESPONSE" | grep -q "token"; then
-    echo "✅ Login API working correctly"
+    echo "✅ Authentication API working correctly"
 else
-    echo "❌ Login API test failed: $LOGIN_RESPONSE"
-    handle_error "Login verification failed"
+    echo "❌ Login API response: $LOGIN_RESPONSE"
+    handle_error "Authentication verification failed"
 fi
 
-# Test transaction creation
-echo "Testing transaction API..."
-TOKEN=$(echo "$LOGIN_RESPONSE" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
-
-TRANSACTION_RESPONSE=$(curl -s -X POST "http://localhost:3001/api/transactions" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"category":"pharmacy_sale","amount":100,"description":"Deployment test","date":"2025-09-01T00:00:00.000Z"}') || echo "Transaction test warning"
-
-if echo "$TRANSACTION_RESPONSE" | grep -q "Transaction created successfully"; then
-    echo "✅ Transaction API working correctly"
+# Test health endpoint
+HEALTH_RESPONSE=$(curl -s "http://localhost:3001/health" --max-time 5) || handle_error "Health check failed"
+if echo "$HEALTH_RESPONSE" | grep -q "healthy\|ok"; then
+    echo "✅ Health check passed"
 else
-    echo "⚠️  Transaction API test warning (may still work): $TRANSACTION_RESPONSE"
+    echo "⚠️  Health check response: $HEALTH_RESPONSE"
+fi
+
+# Test frontend serving
+if curl -s "http://localhost/" --max-time 5 | grep -q "QB Pharma\|<!DOCTYPE html>"; then
+    echo "✅ Frontend serving correctly"
+else
+    echo "⚠️  Frontend may not be serving correctly"
 fi
 
 echo ""
-echo "🎉 Deployment completed successfully!"
+echo "🎉 QB Pharma Deployment Completed Successfully!"
 echo ""
-echo "📋 Service Status:"
-echo "   Backend:   http://localhost:3001 ✅"
-echo "   Frontend:  $WEB_URL ✅"
-echo "   Health:    http://localhost:3001/health"
-echo "   Web Server: $WEB_SERVER"
-echo "   Admin:     username: admin, password: admin123"
+echo "📋 Service Information:"
+echo "   Frontend:     http://localhost/ (nginx)"
+echo "   Backend API:  http://localhost:3001/api"
+echo "   Health Check: http://localhost:3001/health"
+echo "   Admin Login:  username: admin, password: admin123"
 echo ""
-echo "📁 Files:"
-echo "   Frontend: ./frontend/dist/"
-echo "   Backend:  ./backend/dist/"
-echo "   Database: ./backend/prisma/data/qb-pharma.db"
-echo "   Logs:     ./logs/backend.log"
-if [ "$WEB_SERVER" = "serve" ]; then
-echo "             ./logs/frontend.log"
-fi
-echo "   Env:      ./backend/.env, ./frontend/.env"
+echo "📁 Important Paths:"
+echo "   Project:      $PROJECT_DIR"
+echo "   Frontend:     $PROJECT_DIR/frontend/dist/"
+echo "   Backend:      $PROJECT_DIR/backend/dist/"
+echo "   Database:     $PROJECT_DIR/backend/prisma/data/qb-pharma.db"
+echo "   Nginx Config: /etc/nginx/sites-available/qb-pharma"
+echo "   Service:      /etc/systemd/system/qb-pharma-backend.service"
 echo ""
-echo "🌐 Access your application:"
-echo "   Website:  $WEB_URL"
-echo "   API:      http://localhost:3001/api"
-echo "   Health:   http://localhost:3001/health"
+echo "🔍 Management Commands:"
+echo "   Status:       sudo systemctl status qb-pharma-backend"
+echo "   Restart:      sudo systemctl restart qb-pharma-backend"
+echo "   Logs:         sudo journalctl -u qb-pharma-backend -f"
+echo "   Nginx:        sudo systemctl status nginx"
+echo "   Nginx Test:   sudo nginx -t"
 echo ""
-echo "🔍 To check status:"
-echo "   ps aux | grep node"
-echo "   curl http://localhost:3001/health"
-if [ "$WEB_SERVER" = "nginx" ]; then
-echo "   sudo nginx -t"
-echo "   sudo systemctl status nginx"
-fi
+echo "🌐 Access Your Application:"
+echo "   Main Site:    http://localhost/"
+echo "   API Docs:     http://localhost:3001/api"
+echo "   Health:       http://localhost:3001/health"
 echo ""
-echo "🛑 To stop services:"
-echo "   pkill -f 'node.*qb-pharma'"
-if [ "$WEB_SERVER" = "serve" ]; then
-echo "   pkill -f 'serve.*frontend'"
-fi
-echo ""
+echo "✅ Deployment completed with enterprise-grade setup!"
+echo "📧 Support: admin@qbpharma.com"
 
-# Save process IDs for later reference
-echo "BACKEND_PID=$BACKEND_PID" > .deployment_pids
-if [ "$WEB_SERVER" = "serve" ] && [ ! -z "$FRONTEND_PID" ]; then
-    echo "FRONTEND_PID=$FRONTEND_PID" >> .deployment_pids
-fi
+# Create deployment summary
+cat > deployment_summary.txt << EOF
+QB Pharma Deployment Summary
+Deployed: $(date)
+Version: $(git rev-parse HEAD)
+Services: nginx (frontend), systemd (backend)
+Status: SUCCESS
+Access: http://localhost/
+Admin: username=admin, password=admin123
+EOF
 
-echo "✅ All deployment issues have been resolved!"
+echo ""
+echo "📄 Deployment summary saved to: deployment_summary.txt"
