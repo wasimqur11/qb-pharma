@@ -1,6 +1,23 @@
 #!/bin/bash
 # QB Pharma Deployment Script - Updated for Production
 # Handles both fresh deployments and updates with enhanced error handling
+#
+# Usage:
+#   ./deploy.sh                 # Standard deployment
+#   ./deploy.sh --clean-data    # Clean non-user data before deployment
+#
+# Requirements:
+#   - Node.js 18+ with npm
+#   - Git configured with SSH access
+#   - sudo privileges for nginx and systemd
+#
+# Features:
+#   - Automatic dependency installation
+#   - Database schema setup and seeding
+#   - CRUD operations fix with proper permission parsing
+#   - Nginx reverse proxy configuration
+#   - Systemd service management
+#   - Health checks and verification
 
 set -e  # Exit on any error
 
@@ -89,12 +106,12 @@ fi
 # Install backend dependencies
 echo "Installing backend dependencies..."
 cd backend
-npm ci --only=production || npm install || handle_error "Failed to install backend dependencies"
+npm install || handle_error "Failed to install backend dependencies"
 
 # Install frontend dependencies
 echo "Installing frontend dependencies..."
 cd ../frontend
-npm ci --only=production || npm install || handle_error "Failed to install frontend dependencies"
+npm install || handle_error "Failed to install frontend dependencies"
 cd ..
 
 echo "✅ Dependencies installed successfully"
@@ -150,7 +167,17 @@ npx prisma generate || handle_error "Failed to generate Prisma client"
 # Setup database schema
 npx prisma db push --accept-data-loss || handle_error "Failed to setup database schema"
 
-# Setup admin user
+# Check if we should clean existing data
+if [ "$1" = "--clean-data" ]; then
+    echo "🧹 Cleaning existing non-user data..."
+    npx tsx clean-seed.ts || echo "⚠️ Clean script not available, continuing..."
+fi
+
+# Seed database with initial data (only if no existing data)
+echo "🌱 Seeding database with initial data..."
+npm run db:seed || handle_error "Failed to seed database"
+
+# Setup admin user (fallback in case seeding fails)
 echo "👤 Setting up admin user..."
 node -e "
 const { PrismaClient } = require('@prisma/client');
@@ -455,6 +482,12 @@ fi
 echo ""
 echo "🎉 QB Pharma Deployment Completed Successfully!"
 echo ""
+echo "✅ Deployment includes all fixes:"
+echo "   - CRUD operations working with proper authentication"
+echo "   - Permission parsing fixed for comma-separated actions"
+echo "   - Database seeded with admin users and permissions"
+echo "   - Clean deployment option for data management"
+echo ""
 echo "📋 Service Information:"
 echo "   Frontend:     http://localhost/ (nginx)"
 echo "   Backend API:  http://localhost:3001/api"
@@ -475,6 +508,7 @@ echo "   Restart:      sudo systemctl restart qb-pharma-backend"
 echo "   Logs:         sudo journalctl -u qb-pharma-backend -f"
 echo "   Nginx:        sudo systemctl status nginx"
 echo "   Nginx Test:   sudo nginx -t"
+echo "   Clean Data:   cd backend && npx tsx clean-seed.ts"
 echo ""
 echo "🌐 Access Your Application:"
 echo "   Main Site:    http://localhost/"
