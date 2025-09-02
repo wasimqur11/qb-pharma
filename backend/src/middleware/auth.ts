@@ -39,7 +39,6 @@ export const authenticateToken = async (
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET) as any;
     
-    // Fetch user with permissions from database
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
       include: {
@@ -61,12 +60,29 @@ export const authenticateToken = async (
       pharmaUnitId: user.pharmaUnitId || undefined,
       linkedStakeholderId: user.linkedStakeholderId || undefined,
       linkedStakeholderType: user.linkedStakeholderType || undefined,
-      permissions: user.userPermissions.map(p => ({
-        module: p.module,
-        actions: p.actions,
-        scope: p.scope,
-        conditions: p.conditions || undefined
-      }))
+      permissions: user.userPermissions.map(p => {
+        let actions;
+        try {
+          actions = typeof p.actions === 'string' ? JSON.parse(p.actions) : p.actions;
+        } catch (e) {
+          console.error('Failed to parse permission actions:', p.actions, e);
+          actions = [];
+        }
+        
+        let conditions;
+        try {
+          conditions = p.conditions ? (typeof p.conditions === 'string' ? JSON.parse(p.conditions) : p.conditions) : undefined;
+        } catch (e) {
+          console.error('Failed to parse permission conditions:', p.conditions, e);
+          conditions = undefined;
+        }
+        return {
+          module: p.module,
+          actions,
+          scope: p.scope,
+          conditions
+        };
+      })
     };
 
     next();

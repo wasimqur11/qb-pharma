@@ -47,134 +47,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     isLoading: true
   });
   
-  // Initialize with demo users for different roles
-  const [users, setUsers] = useState<User[]>([
-    {
-      id: 'user-001',
-      username: 'superadmin',
-      role: 'super_admin',
-      name: 'Super Administrator',
-      email: 'super@qbpharma.com',
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    },
-    {
-      id: 'user-002',
-      username: 'admin',
-      role: 'admin',
-      name: 'Unit Administrator',
-      email: 'admin@qbpharma.com',
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    },
-    {
-      id: 'user-003',
-      username: 'operator1',
-      role: 'operator',
-      name: 'Data Entry Operator',
-      email: 'operator@qbpharma.com',
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    },
-    {
-      id: 'user-004',
-      username: 'doctor1',
-      role: 'doctor',
-      name: 'Dr. Ahmed Hassan',
-      email: 'ahmed.hassan@qbpharma.com',
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    },
-    {
-      id: 'user-005',
-      username: 'wasim',
-      role: 'partner',
-      name: 'Wasim Qureshi',
-      email: 'wasim.qureshi@qbpharma.com',
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    },
-    {
-      id: 'user-006', 
-      username: 'sarah',
-      role: 'partner',
-      name: 'Sarah Khan',
-      email: 'sarah.khan@qbpharma.com',
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    },
-    {
-      id: 'user-007',
-      username: 'ali',
-      role: 'partner', 
-      name: 'Ali Ahmed',
-      email: 'ali.ahmed@qbpharma.com',
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    },
-    {
-      id: 'user-008',
-      username: 'fatima',
-      role: 'partner',
-      name: 'Fatima Sheikh', 
-      email: 'fatima.sheikh@qbpharma.com',
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    },
-    {
-      id: 'user-009',
-      username: 'karachi_med',
-      role: 'distributor',
-      name: 'Karachi Medical Store',
-      email: 'info@karachimedical.com',
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    },
-    {
-      id: 'user-010',
-      username: 'lahore_pharma',
-      role: 'distributor',
-      name: 'Lahore Pharma Distributors',
-      email: 'contact@lahorepharma.com', 
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    }
-  ]);
+  // Users are now managed by backend - no local state needed
+  const [users, setUsers] = useState<User[]>([]);
   
-  // User credentials storage (in production, this would be handled by backend)
-  const [credentials] = useState<{ [username: string]: string }>({
-    'superadmin': 'admin123',
-    'admin': 'admin123', 
-    'operator1': 'operator123',
-    'doctor1': 'doctor123',
-    'wasim': 'wasim123',
-    'sarah': 'sarah123',
-    'ali': 'ali123', 
-    'fatima': 'fatima123',
-    'karachi_med': 'karachi123',
-    'lahore_pharma': 'lahore123'
-  });
+  // Credentials are now handled by backend authentication
 
-  // Stakeholder linking - maps user IDs to stakeholder IDs
-  const [stakeholderLinks] = useState<{ [userId: string]: { stakeholderId: string; type: 'doctor' | 'business_partner' | 'distributor' } }>({
-    'user-004': { stakeholderId: 'doc-001', type: 'doctor' },           // Dr. Ahmed Hassan
-    'user-005': { stakeholderId: 'bp-001', type: 'business_partner' },   // Wasim Qureshi
-    'user-006': { stakeholderId: 'bp-002', type: 'business_partner' },   // Sarah Khan
-    'user-007': { stakeholderId: 'bp-003', type: 'business_partner' },   // Ali Ahmed
-    'user-008': { stakeholderId: 'bp-004', type: 'business_partner' },   // Fatima Sheikh
-    'user-009': { stakeholderId: 'dist-001', type: 'distributor' },      // Karachi Medical Store
-    'user-010': { stakeholderId: 'dist-002', type: 'distributor' }       // Lahore Pharma Distributors
-  });
+  // Stakeholder linking is now handled by backend (user.linkedStakeholderId)
 
   // Check for existing session on app load
   useEffect(() => {
@@ -271,50 +149,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     });
   };
 
+  // User management functions - should be implemented to use backend API
   const createUser = (userData: Omit<User, 'id' | 'createdAt' | 'updatedAt' | 'lastLogin'>): User => {
-    const newUser: User = {
-      ...userData,
-      id: `user-${Date.now()}`,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
-    
-    setUsers(prev => [...prev, newUser]);
-    return newUser;
+    throw new Error('User creation should be handled by backend API');
   };
 
   const updateUser = (id: string, updates: Partial<User>) => {
-    setUsers(prev => prev.map(user => 
-      user.id === id 
-        ? { ...user, ...updates, updatedAt: new Date() }
-        : user
-    ));
-    
-    // Update current user if it's the same
-    if (authState.user?.id === id) {
-      setAuthState(prev => ({
-        ...prev,
-        user: prev.user ? { ...prev.user, ...updates, updatedAt: new Date() } : null
-      }));
-    }
+    throw new Error('User updates should be handled by backend API');
   };
 
   const deleteUser = (id: string) => {
-    // Prevent deleting superadmin
-    if (id === 'user-001') {
-      throw new Error('Cannot delete super administrator');
-    }
-    
-    setUsers(prev => prev.filter(user => user.id !== id));
-    
-    // Logout if current user is being deleted
-    if (authState.user?.id === id) {
-      logout();
-    }
+    throw new Error('User deletion should be handled by backend API');
   };
 
   const getAllUsers = (): User[] => {
-    return users;
+    // Return empty array - users should be fetched from backend when needed
+    return [];
   };
 
   // Role hierarchy for permissions
@@ -332,8 +182,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Get current user's linked stakeholder information
   const getCurrentUserStakeholder = () => {
-    if (!authState.user) return null;
-    return stakeholderLinks[authState.user.id] || null;
+    if (!authState.user || !authState.user.linkedStakeholderId) return null;
+    return {
+      stakeholderId: authState.user.linkedStakeholderId,
+      type: authState.user.linkedStakeholderType as 'doctor' | 'business_partner' | 'distributor'
+    };
   };
 
   // Check if current user is a stakeholder-linked user
