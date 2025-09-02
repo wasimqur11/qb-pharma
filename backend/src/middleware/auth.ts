@@ -62,11 +62,11 @@ export const authenticateToken = async (
       linkedStakeholderType: user.linkedStakeholderType || undefined,
       permissions: user.userPermissions.map(p => {
         let actions;
-        try {
-          actions = typeof p.actions === 'string' ? JSON.parse(p.actions) : p.actions;
-        } catch (e) {
-          console.error('Failed to parse permission actions:', p.actions, e);
-          actions = [];
+        if (typeof p.actions === 'string') {
+          // Actions are stored as comma-separated strings
+          actions = p.actions.split(',').map(a => a.trim()).filter(a => a.length > 0);
+        } else {
+          actions = Array.isArray(p.actions) ? p.actions : [];
         }
         
         let conditions;

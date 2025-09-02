@@ -49,53 +49,52 @@ async function main() {
         {
           userId: superAdmin.id,
           module: 'pharma_units',
-          actions: ['create', 'read', 'update', 'delete'],
+          actions: 'create,read,update,delete',
           scope: 'all'
         },
         {
           userId: superAdmin.id,
           module: 'users',
-          actions: ['create', 'read', 'update', 'delete'],
+          actions: 'create,read,update,delete',
           scope: 'all'
         },
         {
           userId: superAdmin.id,
           module: 'transactions',
-          actions: ['create', 'read', 'update', 'delete'],
+          actions: 'create,read,update,delete',
           scope: 'all'
         },
         {
           userId: superAdmin.id,
           module: 'stakeholders',
-          actions: ['create', 'read', 'update', 'delete'],
+          actions: 'create,read,update,delete',
           scope: 'all'
         },
         {
           userId: superAdmin.id,
           module: 'reports',
-          actions: ['read', 'export'],
+          actions: 'read,export',
           scope: 'all'
         },
         {
           userId: superAdmin.id,
           module: 'settlements',
-          actions: ['create', 'read', 'update'],
+          actions: 'create,read,update',
           scope: 'all'
         },
         {
           userId: superAdmin.id,
           module: 'dashboard',
-          actions: ['read'],
+          actions: 'read',
           scope: 'all'
         },
         {
           userId: superAdmin.id,
           module: 'system_settings',
-          actions: ['read', 'update'],
+          actions: 'read,update',
           scope: 'all'
         }
-      ],
-      skipDuplicates: true
+      ]
     });
 
     console.log('✅ Created super admin permissions');
@@ -283,19 +282,19 @@ async function main() {
         {
           userId: doctorUser.id,
           module: 'transactions',
-          actions: ['read'],
+          actions: 'read',
           scope: 'own'
         },
         {
           userId: doctorUser.id,
           module: 'dashboard',
-          actions: ['read'],
+          actions: 'read',
           scope: 'own'
         },
         {
           userId: doctorUser.id,
           module: 'reports',
-          actions: ['read'],
+          actions: 'read',
           scope: 'own'
         }
       ]
@@ -326,25 +325,25 @@ async function main() {
         {
           userId: partnerUser.id,
           module: 'transactions',
-          actions: ['read'],
+          actions: 'read',
           scope: 'own'
         },
         {
           userId: partnerUser.id,
           module: 'dashboard',
-          actions: ['read'],
+          actions: 'read',
           scope: 'own'
         },
         {
           userId: partnerUser.id,
           module: 'reports',
-          actions: ['read'],
+          actions: 'read',
           scope: 'own'
         },
         {
           userId: partnerUser.id,
           module: 'settlements',
-          actions: ['read'],
+          actions: 'read',
           scope: 'own'
         }
       ]
