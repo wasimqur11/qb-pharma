@@ -41,11 +41,12 @@ npm run test         # Jest testing
 ### Database Management
 ```bash
 cd backend
-npm run db:generate  # Generate Prisma client
-npm run db:migrate   # Create and apply migrations
-npm run db:deploy    # Deploy migrations (production)
-npm run db:seed      # Seed database
-npm run db:studio    # Prisma Studio GUI
+npm run db:generate    # Generate Prisma client
+npm run db:migrate     # Create and apply migrations
+npm run db:deploy      # Deploy migrations (production)
+npm run db:seed        # Seed database with all sample data
+npm run db:seed:users  # Seed database with user data only
+npm run db:studio      # Prisma Studio GUI
 ```
 
 ### Frontend
@@ -67,10 +68,34 @@ npm run preview      # Preview production build
 - Account statements and payment estimation features
 - Corporate dashboard with dark theme
 
+## Deployment
+
+### Deploy Script Usage
+The `deploy.sh` script is designed to be always up-to-date and handle both scenarios:
+
+```bash
+./deploy.sh                 # Fresh deployment or update with user-only seeding
+./deploy.sh --clean-data    # Clean non-user data before deployment
+```
+
+**Important:** The deploy script automatically:
+- Detects if it's a fresh deployment (no existing directory) or an update
+- For fresh deployments: Clones repository and sets up everything from scratch
+- For updates: Pulls latest changes while preserving database and configurations
+- Uses user-only seeding by default to avoid creating sample business data
+- Backs up database before updates
+- Handles all dependencies, builds, and service management
+
+### Deployment Process
+1. **Repository Management**: Auto-detects fresh vs update deployment
+2. **Database**: Uses `npm run db:seed:users` for minimal seeding (admin user only)
+3. **Services**: Configures nginx reverse proxy and systemd service
+4. **Health Checks**: Verifies all services are running correctly
+
 ## Development Notes
 
 - Backend runs on port 3001 by default
 - Frontend uses Vite for fast development and HMR
 - SQLite database is versioned and backed up during deployments
-- Deployment script (`deploy.sh`) handles both fresh installs and updates
+- Deploy script handles both fresh installs and incremental updates intelligently
 - Prisma schema changes require migration creation and deployment
