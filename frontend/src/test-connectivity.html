@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connectivity Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #111; color: #fff; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #333; border-radius: 8px; }
+        button { padding: 10px 15px; margin: 5px; background: #444; color: #fff; border: 1px solid #666; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #555; }
+        .result { margin: 10px 0; padding: 10px; background: #222; border-radius: 4px; }
+        .success { border-left: 4px solid #22c55e; }
+        .error { border-left: 4px solid #ef4444; }
+    </style>
+</head>
+<body>
+    <h1>QB Pharma - Backend Connectivity Test</h1>
+    
+    <div class="test-section">
+        <h2>Manual Connectivity Tests</h2>
+        <button onclick="testHealthEndpoint()">Test Health Endpoint</button>
+        <button onclick="testInvalidEndpoint()">Test Invalid Endpoint (Network Error)</button>
+        <button onclick="testNonExistentServer()">Test Non-Existent Server</button>
+        <div id="testResults"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Instructions for Full Testing</h2>
+        <ol>
+            <li>Both frontend (http://localhost:5173) and backend (http://localhost:3001) are currently running</li>
+            <li>Open the main application in another tab: <a href="http://localhost:5173" target="_blank" style="color: #60a5fa;">http://localhost:5173</a></li>
+            <li>Look for the connectivity indicator (small dot/icon) in the top header next to notifications</li>
+            <li>When both servers are running, you should see a green dot indicating "Connected"</li>
+            <li>To test disconnection scenarios:</li>
+            <ul>
+                <li>Stop the backend server to simulate server down</li>
+                <li>Disconnect your internet to simulate network issues</li>
+                <li>Change the API URL to simulate wrong server address</li>
+            </ul>
+            <li>You should see appropriate alerts and the connectivity indicator changing colors</li>
+        </ol>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3001';
+        
+        function addResult(message, isSuccess = true) {
+            const resultsDiv = document.getElementById('testResults');
+            const result = document.createElement('div');
+            result.className = `result ${isSuccess ? 'success' : 'error'}`;
+            result.innerHTML = `<strong>${new Date().toLocaleTimeString()}:</strong> ${message}`;
+            resultsDiv.appendChild(result);
+            resultsDiv.scrollTop = resultsDiv.scrollHeight;
+        }
+
+        async function testHealthEndpoint() {
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    addResult(`✅ Health endpoint working: ${data.status} (${data.environment})`, true);
+                } else {
+                    addResult(`❌ Health endpoint returned error: ${response.status} ${response.statusText}`, false);
+                }
+            } catch (error) {
+                addResult(`❌ Health endpoint failed: ${error.message}`, false);
+            }
+        }
+
+        async function testInvalidEndpoint() {
+            try {
+                const response = await fetch(`${API_BASE}/invalid-endpoint`);
+                addResult(`❌ Invalid endpoint test: ${response.status} ${response.statusText}`, false);
+            } catch (error) {
+                addResult(`❌ Invalid endpoint test failed: ${error.message}`, false);
+            }
+        }
+
+        async function testNonExistentServer() {
+            try {
+                const response = await fetch('http://localhost:9999/health');
+                addResult(`❌ Non-existent server test unexpected success: ${response.status}`, false);
+            } catch (error) {
+                addResult(`✅ Non-existent server test (expected failure): ${error.message}`, true);
+            }
+        }
+
+        // Auto-run initial test
+        setTimeout(() => {
+            addResult('🔍 Starting connectivity tests...', true);
+            testHealthEndpoint();
+        }, 1000);
+    </script>
+</body>
+</html>

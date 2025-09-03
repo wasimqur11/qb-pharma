@@ -257,7 +257,7 @@ fi
 cd ..
 
 # Build frontend
-echo "Building frontend..."
+echo "Building frontend with connectivity monitoring features..."
 cd frontend
 npm run build || handle_error "Failed to build frontend"
 
@@ -265,6 +265,14 @@ npm run build || handle_error "Failed to build frontend"
 if [ ! -d "dist" ] || [ ! -f "dist/index.html" ]; then
     handle_error "Frontend build failed - dist directory or index.html not found"
 fi
+
+echo "✅ Frontend built with connectivity monitoring features:"
+echo "   - ConnectivityProvider context for health monitoring"
+echo "   - ConnectivityIndicator component in dashboard header"  
+echo "   - Enhanced API client with better error detection"
+echo "   - Automatic retry logic with exponential backoff"
+echo "   - User-friendly connectivity alerts"
+
 cd ..
 
 echo "✅ Applications built successfully"
@@ -515,7 +523,15 @@ echo "   Main Site:    http://localhost/"
 echo "   API Docs:     http://localhost:3001/api"
 echo "   Health:       http://localhost:3001/health"
 echo ""
-echo "✅ Deployment completed with enterprise-grade setup!"
+echo "✅ Deployment completed with enterprise-grade setup and connectivity monitoring!"
+echo ""
+echo "🔍 New Features Deployed:"
+echo "   • Backend connectivity monitoring with automatic health checks"
+echo "   • Visual connectivity indicator in dashboard header"
+echo "   • Smart retry logic with exponential backoff"
+echo "   • User-friendly error messages for network issues"
+echo "   • Automatic recovery notifications"
+echo ""
 echo "📧 Support: admin@qbpharma.com"
 
 # Create deployment summary
