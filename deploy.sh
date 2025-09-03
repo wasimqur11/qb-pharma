@@ -173,9 +173,9 @@ if [ "$1" = "--clean-data" ]; then
     npx tsx clean-seed.ts || echo "⚠️ Clean script not available, continuing..."
 fi
 
-# Seed database with initial data (only if no existing data)
-echo "🌱 Seeding database with initial data..."
-npm run db:seed || handle_error "Failed to seed database"
+# Seed database with user data only
+echo "👤 Seeding database with user data only..."
+npm run db:seed:users || handle_error "Failed to seed user data"
 
 # Setup admin user (fallback in case seeding fails)
 echo "👤 Setting up admin user..."
