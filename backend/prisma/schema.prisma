@@ -194,3 +194,20 @@ model Department {
 
   @@map("departments")
 }
+
+model SystemConfiguration {
+  id          String   @id @default(cuid())
+  category    String
+  key         String
+  value       String
+  dataType    String   // 'number' | 'string' | 'boolean' | 'json'
+  description String?
+  isEditable  Boolean  @default(true)
+  createdBy   String
+  updatedBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([category, key], name: "category_key")
+  @@map("system_configurations")
+}

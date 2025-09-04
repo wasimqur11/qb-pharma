@@ -11,6 +11,7 @@ import userRoutes from './routes/users';
 import transactionRoutes from './routes/transactions';
 import stakeholderRoutes from './routes/stakeholders';
 import dashboardRoutes from './routes/dashboard';
+import configurationRoutes from './routes/configurations';
 
 // Load environment variables
 dotenv.config();
@@ -73,6 +74,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/stakeholders', stakeholderRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/configurations', configurationRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {
