@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SYSTEM_CONFIG } from '../constants/systemConfig';
-import { Cog6ToothIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { ConfigurationService } from '../utils/paymentEstimationUtils';
+import { Cog6ToothIcon, CheckIcon, XMarkIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 
 interface PaymentEstimationConfigProps {
   onConfigChange?: (config: {
@@ -12,6 +13,9 @@ interface PaymentEstimationConfigProps {
 
 const PaymentEstimationConfig: React.FC<PaymentEstimationConfigProps> = ({ onConfigChange }) => {
   const [isEditing, setIsEditing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [config, setConfig] = useState<{
     profitPercentage: number;
     distributorPercentage: number;
@@ -23,35 +27,95 @@ const PaymentEstimationConfig: React.FC<PaymentEstimationConfigProps> = ({ onCon
   });
 
   const [tempConfig, setTempConfig] = useState(config);
+  const configService = ConfigurationService.getInstance();
 
-  const handleSave = () => {
+  // Load configuration from database on component mount
+  useEffect(() => {
+    loadConfiguration();
+  }, []);
+
+  const loadConfiguration = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const dbConfig = await configService.getPaymentEstimationConfig();
+      setConfig(dbConfig);
+      setTempConfig(dbConfig);
+    } catch (error) {
+      console.error('Failed to load configuration:', error);
+      setError('Failed to load configuration from database');
+      // Keep using default/fallback values
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
     // Validate that profit + distributor = 100%
     if (tempConfig.profitPercentage + tempConfig.distributorPercentage !== 100) {
-      alert('Profit percentage + Distributor percentage must equal 100%');
+      setError('Profit percentage + Distributor percentage must equal 100%');
       return;
     }
 
-    setConfig(tempConfig);
-    setIsEditing(false);
-    
-    if (onConfigChange) {
-      onConfigChange(tempConfig);
+    if (tempConfig.maxPaymentPercentage < 1 || tempConfig.maxPaymentPercentage > 100) {
+      setError('Maximum payment percentage must be between 1% and 100%');
+      return;
     }
-    
-    // In a real app, this would save to backend/localStorage
-    alert('Configuration saved! Note: This is temporary and will reset on page refresh.');
+
+    try {
+      setSaving(true);
+      setError(null);
+
+      // Update each configuration in the database
+      await configService.updateConfiguration('payment_estimation', 'profit_allocation_percentage', tempConfig.profitPercentage.toString());
+      await configService.updateConfiguration('payment_estimation', 'distributor_allocation_percentage', tempConfig.distributorPercentage.toString());
+      await configService.updateConfiguration('payment_estimation', 'max_distributor_payment_percentage', tempConfig.maxPaymentPercentage.toString());
+
+      // Update local state
+      setConfig(tempConfig);
+      onConfigChange?.(tempConfig);
+      setIsEditing(false);
+
+    } catch (error) {
+      console.error('Failed to save configuration:', error);
+      setError('Failed to save configuration to database');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleCancel = () => {
     setTempConfig(config);
     setIsEditing(false);
+    setError(null);
   };
 
   const currentConfig = isEditing ? tempConfig : config;
 
+  if (loading) {
+    return (
+      <div className="bg-gray-800 border border-gray-700 rounded-lg mb-6">
+        <div className="p-4">
+          <div className="flex items-center justify-center py-6">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-400"></div>
+            <span className="ml-3 text-gray-300">Loading payment configuration...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-gray-800 border border-gray-700 rounded-lg mb-6">
       <div className="p-4">
+        {/* Error Message */}
+        {error && (
+          <div className="mb-4 p-3 bg-red-900/50 border border-red-500 rounded-lg flex items-center space-x-2">
+            <ExclamationTriangleIcon className="h-5 w-5 text-red-400" />
+            <span className="text-red-300 text-sm">{error}</span>
+          </div>
+        )}
+
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center">
             <Cog6ToothIcon className="h-5 w-5 text-gray-400 mr-2" />
@@ -71,10 +135,11 @@ const PaymentEstimationConfig: React.FC<PaymentEstimationConfigProps> = ({ onCon
             <div className="flex gap-2">
               <button
                 onClick={handleSave}
-                className="flex items-center gap-1 px-3 py-1.5 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                disabled={saving}
+                className="flex items-center gap-1 px-3 py-1.5 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 transition-colors"
               >
                 <CheckIcon className="h-4 w-4" />
-                Save
+                {saving ? 'Saving...' : 'Save'}
               </button>
               <button
                 onClick={handleCancel}

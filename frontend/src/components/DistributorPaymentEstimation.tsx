@@ -24,11 +24,54 @@ const DistributorPaymentEstimation: React.FC = () => {
     maxPaymentPercentage: SYSTEM_CONFIG.MAX_DISTRIBUTOR_PAYMENT_PERCENTAGE
   });
 
-  const estimationResult: PaymentEstimationResult = useMemo(() => {
-    return calculateDistributorPaymentEstimates(transactions, distributors, config);
+  const [estimationResult, setEstimationResult] = React.useState<PaymentEstimationResult>({
+    weeklyData: {
+      weekStart: new Date(),
+      weekEnd: new Date(),
+      totalSales: 0,
+      profitAllocation: 0,
+      distributorAllocation: 0
+    },
+    currentWeekData: {
+      weekStart: new Date(),
+      weekEnd: new Date()
+    },
+    distributorEstimates: [],
+    totalEstimatedPayments: 0,
+    remainingFunds: 0
+  });
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    const fetchEstimationResult = async () => {
+      try {
+        setLoading(true);
+        const result = await calculateDistributorPaymentEstimates(transactions, distributors, config);
+        setEstimationResult(result);
+      } catch (error) {
+        console.error('Error calculating payment estimates:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchEstimationResult();
   }, [transactions, distributors, config]);
 
   const { weeklyData, currentWeekData, distributorEstimates, totalEstimatedPayments, remainingFunds } = estimationResult;
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
+            <span className="ml-3 text-gray-300">Loading payment estimations...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">

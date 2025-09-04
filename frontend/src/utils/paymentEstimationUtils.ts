@@ -1,6 +1,113 @@
 import type { Transaction, Distributor } from '../types';
 import { SYSTEM_CONFIG } from '../constants/systemConfig';
 
+// Configuration service for fetching payment estimation settings
+export class ConfigurationService {
+  private static instance: ConfigurationService;
+  private configCache: Map<string, any> = new Map();
+  private cacheTimestamp: number = 0;
+  private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+  static getInstance(): ConfigurationService {
+    if (!ConfigurationService.instance) {
+      ConfigurationService.instance = new ConfigurationService();
+    }
+    return ConfigurationService.instance;
+  }
+
+  private async fetchConfigFromAPI(): Promise<Record<string, any>> {
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        throw new Error('No authentication token');
+      }
+
+      const response = await fetch('/api/configurations/payment_estimation', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.configurations || {};
+    } catch (error) {
+      console.error('Failed to fetch configuration from API:', error);
+      return {};
+    }
+  }
+
+  async getPaymentEstimationConfig(): Promise<{
+    profitPercentage: number;
+    distributorPercentage: number;
+    maxPaymentPercentage: number;
+  }> {
+    const now = Date.now();
+    
+    // Check if cache is valid
+    if (this.configCache.size === 0 || (now - this.cacheTimestamp) > this.CACHE_DURATION) {
+      const config = await this.fetchConfigFromAPI();
+      
+      // Update cache
+      this.configCache.clear();
+      Object.entries(config).forEach(([key, value]) => {
+        this.configCache.set(key, value);
+      });
+      this.cacheTimestamp = now;
+    }
+
+    // Extract payment estimation values with fallbacks to hardcoded defaults
+    const profitConfig = this.configCache.get('profit_allocation_percentage');
+    const distributorConfig = this.configCache.get('distributor_allocation_percentage');
+    const maxPaymentConfig = this.configCache.get('max_distributor_payment_percentage');
+
+    return {
+      profitPercentage: profitConfig?.value ?? SYSTEM_CONFIG.PROFIT_ALLOCATION_PERCENTAGE,
+      distributorPercentage: distributorConfig?.value ?? SYSTEM_CONFIG.DISTRIBUTOR_ALLOCATION_PERCENTAGE,
+      maxPaymentPercentage: maxPaymentConfig?.value ?? SYSTEM_CONFIG.MAX_DISTRIBUTOR_PAYMENT_PERCENTAGE
+    };
+  }
+
+  // Method to update configuration and invalidate cache
+  async updateConfiguration(category: string, key: string, value: string): Promise<void> {
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        throw new Error('No authentication token');
+      }
+
+      const response = await fetch(`/api/configurations/${category}/${key}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ value })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      // Invalidate cache
+      this.cacheTimestamp = 0;
+    } catch (error) {
+      console.error('Failed to update configuration:', error);
+      throw error;
+    }
+  }
+
+  // Method to clear cache manually
+  clearCache(): void {
+    this.configCache.clear();
+    this.cacheTimestamp = 0;
+  }
+}
+
 export interface WeeklySalesData {
   weekStart: Date;
   weekEnd: Date;
@@ -108,7 +215,7 @@ export function calculateWeeklySales(
 /**
  * Calculate payment estimates for distributors based on previous week sales
  */
-export function calculateDistributorPaymentEstimates(
+export async function calculateDistributorPaymentEstimates(
   transactions: Transaction[],
   distributors: Distributor[],
   customConfig?: {
@@ -116,15 +223,34 @@ export function calculateDistributorPaymentEstimates(
     distributorPercentage?: number;
     maxPaymentPercentage?: number;
   }
-): PaymentEstimationResult {
+): Promise<PaymentEstimationResult> {
   const { start: weekStart, end: weekEnd } = getPreviousWeekRange();
   const { start: currentWeekStart, end: currentWeekEnd } = getCurrentWeekRange();
   const totalSales = calculateWeeklySales(transactions, weekStart, weekEnd);
   
-  // Use custom config if provided, otherwise use system defaults
-  const profitPercentage = customConfig?.profitPercentage ?? SYSTEM_CONFIG.PROFIT_ALLOCATION_PERCENTAGE;
-  const distributorPercentage = customConfig?.distributorPercentage ?? SYSTEM_CONFIG.DISTRIBUTOR_ALLOCATION_PERCENTAGE;
-  const maxPaymentPercentage = customConfig?.maxPaymentPercentage ?? SYSTEM_CONFIG.MAX_DISTRIBUTOR_PAYMENT_PERCENTAGE;
+  // Get configuration from database or use custom config
+  let profitPercentage: number;
+  let distributorPercentage: number;
+  let maxPaymentPercentage: number;
+
+  if (customConfig) {
+    profitPercentage = customConfig.profitPercentage ?? SYSTEM_CONFIG.PROFIT_ALLOCATION_PERCENTAGE;
+    distributorPercentage = customConfig.distributorPercentage ?? SYSTEM_CONFIG.DISTRIBUTOR_ALLOCATION_PERCENTAGE;
+    maxPaymentPercentage = customConfig.maxPaymentPercentage ?? SYSTEM_CONFIG.MAX_DISTRIBUTOR_PAYMENT_PERCENTAGE;
+  } else {
+    try {
+      const configService = ConfigurationService.getInstance();
+      const dbConfig = await configService.getPaymentEstimationConfig();
+      profitPercentage = dbConfig.profitPercentage;
+      distributorPercentage = dbConfig.distributorPercentage;
+      maxPaymentPercentage = dbConfig.maxPaymentPercentage;
+    } catch (error) {
+      console.error('Failed to fetch configuration from database, using fallback values:', error);
+      profitPercentage = SYSTEM_CONFIG.PROFIT_ALLOCATION_PERCENTAGE;
+      distributorPercentage = SYSTEM_CONFIG.DISTRIBUTOR_ALLOCATION_PERCENTAGE;
+      maxPaymentPercentage = SYSTEM_CONFIG.MAX_DISTRIBUTOR_PAYMENT_PERCENTAGE;
+    }
+  }
   
   const profitAllocation = totalSales * (profitPercentage / 100);
   const distributorAllocation = totalSales * (distributorPercentage / 100);

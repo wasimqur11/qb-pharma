@@ -99,3 +99,13 @@ The `deploy.sh` script is designed to be always up-to-date and handle both scena
 - SQLite database is versioned and backed up during deployments
 - Deploy script handles both fresh installs and incremental updates intelligently
 - Prisma schema changes require migration creation and deployment
+
+## CRITICAL: Deploy Script Updates
+**MANDATORY**: When making ANY changes to backend functionality, database schema, seeding, API endpoints, or system configurations, you MUST immediately update the deploy.sh script to reflect these changes. This includes:
+- Adding new seeding scripts or database operations
+- Including new permissions or user setup requirements  
+- Updating build processes or dependencies
+- Adding new environment variables or configuration files
+- Any changes that affect fresh deployments or updates
+
+The deploy.sh script must always be kept current and comprehensive to ensure seamless deployments.

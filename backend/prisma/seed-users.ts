@@ -93,6 +93,12 @@ async function main() {
           module: 'system_settings',
           actions: 'read,update',
           scope: 'all'
+        },
+        {
+          userId: superAdmin.id,
+          module: 'configurations',
+          actions: 'create,read,update,delete',
+          scope: 'all'
         }
       ]
     });

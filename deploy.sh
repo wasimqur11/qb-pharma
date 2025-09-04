@@ -177,6 +177,10 @@ fi
 echo "👤 Seeding database with user data only..."
 npm run db:seed:users || handle_error "Failed to seed user data"
 
+# Seed system configurations
+echo "⚙️ Seeding system configurations..."
+npx tsx seed-configurations.ts || handle_error "Failed to seed system configurations"
+
 # Setup admin user (fallback in case seeding fails)
 echo "👤 Setting up admin user..."
 node -e "
@@ -494,6 +498,7 @@ echo "✅ Deployment includes all fixes:"
 echo "   - CRUD operations working with proper authentication"
 echo "   - Permission parsing fixed for comma-separated actions"
 echo "   - Database seeded with admin users and permissions"
+echo "   - System configurations seeded for payment estimation"
 echo "   - Clean deployment option for data management"
 echo ""
 echo "📋 Service Information:"
