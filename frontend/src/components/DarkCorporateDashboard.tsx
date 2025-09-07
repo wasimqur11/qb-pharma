@@ -201,6 +201,36 @@ const DarkCorporateDashboard: React.FC = () => {
   // Get all-time stats for settlement decisions and payables
   const allTimeStats = filteredDashboardStats;
   
+  // Calculate previous period stats for percentage comparison
+  const calculatePreviousPeriodStats = () => {
+    const currentFromDate = new Date(dateRange.from);
+    const currentToDate = new Date(dateRange.to);
+    
+    // Calculate period duration
+    const periodDuration = currentToDate.getTime() - currentFromDate.getTime();
+    
+    // Calculate previous period dates
+    const previousToDate = new Date(currentFromDate.getTime() - 1); // Day before current period starts
+    const previousFromDate = new Date(previousToDate.getTime() - periodDuration);
+    
+    return getPeriodFilteredStats(previousFromDate, previousToDate);
+  };
+  
+  const previousPeriodStats = calculatePreviousPeriodStats();
+  
+  // Function to calculate percentage change
+  const calculatePercentageChange = (current: number, previous: number): string => {
+    if (previous === 0) {
+      return current > 0 ? '+100%' : '0%';
+    }
+    
+    const change = ((current - previous) / previous) * 100;
+    
+    if (change === 0) return '0%';
+    if (change > 0) return `+${change.toFixed(1)}%`;
+    return `${change.toFixed(1)}%`;
+  };
+  
   // Merge with period-filtered data for dashboard display
   const stats: DashboardStats = {
     ...allTimeStats,
@@ -1064,32 +1094,32 @@ const DarkCorporateDashboard: React.FC = () => {
           <MetricCard
             title="Today's Total Revenue"
             value={formatCurrency(stats.todayRevenue)}
-            change="+0%"
-            changeType="increase"
+            change={calculatePercentageChange(stats.todayRevenue, previousPeriodStats.totalRevenue)}
+            changeType={stats.todayRevenue >= previousPeriodStats.totalRevenue ? "increase" : "decrease"}
             subtitle="Combined Pharmacy + Doctor"
             icon={CurrencyDollarIcon}
           />
           <MetricCard
             title="Today's Pharmacy Sales"
             value={formatCurrency(stats.todayPharmacyRevenue)}
-            change="+0%"
-            changeType="increase"
+            change={calculatePercentageChange(stats.todayPharmacyRevenue, previousPeriodStats.pharmacyRevenue)}
+            changeType={stats.todayPharmacyRevenue >= previousPeriodStats.pharmacyRevenue ? "increase" : "decrease"}
             subtitle="Pharmacy revenue only"
             icon={BanknotesIcon}
           />
           <MetricCard
             title="Today's Doctor Revenue"
             value={formatCurrency(stats.todayDoctorRevenue)}
-            change="+0%"
-            changeType="increase"
+            change={calculatePercentageChange(stats.todayDoctorRevenue, previousPeriodStats.doctorRevenue)}
+            changeType={stats.todayDoctorRevenue >= previousPeriodStats.doctorRevenue ? "increase" : "decrease"}
             subtitle="Consultation fees"
             icon={UserGroupIcon}
           />
           <MetricCard
             title="Pharmacy Profit"
             value={formatCurrency(stats.pharmacyMonthlyProfit)}
-            change="+0%"
-            changeType="increase"
+            change={calculatePercentageChange(stats.pharmacyMonthlyProfit, previousPeriodStats.pharmacyRevenue - previousPeriodStats.pharmacyExpenses)}
+            changeType={stats.pharmacyMonthlyProfit >= (previousPeriodStats.pharmacyRevenue - previousPeriodStats.pharmacyExpenses) ? "increase" : "decrease"}
             subtitle="Pharmacy business profit"
             icon={ChartBarIcon}
           />
@@ -1223,32 +1253,32 @@ const DarkCorporateDashboard: React.FC = () => {
         <MetricCard
           title="Pharmacy Sales"
           value={formatCurrency(stats.todayPharmacyRevenue)}
-          change="+0%"
-          changeType="increase"
+          change={calculatePercentageChange(stats.todayPharmacyRevenue, previousPeriodStats.pharmacyRevenue)}
+          changeType={stats.todayPharmacyRevenue >= previousPeriodStats.pharmacyRevenue ? "increase" : "decrease"}
           subtitle="Today's pharmacy revenue"
           icon={CurrencyDollarIcon}
         />
         <MetricCard
           title="Total Pharmacy Revenue"
           value={formatCurrency(stats.pharmacyRevenue)}
-          change="+0%"
-          changeType="increase"
+          change={calculatePercentageChange(stats.pharmacyRevenue, allTimeStats.pharmacyRevenue - periodStats.pharmacyRevenue)}
+          changeType={stats.pharmacyRevenue >= (allTimeStats.pharmacyRevenue - periodStats.pharmacyRevenue) ? "increase" : "decrease"}
           subtitle="All-time pharmacy sales"
           icon={BanknotesIcon}
         />
         <MetricCard
           title="Pharmacy Cash Position"
           value={formatCurrency(stats.pharmacyCashPosition)}
-          change="+0%"
-          changeType="increase"
+          change={calculatePercentageChange(stats.pharmacyCashPosition, previousPeriodStats.pharmacyCashPosition)}
+          changeType={stats.pharmacyCashPosition >= previousPeriodStats.pharmacyCashPosition ? "increase" : "decrease"}
           subtitle="Pharmacy business funds"
           icon={ChartBarIcon}
         />
         <MetricCard
           title="Pharmacy Monthly Profit"
           value={formatCurrency(stats.pharmacyMonthlyProfit)}
-          change="+0%"
-          changeType="increase"
+          change={calculatePercentageChange(stats.pharmacyMonthlyProfit, previousPeriodStats.pharmacyRevenue - previousPeriodStats.pharmacyExpenses)}
+          changeType={stats.pharmacyMonthlyProfit >= (previousPeriodStats.pharmacyRevenue - previousPeriodStats.pharmacyExpenses) ? "increase" : "decrease"}
           subtitle="This month's pharmacy profit"
           icon={UserGroupIcon}
         />
@@ -1338,32 +1368,32 @@ const DarkCorporateDashboard: React.FC = () => {
         <MetricCard
           title="Today's Consultations"
           value={formatCurrency(stats.todayDoctorRevenue)}
-          change="+0%"
-          changeType="increase"
+          change={calculatePercentageChange(stats.todayDoctorRevenue, previousPeriodStats.doctorRevenue)}
+          changeType={stats.todayDoctorRevenue >= previousPeriodStats.doctorRevenue ? "increase" : "decrease"}
           subtitle="Today's consultation revenue"
           icon={UserGroupIcon}
         />
         <MetricCard
           title="Total Doctor Revenue"
           value={formatCurrency(stats.doctorRevenue)}
-          change="+0%"
-          changeType="increase"
+          change={calculatePercentageChange(stats.doctorRevenue, allTimeStats.doctorRevenue - periodStats.doctorRevenue)}
+          changeType={stats.doctorRevenue >= (allTimeStats.doctorRevenue - periodStats.doctorRevenue) ? "increase" : "decrease"}
           subtitle="All-time consultation fees"
           icon={CurrencyDollarIcon}
         />
         <MetricCard
           title="Doctor Payables Due"
           value={formatCurrency(stats.doctorPayables.reduce((sum, p) => sum + p.netPayable, 0))}
-          change="+0%"
-          changeType="increase"
+          change="0%"
+          changeType="neutral"
           subtitle="Outstanding doctor payments"
           icon={ChartBarIcon}
         />
         <MetricCard
           title="Active Doctors"
           value={stats.doctorPayables.length.toString()}
-          change="+0%"
-          changeType="increase"
+          change="0%"
+          changeType="neutral"
           subtitle="Doctors with transactions"
           icon={UsersIcon}
         />
