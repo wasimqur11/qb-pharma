@@ -290,6 +290,7 @@ const EditTransactionForm: React.FC<EditTransactionFormProps> = ({
                   <input
                     type="date"
                     value={formData.date}
+                    max={new Date().toISOString().split('T')[0]}
                     onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
                     className="w-full pl-10 pr-3 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors"
                     required

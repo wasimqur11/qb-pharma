@@ -28,6 +28,7 @@ import DepartmentManagement from './DepartmentManagement';
 import PatientManagement from './PatientManagement';
 import ConfigurationManagement from './ConfigurationManagement';
 import UserProfileBanner from './UserProfileBanner';
+import ProfileSettings from './ProfileSettings';
 import { 
   CurrencyDollarIcon, BanknotesIcon, ChartBarIcon, UserGroupIcon,
   BuildingOfficeIcon, UsersIcon, TruckIcon, PlusIcon, CreditCardIcon,
@@ -50,6 +51,9 @@ const DarkCorporateDashboard: React.FC = () => {
   const [showPaymentProcessor, setShowPaymentProcessor] = useState(false);
   const [showSimpleSettlementWizard, setShowSimpleSettlementWizard] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showProfileSettings, setShowProfileSettings] = useState(false);
   
   const { 
     transactions, 
@@ -66,7 +70,7 @@ const DarkCorporateDashboard: React.FC = () => {
   const { doctors, businessPartners, employees, distributors, patients } = useStakeholders();
   
   const { user, logout } = useAuth();
-  const { unreadCount } = useNotifications();
+  const { notifications, unreadCount, markAsRead, markAllAsRead, removeNotification } = useNotifications();
   
   // Use role-based filtered data
   const { 
@@ -76,6 +80,21 @@ const DarkCorporateDashboard: React.FC = () => {
     getAvailableTabs,
     isStakeholderUser 
   } = useRoleBasedData();
+
+  // Close user menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showUserMenu) {
+        const target = event.target as HTMLElement;
+        if (!target.closest('.user-menu-container')) {
+          setShowUserMenu(false);
+        }
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showUserMenu]);
   // const { showSuccess } = useToast();
   
   // Define navigation items based on user role
@@ -636,6 +655,7 @@ const DarkCorporateDashboard: React.FC = () => {
             
             {/* Notifications */}
             <button 
+              onClick={() => setShowNotifications(true)}
               className="relative p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-md transition-colors"
               title={`View notifications and alerts${unreadCount > 0 ? ` (${unreadCount} new)` : ''}`}
             >
@@ -648,21 +668,54 @@ const DarkCorporateDashboard: React.FC = () => {
             </button>
             
             {/* User Menu */}
-            <div className="flex items-center gap-2 pl-2 border-l border-gray-600">
-              <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center">
-                <UserIcon className="h-4 w-4 text-white" />
-              </div>
-              <div className="hidden sm:block">
-                <p className="text-sm font-medium text-white">{user?.name}</p>
-                <p className="text-xs text-gray-400">{user?.email}</p>
-              </div>
+            <div className="relative pl-2 border-l border-gray-600 user-menu-container">
               <button
-                onClick={logout}
-                className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded-md transition-colors"
-                title="Logout"
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className="flex items-center gap-2 p-1 hover:bg-gray-700 rounded-md transition-colors"
               >
-                <ArrowRightOnRectangleIcon className="h-4 w-4" />
+                <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center">
+                  <UserIcon className="h-4 w-4 text-white" />
+                </div>
+                <div className="hidden sm:block text-left">
+                  <p className="text-sm font-medium text-white">{user?.name}</p>
+                  <p className="text-xs text-gray-400">{user?.email}</p>
+                </div>
+                <ChevronDownIcon className="h-4 w-4 text-gray-400" />
               </button>
+
+              {/* User Dropdown Menu */}
+              {showUserMenu && (
+                <div className="absolute right-0 top-full mt-2 w-48 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50">
+                  <div className="p-3 border-b border-gray-700">
+                    <p className="text-sm font-medium text-white">{user?.name}</p>
+                    <p className="text-xs text-gray-400">{user?.email}</p>
+                    <p className="text-xs text-blue-400 mt-1">{user?.role}</p>
+                  </div>
+                  <div className="py-2">
+                    <button
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        setShowProfileSettings(true);
+                      }}
+                      className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors flex items-center gap-2"
+                    >
+                      <Cog6ToothIcon className="h-4 w-4" />
+                      Profile Settings
+                    </button>
+                    <hr className="border-gray-700 my-1" />
+                    <button
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        logout();
+                      }}
+                      className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-gray-700 hover:text-red-300 transition-colors flex items-center gap-2"
+                    >
+                      <ArrowRightOnRectangleIcon className="h-4 w-4" />
+                      Logout
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -988,22 +1041,71 @@ const DarkCorporateDashboard: React.FC = () => {
 
 
   const DateFilter: React.FC = () => (
-    <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 mb-5 overflow-hidden">
-      <div className="flex items-center gap-3 mb-3">
-        <FunnelIcon className="h-4 w-4 text-gray-400" />
-        <h3 className="text-sm font-semibold text-white">
-          {activeTab === 'reports' ? 'Report Period Filter' : 'Dashboard Period Filter'}
-        </h3>
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-        {/* Quick Period Selection */}
-        <div className="min-w-0">
-          <label className="block text-xs font-medium text-gray-300 mb-2">Time Period</label>
+    <div className="bg-gray-800/50 border border-gray-700/50 rounded-lg px-3 py-2 mb-4">
+      {/* Desktop Layout */}
+      <div className="hidden md:flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <FunnelIcon className="h-4 w-4 text-gray-400" />
+            <span className="text-sm text-gray-300">Period:</span>
+          </div>
+          
           <select
             value={selectedPeriod}
             onChange={(e) => handlePeriodChange(e.target.value)}
-            className="w-full px-2 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+            className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+          >
+            <option value="7days">7 Days</option>
+            <option value="30days">30 Days</option>
+            <option value="90days">90 Days</option>
+            <option value="6months">6 Months</option>
+            <option value="1year">1 Year</option>
+          </select>
+          
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={dateRange.from}
+              max={new Date().toISOString().split('T')[0]}
+              onChange={(e) => setDateRange(prev => ({ ...prev, from: e.target.value }))}
+              className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+            />
+            <span className="text-gray-400">to</span>
+            <input
+              type="date"
+              value={dateRange.to}
+              min={dateRange.from}
+              max={new Date().toISOString().split('T')[0]}
+              onChange={(e) => setDateRange(prev => ({ ...prev, to: e.target.value }))}
+              className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+            />
+          </div>
+        </div>
+        
+        <div className="text-xs text-gray-400">
+          {new Date(dateRange.from).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - 
+          {new Date(dateRange.to).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+        </div>
+      </div>
+      
+      {/* Mobile Layout */}
+      <div className="md:hidden space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <FunnelIcon className="h-4 w-4 text-gray-400" />
+            <span className="text-sm text-gray-300">Filter Period</span>
+          </div>
+          <div className="text-xs text-gray-400">
+            {new Date(dateRange.from).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - 
+            {new Date(dateRange.to).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          </div>
+        </div>
+        
+        <div className="flex flex-col sm:flex-row gap-2">
+          <select
+            value={selectedPeriod}
+            onChange={(e) => handlePeriodChange(e.target.value)}
+            className="flex-1 px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
           >
             <option value="7days">Last 7 Days</option>
             <option value="30days">Last 30 Days</option>
@@ -1011,35 +1113,23 @@ const DarkCorporateDashboard: React.FC = () => {
             <option value="6months">Last 6 Months</option>
             <option value="1year">Last 1 Year</option>
           </select>
-        </div>
-
-        {/* Custom Date Range */}
-        <div className="min-w-0">
-          <label className="block text-xs font-medium text-gray-300 mb-2">From Date</label>
-          <input
-            type="date"
-            value={dateRange.from}
-            onChange={(e) => setDateRange(prev => ({ ...prev, from: e.target.value }))}
-            className="w-full px-2 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-          />
-        </div>
-
-        <div className="min-w-0">
-          <label className="block text-xs font-medium text-gray-300 mb-2">To Date</label>
-          <input
-            type="date"
-            value={dateRange.to}
-            onChange={(e) => setDateRange(prev => ({ ...prev, to: e.target.value }))}
-            className="w-full px-2 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-          />
-        </div>
-
-        <div className="flex items-end min-w-0">
-          <div className="w-full min-w-0">
-            <label className="block text-xs font-medium text-gray-300 mb-2">Current Range</label>
-            <div className="px-2 py-2 bg-gray-750 border border-gray-600 rounded-lg text-xs text-gray-300 truncate">
-              {new Date(dateRange.from).toLocaleDateString()} - {new Date(dateRange.to).toLocaleDateString()}
-            </div>
+          
+          <div className="flex gap-2">
+            <input
+              type="date"
+              value={dateRange.from}
+              max={new Date().toISOString().split('T')[0]}
+              onChange={(e) => setDateRange(prev => ({ ...prev, from: e.target.value }))}
+              className="flex-1 px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+            />
+            <input
+              type="date"
+              value={dateRange.to}
+              min={dateRange.from}
+              max={new Date().toISOString().split('T')[0]}
+              onChange={(e) => setDateRange(prev => ({ ...prev, to: e.target.value }))}
+              className="flex-1 px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+            />
           </div>
         </div>
       </div>
@@ -1617,107 +1707,142 @@ const DarkCorporateDashboard: React.FC = () => {
           </button>
         </div>
 
-        {/* Comprehensive Report Filters */}
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <FunnelIcon className="h-4 w-4 text-gray-400" />
-              <h3 className="text-base font-semibold text-white">Report Filters</h3>
-            </div>
-            <button
-              onClick={() => {
-                const defaultRange = getDefaultDateRange();
-                setReportFilters(prev => ({
-                  ...prev,
-                  dateFrom: defaultRange.from,
-                  dateTo: defaultRange.to,
-                  searchTerm: ''
-                }));
-                setSelectedPeriod('30days');
-              }}
-              className="text-xs text-blue-400 hover:text-blue-300 underline"
-            >
-              Clear All
-            </button>
-          </div>
-
-          {/* Period Filter - Compact buttons */}
-          <div className="mb-3">
-            <div className="flex flex-wrap gap-1">
-              {/* Settlement Point button - shown first if available */}
-              {getLastSettlementPoint() && (
-                <button
-                  onClick={() => {
-                    const defaultRange = getDefaultDateRange();
-                    setReportFilters(prev => ({
-                      ...prev,
-                      dateFrom: defaultRange.from,
-                      dateTo: defaultRange.to,
-                      searchTerm: ''
-                    }));
-                    setSelectedPeriod('settlement');
-                  }}
-                  className={clsx(
-                    'px-3 py-1 rounded text-xs font-medium transition-colors',
-                    selectedPeriod === 'settlement'
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-emerald-900/30 text-emerald-300 hover:bg-emerald-800/50 border border-emerald-600/30'
-                  )}
+        {/* Compact Report Filters */}
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-lg p-3 mb-4">
+          {/* Desktop Layout */}
+          <div className="hidden lg:block">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-6">
+                <div className="flex items-center gap-2">
+                  <FunnelIcon className="h-4 w-4 text-gray-400" />
+                  <span className="text-sm text-gray-300">Report Filters:</span>
+                </div>
+                
+                {/* Period Dropdown */}
+                <select
+                  value={selectedPeriod}
+                  onChange={(e) => handleReportPeriodChange(e.target.value)}
+                  className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
                 >
-                  📍 Since Settlement
-                </button>
-              )}
+                  {getLastSettlementPoint() && <option value="settlement">📍 Since Settlement</option>}
+                  <option value="7days">7 Days</option>
+                  <option value="30days">30 Days</option>
+                  <option value="90days">3 Months</option>
+                  <option value="6months">6 Months</option>
+                  <option value="1year">1 Year</option>
+                  <option value="all">All Time</option>
+                </select>
+                
+                {/* Date Range */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={reportFilters.dateFrom}
+                    max={new Date().toISOString().split('T')[0]}
+                    onChange={(e) => setReportFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+                    className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+                  />
+                  <span className="text-gray-400">to</span>
+                  <input
+                    type="date"
+                    value={reportFilters.dateTo}
+                    min={reportFilters.dateFrom}
+                    max={new Date().toISOString().split('T')[0]}
+                    onChange={(e) => setReportFilters(prev => ({ ...prev, dateTo: e.target.value }))}
+                    className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+                  />
+                </div>
+                
+                {/* Search */}
+                <div className="relative">
+                  <MagnifyingGlassIcon className="h-3 w-3 absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    value={reportFilters.searchTerm}
+                    onChange={(e) => setReportFilters(prev => ({ ...prev, searchTerm: e.target.value }))}
+                    placeholder="Search transactions..."
+                    className="w-48 pl-7 pr-2 py-1 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+                  />
+                </div>
+              </div>
               
-              {/* Regular period buttons */}
-              {[
-                { value: '7days', label: 'Last 7 Days' },
-                { value: '30days', label: 'Last 30 Days' },
-                { value: '90days', label: 'Last 3 Months' },
-                { value: '6months', label: 'Last 6 Months' },
-                { value: '1year', label: 'Last Year' },
-                { value: 'all', label: 'Show All' }
-              ].map(period => (
-                <button
-                  key={period.value}
-                  onClick={() => handleReportPeriodChange(period.value)}
-                  className={clsx(
-                    'px-3 py-1 rounded text-xs font-medium transition-colors',
-                    selectedPeriod === period.value
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  )}
-                >
-                  {period.label}
-                </button>
-              ))}
+              <button
+                onClick={() => {
+                  const defaultRange = getDefaultDateRange();
+                  setReportFilters(prev => ({
+                    ...prev,
+                    dateFrom: defaultRange.from,
+                    dateTo: defaultRange.to,
+                    searchTerm: ''
+                  }));
+                  setSelectedPeriod('30days');
+                }}
+                className="text-xs text-blue-400 hover:text-blue-300 underline"
+              >
+                Reset
+              </button>
+            </div>
+            
+            {/* Compact Summary */}
+            <div className="flex items-center justify-between text-xs text-gray-400">
+              <span>
+                {filteredReportTransactions.length} transactions 
+                {(() => {
+                  const lastSettlement = getLastSettlementPoint();
+                  const defaultRange = getDefaultDateRange();
+                  if (lastSettlement && reportFilters.dateFrom === defaultRange.from) {
+                    return <span className="text-emerald-400 ml-1">📍 since settlement</span>;
+                  }
+                  return null;
+                })()}
+              </span>
+              <span>
+                {new Date(reportFilters.dateFrom).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - 
+                {new Date(reportFilters.dateTo).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </span>
             </div>
           </div>
-
-          {/* Main filters in single row */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-            {/* Date Range */}
-            <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1">From</label>
-              <input
-                type="date"
-                value={reportFilters.dateFrom}
-                onChange={(e) => setReportFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
-                className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
-              />
+          
+          {/* Mobile/Tablet Layout */}
+          <div className="lg:hidden space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FunnelIcon className="h-4 w-4 text-gray-400" />
+                <span className="text-sm text-gray-300">Report Filters</span>
+              </div>
+              <button
+                onClick={() => {
+                  const defaultRange = getDefaultDateRange();
+                  setReportFilters(prev => ({
+                    ...prev,
+                    dateFrom: defaultRange.from,
+                    dateTo: defaultRange.to,
+                    searchTerm: ''
+                  }));
+                  setSelectedPeriod('30days');
+                }}
+                className="text-xs text-blue-400 hover:text-blue-300 underline"
+              >
+                Reset
+              </button>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1">To</label>
-              <input
-                type="date"
-                value={reportFilters.dateTo}
-                onChange={(e) => setReportFilters(prev => ({ ...prev, dateTo: e.target.value }))}
-                className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
-              />
-            </div>
-
-            {/* Search */}
-            <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1">Search</label>
+            
+            {/* Period and Search */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <select
+                value={selectedPeriod}
+                onChange={(e) => handleReportPeriodChange(e.target.value)}
+                className="px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+              >
+                {getLastSettlementPoint() && <option value="settlement">📍 Since Settlement</option>}
+                <option value="7days">Last 7 Days</option>
+                <option value="30days">Last 30 Days</option>
+                <option value="90days">Last 3 Months</option>
+                <option value="6months">Last 6 Months</option>
+                <option value="1year">Last 1 Year</option>
+                <option value="all">All Time</option>
+              </select>
+              
               <div className="relative">
                 <MagnifyingGlassIcon className="h-3 w-3 absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
                 <input
@@ -1725,42 +1850,47 @@ const DarkCorporateDashboard: React.FC = () => {
                   value={reportFilters.searchTerm}
                   onChange={(e) => setReportFilters(prev => ({ ...prev, searchTerm: e.target.value }))}
                   placeholder="Search..."
-                  className="w-full pl-7 pr-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
+                  className="w-full pl-7 pr-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
                 />
               </div>
             </div>
-          </div>
-
-
-          {/* Filter Summary */}
-          <div className="mt-3 pt-3 border-t border-gray-600/30">
-            <div className="flex items-center justify-between text-sm">
-              <div className="flex items-center gap-3">
-                <span className="text-gray-400">
-                  Showing {filteredReportTransactions.length} transactions from {new Date(reportFilters.dateFrom).toLocaleDateString()} to {new Date(reportFilters.dateTo).toLocaleDateString()}
-                </span>
+            
+            {/* Date Range */}
+            <div className="flex gap-2">
+              <input
+                type="date"
+                value={reportFilters.dateFrom}
+                max={new Date().toISOString().split('T')[0]}
+                onChange={(e) => setReportFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+                className="flex-1 px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+              />
+              <input
+                type="date"
+                value={reportFilters.dateTo}
+                min={reportFilters.dateFrom}
+                max={new Date().toISOString().split('T')[0]}
+                onChange={(e) => setReportFilters(prev => ({ ...prev, dateTo: e.target.value }))}
+                className="flex-1 px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+              />
+            </div>
+            
+            {/* Mobile Summary */}
+            <div className="text-xs text-gray-400 text-center">
+              <span>
+                {filteredReportTransactions.length} transactions
                 {(() => {
                   const lastSettlement = getLastSettlementPoint();
                   const defaultRange = getDefaultDateRange();
                   if (lastSettlement && reportFilters.dateFrom === defaultRange.from) {
-                    return (
-                      <span className="bg-emerald-900/30 text-emerald-300 px-3 py-1.5 rounded-md text-xs font-medium border border-emerald-600/50 flex items-center gap-1">
-                        <span className="text-emerald-400">📍</span>
-                        Since Settlement Point ({new Date(lastSettlement.date).toLocaleDateString()})
-                      </span>
-                    );
+                    return <span className="text-emerald-400 ml-1">📍 since settlement</span>;
                   }
                   return null;
                 })()}
-              </div>
-              <div className="flex items-center gap-4">
-                <span className="text-green-400 font-medium">
-                  Transactions: {filteredReportTransactions.length}
-                </span>
-                <span className="text-blue-400 font-medium">
-                  Period: {selectedPeriod.replace('days', 'd').replace('months', 'm').replace('year', 'y')}
-                </span>
-              </div>
+              </span>
+              <span className="block mt-1">
+                {new Date(reportFilters.dateFrom).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - 
+                {new Date(reportFilters.dateTo).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </span>
             </div>
           </div>
         </div>
@@ -2181,6 +2311,106 @@ const DarkCorporateDashboard: React.FC = () => {
 
       {/* Add bottom padding to main content on mobile */}
       <div className="lg:hidden h-16"></div>
+
+      {/* Notification Panel */}
+      {showNotifications && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center z-50 pt-20 px-4">
+          <div className="bg-gray-800 border border-gray-700 rounded-xl w-full max-w-md shadow-2xl max-h-[80vh] overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700">
+              <div className="flex items-center gap-3">
+                <BellIcon className="h-5 w-5 text-blue-400" />
+                <h2 className="text-lg font-semibold text-white">Notifications</h2>
+                {unreadCount > 0 && (
+                  <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full">
+                    {unreadCount}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {notifications.length > 0 && (
+                  <button
+                    onClick={() => markAllAsRead()}
+                    className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                  >
+                    Mark all read
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowNotifications(false)}
+                  className="p-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
+                >
+                  <XMarkIcon className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Notification List */}
+            <div className="overflow-y-auto max-h-96">
+              {notifications.length === 0 ? (
+                <div className="p-8 text-center">
+                  <BellIcon className="h-12 w-12 text-gray-500 mx-auto mb-3" />
+                  <p className="text-gray-400">No notifications</p>
+                  <p className="text-sm text-gray-500 mt-1">You're all caught up!</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-700">
+                  {notifications.map((notification) => (
+                    <div
+                      key={notification.id}
+                      className={`p-4 hover:bg-gray-750 transition-colors ${
+                        !notification.isRead ? 'bg-blue-900/20 border-l-2 border-l-blue-500' : ''
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-medium ${
+                            !notification.isRead ? 'text-white' : 'text-gray-300'
+                          }`}>
+                            {notification.title}
+                          </p>
+                          <p className="text-sm text-gray-400 mt-1">
+                            {notification.message}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-2">
+                            {new Date(notification.timestamp).toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 ml-3">
+                          {!notification.isRead && (
+                            <button
+                              onClick={() => markAsRead(notification.id)}
+                              className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                              title="Mark as read"
+                            >
+                              ✓
+                            </button>
+                          )}
+                          <button
+                            onClick={() => removeNotification(notification.id)}
+                            className="text-xs text-gray-400 hover:text-red-400 transition-colors"
+                            title="Remove notification"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Profile Settings Modal */}
+      {showProfileSettings && (
+        <ProfileSettings
+          isOpen={showProfileSettings}
+          onClose={() => setShowProfileSettings(false)}
+        />
+      )}
     </div>
   );
 };

@@ -355,6 +355,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
                 <input
                   type="date"
                   value={formData.date}
+                  max={new Date().toISOString().split('T')[0]}
                   onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
                   className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
                   required
