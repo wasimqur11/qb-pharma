@@ -90,62 +90,40 @@ const UserProfileBanner: React.FC = () => {
   });
 
   return (
-    <div className="bg-white rounded-xl shadow-lg border border-gray-200 mb-6 overflow-hidden">
-      {/* Header Section with Gradient */}
-      <div className={`${roleConfig.bgGradient} px-6 py-4`}>
+    <div className={`${roleConfig.bgGradient} rounded-lg shadow-sm border border-gray-700/50 mb-4 overflow-hidden`}>
+      <div className="px-4 py-3">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            {/* Professional Avatar */}
-            <div className="h-14 w-14 rounded-full bg-white bg-opacity-20 flex items-center justify-center border-2 border-white border-opacity-30 backdrop-blur-sm">
-              {roleConfig.icon}
+          {/* Left: User Info */}
+          <div className="flex items-center space-x-3">
+            {/* Compact Avatar */}
+            <div className="h-10 w-10 rounded-lg bg-white bg-opacity-20 flex items-center justify-center border border-white border-opacity-30">
+              <div className="scale-75">
+                {roleConfig.icon}
+              </div>
             </div>
             
-            {/* User Identity */}
+            {/* User Details */}
             <div className="text-white">
-              <h2 className="text-xl font-bold">{user.name}</h2>
-              <p className="text-white text-opacity-90 text-sm">{user.email}</p>
+              <h2 className="text-lg font-semibold leading-tight">{user.name}</h2>
+              <p className="text-white text-opacity-80 text-xs">{roleConfig.title}</p>
             </div>
           </div>
 
-          {/* Role Badge */}
-          <div className="text-right">
-            <span className={`inline-flex items-center px-4 py-2 text-sm font-semibold rounded-lg border-2 ${roleConfig.badge} shadow-sm`}>
-              {roleConfig.title}
-            </span>
+          {/* Right: Status & Time */}
+          <div className="flex items-center space-x-4">
+            {/* Active Status */}
+            <div className="flex items-center text-white text-opacity-90">
+              <div className="h-2 w-2 bg-green-400 rounded-full mr-2 animate-pulse"></div>
+              <span className="text-xs font-medium hidden sm:inline">Active</span>
+            </div>
+            
+            {/* Current Time - Hidden on mobile */}
+            <div className="text-white text-opacity-80 text-xs font-mono hidden md:block">
+              {currentTime}
+            </div>
           </div>
         </div>
       </div>
-
-      {/* Content Section */}
-      <div className="px-6 py-4 bg-gray-50">
-        <div className="flex items-center justify-between">
-          {/* Role Description */}
-          <div className="flex-1">
-            <p className="text-gray-700 font-medium text-sm">{roleConfig.description}</p>
-            <div className="flex items-center space-x-4 mt-2">
-              <div className="flex items-center text-xs text-gray-500">
-                <ClockIcon className="h-4 w-4 mr-1" />
-                Last login: {user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'First time'}
-              </div>
-              <div className="text-xs text-gray-500">
-                Current time: {currentTime}
-              </div>
-            </div>
-          </div>
-
-          {/* Access Level Indicator */}
-          <div className="text-right ml-6">
-            <div className="inline-flex items-center">
-              <div className="h-2 w-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
-              <span className="text-sm font-medium text-gray-900">{roleConfig.accessLevel}</span>
-            </div>
-            <p className="text-xs text-gray-500 mt-1">Active Session</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Bottom accent line */}
-      <div className={`h-1 ${roleConfig.bgGradient}`}></div>
     </div>
   );
 };

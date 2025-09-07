@@ -17,7 +17,7 @@ export class ConfigurationService {
 
   private async fetchConfigFromAPI(): Promise<Record<string, any>> {
     try {
-      const token = localStorage.getItem('authToken');
+      const token = localStorage.getItem('qb_pharma_token');
       if (!token) {
         throw new Error('No authentication token');
       }
@@ -75,7 +75,7 @@ export class ConfigurationService {
   // Method to update configuration and invalidate cache
   async updateConfiguration(category: string, key: string, value: string): Promise<void> {
     try {
-      const token = localStorage.getItem('authToken');
+      const token = localStorage.getItem('qb_pharma_token');
       if (!token) {
         throw new Error('No authentication token');
       }

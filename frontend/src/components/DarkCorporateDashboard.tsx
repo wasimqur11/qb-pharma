@@ -8,6 +8,7 @@ import type { DashboardStats, PayableBalance, Transaction } from '../types';
 import { useTransactions } from '../contexts/TransactionContext';
 import { useStakeholders } from '../contexts/StakeholderContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotifications } from '../contexts/NotificationContext';
 import { useRoleBasedData } from '../hooks/useRoleBasedData';
 // import { useToast } from '../contexts/ToastContext';
 import qbLogo from '../assets/qblogo.png';
@@ -34,7 +35,7 @@ import {
   ClockIcon, CalendarIcon, BellIcon, Cog6ToothIcon, HomeIcon,
   DocumentTextIcon, UserIcon, ArrowTrendingUpIcon, EyeIcon,
   Squares2X2Icon, ChevronDownIcon, MagnifyingGlassIcon, FunnelIcon,
-  ArrowRightOnRectangleIcon
+  ArrowRightOnRectangleIcon, Bars3Icon, XMarkIcon
 } from '@heroicons/react/24/outline';
 import { SYSTEM_CONFIG, getDefaultDateRange } from '../constants/systemConfig';
 import clsx from 'clsx';
@@ -48,6 +49,7 @@ const DarkCorporateDashboard: React.FC = () => {
   const [selectedTransactionForEdit, setSelectedTransactionForEdit] = useState<Transaction | null>(null);
   const [showPaymentProcessor, setShowPaymentProcessor] = useState(false);
   const [showSimpleSettlementWizard, setShowSimpleSettlementWizard] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
   const { 
     transactions, 
@@ -64,6 +66,7 @@ const DarkCorporateDashboard: React.FC = () => {
   const { doctors, businessPartners, employees, distributors, patients } = useStakeholders();
   
   const { user, logout } = useAuth();
+  const { unreadCount } = useNotifications();
   
   // Use role-based filtered data
   const { 
@@ -540,6 +543,15 @@ const DarkCorporateDashboard: React.FC = () => {
         <div className="flex items-center justify-between">
           {/* Left Section - Brand */}
           <div className="flex items-center gap-4">
+            {/* Mobile Hamburger Menu */}
+            <button 
+              onClick={() => setMobileMenuOpen(true)}
+              className="lg:hidden p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-md transition-colors"
+              title="Open Navigation Menu"
+            >
+              <Bars3Icon className="h-6 w-6" />
+            </button>
+            
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 flex items-center justify-center">
                 <img src={qbLogo} alt="QB Pharmacy Management" className="h-10 w-10 object-contain" />
@@ -580,24 +592,6 @@ const DarkCorporateDashboard: React.FC = () => {
               </button>
             </div>
 
-            {/* Mobile Quick Actions */}
-            <div className="lg:hidden flex items-center gap-1">
-              <button
-                onClick={() => setShowTransactionForm(true)}
-                className="p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                title="Add Transaction (Ctrl+Enter)"
-              >
-                <PlusIcon className="h-4 w-4" />
-              </button>
-              
-              <button
-                onClick={() => setShowPaymentProcessor(true)}
-                className="p-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
-                title="Process Payments"
-              >
-                <CreditCardIcon className="h-4 w-4" />
-              </button>
-            </div>
 
             {/* Search - Hidden on small screens */}
             <div className="hidden md:block relative">
@@ -613,10 +607,14 @@ const DarkCorporateDashboard: React.FC = () => {
             {/* Notifications */}
             <button 
               className="relative p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-md transition-colors"
-              title="View notifications and alerts (3 new)"
+              title={`View notifications and alerts${unreadCount > 0 ? ` (${unreadCount} new)` : ''}`}
             >
               <BellIcon className="h-4 w-4" />
-              <span className="absolute -top-0.5 -right-0.5 h-3 w-3 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">3</span>
+              {unreadCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 h-4 w-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-medium">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
             </button>
             
             {/* User Menu */}
@@ -640,8 +638,8 @@ const DarkCorporateDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Navigation Tabs */}
-      <div className="px-4 pb-0 border-b border-gray-800">
+      {/* Desktop Navigation Tabs - Hidden on mobile */}
+      <div className="hidden lg:block px-4 pb-0 border-b border-gray-800">
         <nav className="flex items-center gap-1 -mb-px overflow-x-auto scrollbar-hide">
           {/* Primary Navigation - Daily Operations */}
           {navigationItems.primary.map(item => (
@@ -743,36 +741,6 @@ const DarkCorporateDashboard: React.FC = () => {
           ))}
         </nav>
       </div>
-      
-      {/* Sub-navigation for Statements */}
-      {(activeTab === 'statements' || activeTab === 'business_statement' || activeTab === 'doctor_statement' || activeTab === 'distributor_statement') && (
-        <div className="px-4 py-2 bg-gray-850 border-b border-gray-800">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-400 mr-3">Statement Type:</span>
-            {[
-              { id: 'statements', label: 'Account Statements', icon: DocumentArrowUpIcon, tooltip: 'General stakeholder account statements' },
-              { id: 'business_statement', label: 'Pharmacy Business', icon: BuildingOfficeIcon, tooltip: 'Pharmacy business financial statement' },
-              { id: 'doctor_statement', label: 'Doctor Practice', icon: UserGroupIcon, tooltip: 'Doctor consultation and revenue statement' },
-              { id: 'distributor_statement', label: 'Distributor Accounts', icon: TruckIcon, tooltip: 'Distributor credit and payment statements' },
-            ].map(item => (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id as any)}
-                title={item.tooltip}
-                className={clsx(
-                  'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200',
-                  activeTab === item.id 
-                    ? 'bg-purple-600 text-white' 
-                    : 'text-gray-400 hover:text-gray-300 hover:bg-gray-700'
-                )}
-              >
-                <item.icon className="h-3 w-3" />
-                {item.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 
@@ -1868,11 +1836,199 @@ const DarkCorporateDashboard: React.FC = () => {
     );
   };
 
+  // Mobile Menu Drawer Component
+  const MobileMenuDrawer: React.FC = () => (
+    <>
+      {mobileMenuOpen && (
+        <div className="lg:hidden fixed inset-0 z-50">
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm" 
+            onClick={() => setMobileMenuOpen(false)} 
+          />
+          
+          {/* Drawer */}
+          <div className="fixed left-0 top-0 h-full w-80 bg-gray-900 shadow-xl border-r border-gray-700 flex flex-col">
+            {/* Header */}
+            <div className="p-4 border-b border-gray-700">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 flex items-center justify-center">
+                    <img src={qbLogo} alt="QB Pharmacy" className="h-8 w-8 object-contain" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-white">QB Pharmacy</h2>
+                    <p className="text-xs text-gray-400">Navigation Menu</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-md transition-colors"
+                >
+                  <XMarkIcon className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* User Info */}
+            <div className="p-4 border-b border-gray-700 bg-gray-850">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
+                  <span className="text-white font-medium text-sm">
+                    {user?.name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'}
+                  </span>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-white">{user?.name}</p>
+                  <p className="text-xs text-gray-400">{user?.role?.replace('_', ' ').toUpperCase()}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Navigation Items */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+              {/* Primary */}
+              {navigationItems.primary.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                    Dashboard
+                  </h3>
+                  <div className="space-y-1">
+                    {navigationItems.primary.map(item => (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          setActiveTab(item.id as any);
+                          setMobileMenuOpen(false);
+                        }}
+                        className={clsx(
+                          'w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors',
+                          activeTab === item.id
+                            ? 'bg-blue-600 text-white'
+                            : 'text-gray-300 hover:text-white hover:bg-gray-800'
+                        )}
+                      >
+                        <item.icon className="h-5 w-5" />
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Management */}
+              {navigationItems.management.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                    Management
+                  </h3>
+                  <div className="space-y-1">
+                    {navigationItems.management.map(item => (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          setActiveTab(item.id as any);
+                          setMobileMenuOpen(false);
+                        }}
+                        className={clsx(
+                          'w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors',
+                          activeTab === item.id
+                            ? 'bg-blue-600 text-white'
+                            : 'text-gray-300 hover:text-white hover:bg-gray-800'
+                        )}
+                      >
+                        <item.icon className="h-5 w-5" />
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Statements */}
+              {navigationItems.statements.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                    Statements & Reports
+                  </h3>
+                  <div className="space-y-1">
+                    {navigationItems.statements.map(item => (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          setActiveTab(item.id as any);
+                          setMobileMenuOpen(false);
+                        }}
+                        className={clsx(
+                          'w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors',
+                          activeTab === item.id
+                            ? 'bg-blue-600 text-white'
+                            : 'text-gray-300 hover:text-white hover:bg-gray-800'
+                        )}
+                      >
+                        <item.icon className="h-5 w-5" />
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* System */}
+              {navigationItems.system.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                    System Settings
+                  </h3>
+                  <div className="space-y-1">
+                    {navigationItems.system.map(item => (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          setActiveTab(item.id as any);
+                          setMobileMenuOpen(false);
+                        }}
+                        className={clsx(
+                          'w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors',
+                          activeTab === item.id
+                            ? 'bg-blue-600 text-white'
+                            : 'text-gray-300 hover:text-white hover:bg-gray-800'
+                        )}
+                      >
+                        <item.icon className="h-5 w-5" />
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-gray-700 bg-gray-900">
+              <button
+                onClick={() => {
+                  logout();
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded-md transition-colors text-sm font-medium"
+              >
+                <ArrowRightOnRectangleIcon className="h-5 w-5" />
+                Sign Out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+
   return (
     <div className="min-h-screen bg-gray-900">
       <Header />
+      <MobileMenuDrawer />
       
-      <main className="p-5 max-w-7xl mx-auto">
+      <main className="p-5 max-w-7xl mx-auto pb-20 lg:pb-5">
         {/* User Profile Banner */}
         <UserProfileBanner />
         <div className="mb-5">
@@ -1932,6 +2088,69 @@ const DarkCorporateDashboard: React.FC = () => {
         onClose={() => setShowSimpleSettlementWizard(false)}
         availableCash={allTimeStats.pharmacyCashPosition}
       />
+
+      {/* Mobile Bottom Tab Bar */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-700 px-2 py-1 z-40">
+        <div className="flex justify-around items-center">
+          {/* Dashboard */}
+          <button
+            onClick={() => setActiveTab('dashboard')}
+            className={clsx(
+              'flex flex-col items-center py-2 px-3 min-w-0 transition-colors rounded-md',
+              activeTab === 'dashboard'
+                ? 'text-blue-400 bg-blue-900/30'
+                : 'text-gray-400 hover:text-white hover:bg-gray-800'
+            )}
+          >
+            <Squares2X2Icon className="h-5 w-5 mb-1" />
+            <span className="text-xs font-medium truncate">Dashboard</span>
+          </button>
+
+          {/* Add Transaction */}
+          <button
+            onClick={() => setShowTransactionForm(true)}
+            className="flex flex-col items-center py-2 px-3 min-w-0 text-gray-400 hover:text-white hover:bg-gray-800 transition-colors rounded-md"
+          >
+            <PlusIcon className="h-5 w-5 mb-1" />
+            <span className="text-xs font-medium truncate">Add</span>
+          </button>
+
+          {/* Reports */}
+          <button
+            onClick={() => setActiveTab('reports')}
+            className={clsx(
+              'flex flex-col items-center py-2 px-3 min-w-0 transition-colors rounded-md',
+              activeTab === 'reports'
+                ? 'text-blue-400 bg-blue-900/30'
+                : 'text-gray-400 hover:text-white hover:bg-gray-800'
+            )}
+          >
+            <DocumentTextIcon className="h-5 w-5 mb-1" />
+            <span className="text-xs font-medium truncate">Reports</span>
+          </button>
+
+          {/* Process Payments */}
+          <button
+            onClick={() => setShowPaymentProcessor(true)}
+            className="flex flex-col items-center py-2 px-3 min-w-0 text-gray-400 hover:text-white hover:bg-gray-800 transition-colors rounded-md"
+          >
+            <CreditCardIcon className="h-5 w-5 mb-1" />
+            <span className="text-xs font-medium truncate">Pay</span>
+          </button>
+
+          {/* More (opens hamburger menu) */}
+          <button
+            onClick={() => setMobileMenuOpen(true)}
+            className="flex flex-col items-center py-2 px-3 min-w-0 text-gray-400 hover:text-white hover:bg-gray-800 transition-colors rounded-md"
+          >
+            <Bars3Icon className="h-5 w-5 mb-1" />
+            <span className="text-xs font-medium truncate">More</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Add bottom padding to main content on mobile */}
+      <div className="lg:hidden h-16"></div>
     </div>
   );
 };
