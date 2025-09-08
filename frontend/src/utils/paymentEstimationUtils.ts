@@ -60,15 +60,20 @@ export class ConfigurationService {
       this.cacheTimestamp = now;
     }
 
-    // Extract payment estimation values with fallbacks to hardcoded defaults
+    // Extract payment estimation values with fallbacks to system defaults
     const profitConfig = this.configCache.get('profit_allocation_percentage');
     const distributorConfig = this.configCache.get('distributor_allocation_percentage');
     const maxPaymentConfig = this.configCache.get('max_distributor_payment_percentage');
 
+    // Use system defaults only as last resort if configuration is missing
+    const DEFAULT_PROFIT_PERCENTAGE = 25;
+    const DEFAULT_DISTRIBUTOR_PERCENTAGE = 75;
+    const DEFAULT_MAX_PAYMENT_PERCENTAGE = 10;
+
     return {
-      profitPercentage: profitConfig?.value ?? SYSTEM_CONFIG.PROFIT_ALLOCATION_PERCENTAGE,
-      distributorPercentage: distributorConfig?.value ?? SYSTEM_CONFIG.DISTRIBUTOR_ALLOCATION_PERCENTAGE,
-      maxPaymentPercentage: maxPaymentConfig?.value ?? SYSTEM_CONFIG.MAX_DISTRIBUTOR_PAYMENT_PERCENTAGE
+      profitPercentage: profitConfig?.value ?? DEFAULT_PROFIT_PERCENTAGE,
+      distributorPercentage: distributorConfig?.value ?? DEFAULT_DISTRIBUTOR_PERCENTAGE,
+      maxPaymentPercentage: maxPaymentConfig?.value ?? DEFAULT_MAX_PAYMENT_PERCENTAGE
     };
   }
 
@@ -234,9 +239,19 @@ export async function calculateDistributorPaymentEstimates(
   let maxPaymentPercentage: number;
 
   if (customConfig) {
-    profitPercentage = customConfig.profitPercentage ?? SYSTEM_CONFIG.PROFIT_ALLOCATION_PERCENTAGE;
-    distributorPercentage = customConfig.distributorPercentage ?? SYSTEM_CONFIG.DISTRIBUTOR_ALLOCATION_PERCENTAGE;
-    maxPaymentPercentage = customConfig.maxPaymentPercentage ?? SYSTEM_CONFIG.MAX_DISTRIBUTOR_PAYMENT_PERCENTAGE;
+    // Configuration service fallback for missing custom config values
+    const configService = ConfigurationService.getInstance();
+    let fallbackConfig = { profitPercentage: 25, distributorPercentage: 75, maxPaymentPercentage: 10 };
+    
+    try {
+      fallbackConfig = await configService.getPaymentEstimationConfig();
+    } catch (error) {
+      console.error('Failed to fetch fallback configuration, using defaults:', error);
+    }
+    
+    profitPercentage = customConfig.profitPercentage ?? fallbackConfig.profitPercentage;
+    distributorPercentage = customConfig.distributorPercentage ?? fallbackConfig.distributorPercentage;
+    maxPaymentPercentage = customConfig.maxPaymentPercentage ?? fallbackConfig.maxPaymentPercentage;
   } else {
     try {
       const configService = ConfigurationService.getInstance();
@@ -245,10 +260,10 @@ export async function calculateDistributorPaymentEstimates(
       distributorPercentage = dbConfig.distributorPercentage;
       maxPaymentPercentage = dbConfig.maxPaymentPercentage;
     } catch (error) {
-      console.error('Failed to fetch configuration from database, using fallback values:', error);
-      profitPercentage = SYSTEM_CONFIG.PROFIT_ALLOCATION_PERCENTAGE;
-      distributorPercentage = SYSTEM_CONFIG.DISTRIBUTOR_ALLOCATION_PERCENTAGE;
-      maxPaymentPercentage = SYSTEM_CONFIG.MAX_DISTRIBUTOR_PAYMENT_PERCENTAGE;
+      console.error('Failed to fetch configuration from database, using built-in defaults:', error);
+      profitPercentage = 25;
+      distributorPercentage = 75;
+      maxPaymentPercentage = 10;
     }
   }
   

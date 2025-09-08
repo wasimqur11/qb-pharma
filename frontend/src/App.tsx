@@ -9,6 +9,7 @@ import { TransactionProvider } from './contexts/TransactionContext'
 import { SettlementEquityProvider } from './contexts/SettlementEquityContext'
 import { SimpleSettlementProvider } from './contexts/SimpleSettlementContext'
 import { NotificationProvider } from './contexts/NotificationContext'
+import { UserPreferencesProvider } from './contexts/UserPreferencesContext'
 // import { ToastProvider } from './contexts/ToastContext'
 
 function App() {
@@ -18,17 +19,19 @@ function App() {
         <ConnectivityProvider checkInterval={15000} maxRetries={3}>
           <ProtectedRoute>
             <ConfigurationProvider>
-              <StakeholderProvider>
-                <TransactionProvider>
-                  <NotificationProvider>
-                    <SettlementEquityProvider>
-                      <SimpleSettlementProvider>
-                        <DarkCorporateDashboard />
-                      </SimpleSettlementProvider>
-                    </SettlementEquityProvider>
-                  </NotificationProvider>
-                </TransactionProvider>
-              </StakeholderProvider>
+              <UserPreferencesProvider>
+                <StakeholderProvider>
+                  <TransactionProvider>
+                    <NotificationProvider>
+                      <SettlementEquityProvider>
+                        <SimpleSettlementProvider>
+                          <DarkCorporateDashboard />
+                        </SimpleSettlementProvider>
+                      </SettlementEquityProvider>
+                    </NotificationProvider>
+                  </TransactionProvider>
+                </StakeholderProvider>
+              </UserPreferencesProvider>
             </ConfigurationProvider>
           </ProtectedRoute>
         </ConnectivityProvider>

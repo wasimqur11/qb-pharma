@@ -9,7 +9,8 @@ import {
   CreditCardIcon,
   BuildingOfficeIcon,
   CalendarIcon,
-  CheckBadgeIcon
+  CheckBadgeIcon,
+  ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 import type { TransactionCategory, StakeholderType } from '../types';
 import { useStakeholders } from '../contexts/StakeholderContext';
@@ -45,6 +46,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
     billNo: '',
     date: new Date().toISOString().split('T')[0]
   });
+
+  // State for duplicate confirmation dialog
+  const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
+  const [pendingSubmission, setPendingSubmission] = useState<TransactionFormData | null>(null);
 
   // Track if user has made any changes to the form
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -89,64 +94,123 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
     return !existingEntry; // Return true if no existing entry (allowed), false if entry exists (not allowed)
   };
 
+  // Check for potential duplicate transactions (for warning, not blocking)
+  const checkForDuplicates = (data: TransactionFormData): boolean => {
+    // Skip duplicate check for categories with daily limits (they have their own logic)
+    const dailyLimitCategories = ['pharmacy_sale', 'consultation_fee'];
+    if (dailyLimitCategories.includes(data.category)) {
+      return false;
+    }
+
+    const amount = parseFloat(data.amount);
+    const selectedDate = new Date(data.date).toDateString();
+    
+    const duplicateTransaction = transactions.find(t => 
+      t.category === data.category &&
+      t.amount === amount &&
+      t.date.toDateString() === selectedDate &&
+      (data.stakeholderId ? t.stakeholderId === data.stakeholderId : true)
+    );
+
+    return !!duplicateTransaction;
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
+    const submissionData = {
+      ...formData,
+      stakeholderType: selectedType?.stakeholderType as StakeholderType
+    };
+
+    // Perform basic validations first
+    if (!performBasicValidations(submissionData)) {
+      return;
+    }
+
+    // Check for duplicates (only for non-daily-limit categories)
+    if (checkForDuplicates(submissionData)) {
+      setPendingSubmission(submissionData);
+      setShowDuplicateWarning(true);
+      return;
+    }
+
+    // Proceed with submission
+    submitTransaction(submissionData);
+  };
+
+  // Extract validation logic for reuse
+  const performBasicValidations = (data: TransactionFormData): boolean => {
     // Special validation for Settlement Point
-    if (formData.category === 'settlement_point') {
+    if (data.category === 'settlement_point') {
       const currentCash = getCashPosition();
       
       // Debug info
       console.log('Settlement Point Validation:', {
         currentCash,
         absoluteCash: Math.abs(currentCash),
-        amount: formData.amount,
-        parsedAmount: parseFloat(formData.amount)
+        amount: data.amount,
+        parsedAmount: parseFloat(data.amount)
       });
       
       // Allow Settlement Point only if cash is within ₹50 of zero (more tolerant for testing)
       if (Math.abs(currentCash) > 50) {
         alert(`Settlement Point can only be created when cash position is close to zero.\n\nCurrent cash: ₹${currentCash.toLocaleString()}\nTolerance: ±₹50`);
-        return;
+        return false;
       }
       
       // Force amount to be 0 for Settlement Point
-      if (parseFloat(formData.amount) !== 0) {
+      if (parseFloat(data.amount) !== 0) {
         alert('Settlement Point amount must be ₹0');
-        return;
+        return false;
       }
     } else {
       // Regular validation for non-Settlement Point transactions
-      if (!formData.amount || parseFloat(formData.amount) <= 0) {
+      if (!data.amount || parseFloat(data.amount) <= 0) {
         alert('Please enter a valid amount greater than 0');
-        return;
+        return false;
       }
     }
     
-    if (selectedType?.requiresStakeholder && !formData.stakeholderId) {
+    if (selectedType?.requiresStakeholder && !data.stakeholderId) {
       alert('Missing Stakeholder: Please select a stakeholder for this transaction type.');
-      return;
+      return false;
     }
-    if (!formData.description) {
+    if (!data.description) {
       alert('Missing Required Fields: Please provide a description for this transaction.');
-      return;
+      return false;
     }
 
     // Check daily entry limit for specific transaction types
-    if (!checkDailyEntryLimit(formData.category, formData.date)) {
-      const categoryLabel = selectedType?.label || formData.category;
-      const selectedDate = new Date(formData.date).toLocaleDateString();
+    if (!checkDailyEntryLimit(data.category, data.date)) {
+      const categoryLabel = selectedType?.label || data.category;
+      const selectedDate = new Date(data.date).toLocaleDateString();
       alert(`Daily Limit Exceeded: Only one ${categoryLabel} entry is allowed per day. An entry already exists for ${selectedDate}.`);
-      return;
+      return false;
     }
 
-    onSubmit({
-      ...formData,
-      stakeholderType: selectedType?.stakeholderType as StakeholderType
-    });
-    
-    // Reset form after successful submission
+    return true;
+  };
+
+  // Submit transaction after all validations
+  const submitTransaction = (data: TransactionFormData) => {
+    onSubmit(data);
     resetForm();
+  };
+
+  // Handle duplicate confirmation
+  const handleDuplicateConfirm = () => {
+    if (pendingSubmission) {
+      submitTransaction(pendingSubmission);
+    }
+    setShowDuplicateWarning(false);
+    setPendingSubmission(null);
+  };
+
+  // Handle duplicate cancellation
+  const handleDuplicateCancel = () => {
+    setShowDuplicateWarning(false);
+    setPendingSubmission(null);
   };
 
   const handleCategoryChange = (category: TransactionCategory) => {
@@ -425,6 +489,72 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
           </div>
         </div>
       </div>
+
+      {/* Duplicate Warning Dialog */}
+      {showDuplicateWarning && pendingSubmission && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-60 p-4">
+          <div className="bg-gray-800 border border-yellow-600/50 rounded-lg w-full max-w-md shadow-2xl">
+            {/* Header */}
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-700 bg-yellow-600/10">
+              <ExclamationTriangleIcon className="h-6 w-6 text-yellow-400 flex-shrink-0" />
+              <h3 className="text-lg font-semibold text-white">Potential Duplicate Transaction</h3>
+            </div>
+
+            {/* Content */}
+            <div className="px-4 py-4">
+              <p className="text-gray-300 mb-4">
+                A similar transaction already exists with the same amount, type, and date. 
+                Are you sure you want to add this transaction?
+              </p>
+              
+              <div className="bg-gray-900/50 p-3 rounded border border-gray-600">
+                <div className="text-sm space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Type:</span>
+                    <span className="text-white">{selectedType?.label}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Amount:</span>
+                    <span className="text-white">₹{parseFloat(pendingSubmission.amount).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Date:</span>
+                    <span className="text-white">{new Date(pendingSubmission.date).toLocaleDateString()}</span>
+                  </div>
+                  {pendingSubmission.stakeholderId && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Stakeholder:</span>
+                      <span className="text-white">
+                        {stakeholders.find(s => s.id === pendingSubmission.stakeholderId)?.name}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="px-4 py-3 border-t border-gray-700 bg-gray-750">
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={handleDuplicateCancel}
+                  className="flex-1 px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors text-sm font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDuplicateConfirm}
+                  className="flex-1 px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 transition-colors text-sm font-medium"
+                >
+                  Add Anyway
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

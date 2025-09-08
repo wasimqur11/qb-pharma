@@ -40,9 +40,48 @@ interface NotificationProviderProps {
 }
 
 export const NotificationProvider: React.FC<NotificationProviderProps> = ({ children }) => {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>(() => {
+    // Load notifications from localStorage on initialization
+    try {
+      const stored = localStorage.getItem('qb-pharma-notifications');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // Convert timestamp strings back to Date objects
+        return parsed.map((n: any) => ({
+          ...n,
+          timestamp: new Date(n.timestamp)
+        }));
+      }
+    } catch (error) {
+      console.warn('Failed to load notifications from localStorage:', error);
+    }
+    return [];
+  });
   const { getDistributorPaymentsDue, transactions } = useTransactions();
   const { distributors } = useStakeholders();
+
+  // Save notifications to localStorage whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem('qb-pharma-notifications', JSON.stringify(notifications));
+    } catch (error) {
+      console.warn('Failed to save notifications to localStorage:', error);
+    }
+  }, [notifications]);
+
+  // Helper function to check if we should create a notification based on recent history
+  const shouldCreateNotification = useCallback((type: string, cooldownHours: number = 4): boolean => {
+    const now = new Date();
+    const cooldownMs = cooldownHours * 60 * 60 * 1000; // Convert hours to milliseconds
+    
+    // Check if there's a recent notification of this type (read or unread)
+    const recentNotification = notifications.find(n => 
+      n.metadata?.type === type && 
+      (now.getTime() - n.timestamp.getTime()) < cooldownMs
+    );
+    
+    return !recentNotification; // Only create if no recent notification exists
+  }, [notifications]);
 
   const addNotification = useCallback((notification: Omit<Notification, 'id' | 'timestamp' | 'isRead'>) => {
     const newNotification: Notification = {
@@ -85,22 +124,22 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
       try {
         // Check for payments due
         const paymentsDue = getDistributorPaymentsDue();
-        if (paymentsDue.length > 0) {
-          // Only add notification if we don't already have one for payments due
-          const hasPaymentNotification = notifications.some(n => 
-            n.metadata?.type === 'payments_due' && !n.isRead
-          );
-
-          if (!hasPaymentNotification) {
-            addNotification({
+        if (paymentsDue.length > 0 && shouldCreateNotification('payments_due', 2)) {
+          // Only add notification if we haven't created one recently (2 hour cooldown)
+          setNotifications(currentNotifications => {
+            const newNotification: Notification = {
+              id: `notification-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
               title: 'Distributor Payments Due',
               message: `${paymentsDue.length} distributor${paymentsDue.length > 1 ? 's have' : ' has'} outstanding payments due`,
               type: 'warning',
               priority: 'high',
+              timestamp: new Date(),
+              isRead: false,
               actionUrl: '/distributor_statement',
               metadata: { type: 'payments_due', count: paymentsDue.length }
-            });
-          }
+            };
+            return [newNotification, ...currentNotifications].slice(0, 50);
+          });
         }
 
         // Check for recent transactions (last 24 hours)
@@ -111,20 +150,21 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
           new Date(t.date) > twentyFourHoursAgo
         );
 
-        if (recentTransactions.length > 10) {
-          const hasActivityNotification = notifications.some(n => 
-            n.metadata?.type === 'high_activity' && !n.isRead
-          );
-
-          if (!hasActivityNotification) {
-            addNotification({
+        if (recentTransactions.length > 10 && shouldCreateNotification('high_activity', 8)) {
+          // Only create high activity notification once per 8 hours
+          setNotifications(currentNotifications => {
+            const newNotification: Notification = {
+              id: `notification-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
               title: 'High Transaction Activity',
               message: `${recentTransactions.length} transactions processed in the last 24 hours`,
               type: 'info',
               priority: 'medium',
+              timestamp: new Date(),
+              isRead: false,
               metadata: { type: 'high_activity', count: recentTransactions.length }
-            });
-          }
+            };
+            return [newNotification, ...currentNotifications].slice(0, 50);
+          });
         }
 
         // Check for inactive distributors (no transactions in last 30 days)
@@ -141,21 +181,22 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
           d.isActive && !activeDistributorIds.has(d.id)
         );
 
-        if (inactiveDistributors.length > 0) {
-          const hasInactivityNotification = notifications.some(n => 
-            n.metadata?.type === 'inactive_distributors' && !n.isRead
-          );
-
-          if (!hasInactivityNotification) {
-            addNotification({
+        if (inactiveDistributors.length > 0 && shouldCreateNotification('inactive_distributors', 24)) {
+          // Only create inactive distributor notification once per day
+          setNotifications(currentNotifications => {
+            const newNotification: Notification = {
+              id: `notification-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
               title: 'Inactive Distributors',
               message: `${inactiveDistributors.length} distributor${inactiveDistributors.length > 1 ? 's have' : ' has'} been inactive for 30+ days`,
               type: 'warning',
               priority: 'low',
+              timestamp: new Date(),
+              isRead: false,
               actionUrl: '/stakeholders',
               metadata: { type: 'inactive_distributors', count: inactiveDistributors.length }
-            });
-          }
+            };
+            return [newNotification, ...currentNotifications].slice(0, 50);
+          });
         }
 
       } catch (error) {
@@ -168,7 +209,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     const interval = setInterval(checkSystemNotifications, 5 * 60 * 1000);
 
     return () => clearInterval(interval);
-  }, [transactions, distributors, getDistributorPaymentsDue, addNotification, notifications]);
+  }, [transactions, distributors, getDistributorPaymentsDue, addNotification]);
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
 

@@ -380,55 +380,59 @@ const DoctorAccountStatement: React.FC = () => {
               {filteredTransactions.length > 0 ? (
                 filteredTransactions.map((transaction) => (
                   <tr key={transaction.id} className="hover:bg-gray-750 transition-colors">
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-300">
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-300">
                       {transaction.date.toLocaleDateString()}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-400">
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-400">
                       {transaction.reference}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <UserGroupIcon className={clsx('h-4 w-4', getCategoryColor(transaction.category))} />
-                        <span className={clsx('text-xs font-medium', getCategoryColor(transaction.category))}>
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap">
+                      <div className="flex items-center gap-1 sm:gap-2">
+                        <UserGroupIcon className={clsx('h-3 w-3 sm:h-4 sm:w-4', getCategoryColor(transaction.category))} />
+                        <span className={clsx('text-xs font-medium hidden sm:inline', getCategoryColor(transaction.category))}>
                           {getCategoryLabel(transaction.category)}
+                        </span>
+                        <span className={clsx('text-xs font-medium sm:hidden', getCategoryColor(transaction.category))}>
+                          {transaction.category === 'consultation_fee' ? 'Fee' : 'Exp'}
                         </span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-center">
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap text-center">
                       {(() => {
                         const impact = getCashFlowImpact(transaction.category);
                         return (
-                          <span className={clsx('text-xs font-semibold px-2 py-1 rounded-full', 
+                          <span className={clsx('text-xs font-semibold px-1 sm:px-2 py-1 rounded-full', 
                             impact.type === 'Revenue' ? 'bg-green-900/50 text-green-400' :
                             impact.type === 'Expense' ? 'bg-red-900/50 text-red-400' :
                             'bg-gray-900/50 text-gray-400'
                           )}>
-                            {impact.type}
+                            <span className="hidden sm:inline">{impact.type}</span>
+                            <span className="sm:hidden">{impact.type === 'Revenue' ? 'R' : 'E'}</span>
                           </span>
                         );
                       })()}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-300 max-w-xs">
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-gray-300 max-w-xs">
                       <div>
                         <p className="truncate">{transaction.description}</p>
                         <p className="text-xs text-gray-500 mt-0.5">Dr. {transaction.doctorName}</p>
                       </div>
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-right text-sm">
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap text-right text-xs sm:text-sm">
                       {transaction.debit > 0 ? (
                         <span className="text-red-400 font-semibold">{formatCurrency(transaction.debit)}</span>
                       ) : (
                         <span className="text-gray-500">-</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-right text-sm">
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap text-right text-xs sm:text-sm">
                       {transaction.credit > 0 ? (
                         <span className="text-blue-400 font-semibold">{formatCurrency(transaction.credit)}</span>
                       ) : (
                         <span className="text-gray-500">-</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-right text-sm">
+                    <td className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap text-right text-xs sm:text-sm">
                       <span className={clsx(
                         'font-semibold',
                         transaction.balance >= 0 ? 'text-green-400' : 'text-red-400'
@@ -440,7 +444,7 @@ const DoctorAccountStatement: React.FC = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
+                  <td colSpan={8} className="px-2 sm:px-4 py-6 sm:py-8 text-center text-gray-400 text-sm">
                     No doctor transactions found for the selected criteria
                   </td>
                 </tr>

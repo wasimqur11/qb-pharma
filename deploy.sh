@@ -170,16 +170,21 @@ npx prisma db push --accept-data-loss || handle_error "Failed to setup database 
 # Check if we should clean existing data
 if [ "$1" = "--clean-data" ]; then
     echo "🧹 Cleaning existing non-user data..."
-    npx tsx clean-seed.ts || echo "⚠️ Clean script not available, continuing..."
+    npx tsx clean-data.ts 2>/dev/null || echo "⚠️ Clean script not available, continuing with fresh setup..."
 fi
 
-# Seed database with user data only
-echo "👤 Seeding database with user data only..."
+# Seed database with ONLY essential user and system data
+echo "👤 Seeding database with essential user data only (NO dummy business data)..."
 npm run db:seed:users || handle_error "Failed to seed user data"
 
-# Seed system configurations
-echo "⚙️ Seeding system configurations..."
+# Seed system configurations (required for application functionality)
+echo "⚙️ Seeding essential system configurations..."
 npx tsx seed-configurations.ts || handle_error "Failed to seed system configurations"
+
+# Explicitly warn against dummy data seeding
+echo "⚠️  NOTE: Dummy business data (doctors, patients, distributors) is NOT seeded"
+echo "   This is intentional to maintain a clean production environment."
+echo "   Business data should be added through the application interface."
 
 # Setup admin user (fallback in case seeding fails)
 echo "👤 Setting up admin user..."
@@ -494,12 +499,13 @@ fi
 echo ""
 echo "🎉 QB Pharma Deployment Completed Successfully!"
 echo ""
-echo "✅ Deployment includes all fixes:"
+echo "✅ Clean Production Deployment Completed:"
 echo "   - CRUD operations working with proper authentication"
 echo "   - Permission parsing fixed for comma-separated actions"
-echo "   - Database seeded with admin users and permissions"
-echo "   - System configurations seeded for payment estimation"
-echo "   - Clean deployment option for data management"
+echo "   - Database seeded with ONLY essential admin users and permissions"
+echo "   - System configurations seeded for payment estimation functionality"
+echo "   - NO dummy business data seeded (doctors, patients, distributors)"
+echo "   - Clean production-ready environment with no sample data"
 echo ""
 echo "📋 Service Information:"
 echo "   Frontend:     http://localhost/ (nginx)"
@@ -542,12 +548,22 @@ echo "📧 Support: admin@qbpharma.com"
 # Create deployment summary
 cat > deployment_summary.txt << EOF
 QB Pharma Deployment Summary
+============================
 Deployed: $(date)
 Version: $(git rev-parse HEAD)
 Services: nginx (frontend), systemd (backend)
 Status: SUCCESS
 Access: http://localhost/
 Admin: username=admin, password=admin123
+
+Data Seeding Policy:
+- ✅ Essential user accounts (admin, operator)
+- ✅ System configurations and settings
+- ✅ Required permissions and departments
+- ❌ NO dummy business data (doctors, patients, distributors)
+- ❌ NO sample transactions or stakeholder records
+
+Note: Business data should be added through the application interface
 EOF
 
 echo ""

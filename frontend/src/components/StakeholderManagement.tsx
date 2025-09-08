@@ -14,6 +14,7 @@ import {
 } from '@heroicons/react/24/outline';
 import type { Partner, Doctor, BusinessPartner, Employee, Distributor, Patient, StakeholderType } from '../types';
 import { useStakeholders } from '../contexts/StakeholderContext';
+import { useAuth } from '../contexts/AuthContext';
 import StakeholderForm from './StakeholderForm';
 import DistributorBulkUpload from './DistributorBulkUpload';
 import clsx from 'clsx';
@@ -28,7 +29,8 @@ interface TableColumn {
 }
 
 const StakeholderManagement: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<StakeholderType>('doctor');
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState<StakeholderType>(user?.role === 'operator' ? 'distributor' : 'doctor');
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
@@ -62,13 +64,18 @@ const StakeholderManagement: React.FC = () => {
     patient: patients
   };
 
-  const stakeholderTypes = [
+  const allStakeholderTypes = [
     { id: 'doctor', label: 'Doctors', icon: UserGroupIcon, color: 'text-green-400' },
     { id: 'business_partner', label: 'Business Partners', icon: UsersIcon, color: 'text-orange-400' },
     { id: 'employee', label: 'Employees', icon: UsersIcon, color: 'text-purple-400' },
-    { id: 'distributor', label: 'Distributors', icon: TruckIcon, color: 'text-cyan-400' },
-    { id: 'patient', label: 'Patients', icon: UserIcon, color: 'text-pink-400' }
+    { id: 'distributor', label: 'Distributors', icon: TruckIcon, color: 'text-cyan-400' }
+    // Removed patients - they have their own dedicated tab
   ];
+
+  // Filter stakeholder types based on user role
+  const stakeholderTypes = user?.role === 'operator' 
+    ? allStakeholderTypes.filter(type => ['distributor'].includes(type.id)) // Operators only see distributors
+    : allStakeholderTypes;
 
   const currentType = stakeholderTypes.find(t => t.id === activeTab);
   const currentData = (stakeholderData as any)[activeTab] || [];
@@ -257,16 +264,18 @@ const StakeholderManagement: React.FC = () => {
     return (
       <div className="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
-          <table className={`w-full ${type === 'distributor' ? 'min-w-[1400px]' : 'min-w-[800px]'}`}>
+          <table className={`w-full ${type === 'distributor' ? 'min-w-[1200px]' : 'min-w-[700px]'}`}>
             <thead className="bg-gray-750">
               <tr>
                 {columns.map(col => (
-                  <th key={col.key} className={`px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider ${col.width || ''}`}>
-                    {col.label}
+                  <th key={col.key} className={`px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider ${col.width || ''}`}>
+                    <span className="hidden sm:inline">{col.label}</span>
+                    <span className="sm:hidden">{col.label.length > 8 ? col.label.substring(0, 8) + '...' : col.label}</span>
                   </th>
                 ))}
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">
-                  Actions
+                <th className="px-2 sm:px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  <span className="hidden sm:inline">Actions</span>
+                  <span className="sm:hidden">Act</span>
                 </th>
               </tr>
             </thead>
@@ -274,25 +283,25 @@ const StakeholderManagement: React.FC = () => {
               {data.map((item) => (
                 <tr key={item.id} className="hover:bg-gray-750 transition-colors">
                   {columns.map(col => (
-                    <td key={col.key} className={`px-4 py-3 text-sm text-gray-300 ${col.key === 'address' ? '' : 'whitespace-nowrap'} ${col.width || ''}`}>
+                    <td key={col.key} className={`px-2 sm:px-4 py-3 text-xs sm:text-sm text-gray-300 ${col.key === 'address' ? '' : 'whitespace-nowrap'} ${col.width || ''}`}>
                       {col.render ? col.render((item as any)[col.key]) : (item as any)[col.key]}
                     </td>
                   ))}
-                  <td className="px-4 py-3 whitespace-nowrap text-right text-sm">
-                    <div className="flex items-center justify-end gap-2">
+                  <td className="px-2 sm:px-4 py-3 whitespace-nowrap text-right text-sm">
+                    <div className="flex items-center justify-end gap-1 sm:gap-2">
                       <button 
                         onClick={() => handleEdit(item)}
                         className="p-1.5 text-gray-400 hover:text-blue-400 hover:bg-gray-700 rounded transition-colors"
                         title="Edit"
                       >
-                        <PencilIcon className="h-4 w-4" />
+                        <PencilIcon className="h-3 w-3 sm:h-4 sm:w-4" />
                       </button>
                       <button 
                         onClick={() => handleDelete(item.id)}
                         className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-gray-700 rounded transition-colors"
                         title="Delete"
                       >
-                        <TrashIcon className="h-4 w-4" />
+                        <TrashIcon className="h-3 w-3 sm:h-4 sm:w-4" />
                       </button>
                     </div>
                   </td>
@@ -308,69 +317,83 @@ const StakeholderManagement: React.FC = () => {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-white">Stakeholder Management</h2>
           <p className="text-gray-400 text-sm">Manage all business partners, doctors, employees, and distributors</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
           {activeTab === 'distributor' && (
             <button
               onClick={() => setShowBulkUpload(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm"
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm"
             >
               <DocumentArrowUpIcon className="h-4 w-4" />
-              Bulk Upload
+              <span className="hidden sm:inline">Bulk Upload</span>
+              <span className="sm:hidden">Upload</span>
             </button>
           )}
           <button
             onClick={() => setShowAddForm(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
           >
             <PlusIcon className="h-4 w-4" />
-            Add {currentType?.label.slice(0, -1)}
+            <span className="hidden sm:inline">Add {currentType?.label.slice(0, -1)}</span>
+            <span className="sm:hidden">Add</span>
           </button>
         </div>
       </div>
 
       {/* Tab Navigation */}
       <div className="border-b border-gray-700">
-        <nav className="flex space-x-1">
-          {stakeholderTypes.map(type => {
-            const Icon = type.icon;
-            return (
-              <button
-                key={type.id}
-                onClick={() => setActiveTab(type.id as any)}
-                className={clsx(
-                  'flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors',
-                  activeTab === type.id
-                    ? 'border-blue-500 text-blue-400 bg-gray-800/50'
-                    : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600'
-                )}
-              >
-                <Icon className={clsx('h-4 w-4', activeTab === type.id ? type.color : 'text-gray-500')} />
-                {type.label}
-                <span className="ml-1 px-2 py-0.5 bg-gray-700 text-gray-300 rounded-full text-xs">
-                  {(stakeholderData as any)[type.id]?.length || 0}
-                </span>
-              </button>
-            );
-          })}
-        </nav>
+        <div className="overflow-x-auto scrollbar-hide">
+          <nav className="flex gap-0 sm:gap-1 min-w-max pb-px w-full">
+            {stakeholderTypes.map(type => {
+              const Icon = type.icon;
+              const mobileLabels = {
+                'doctor': 'Doctors',
+                'business_partner': 'Partners',
+                'employee': 'Employees',
+                'distributor': 'Distributors',
+                'patient': 'Patients'
+              };
+              return (
+                <button
+                  key={type.id}
+                  onClick={() => setActiveTab(type.id as any)}
+                  className={clsx(
+                    'flex flex-col sm:flex-row items-center gap-0.5 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-3 text-xs sm:text-sm font-medium border-b-2 transition-colors flex-shrink-0 min-w-0',
+                    activeTab === type.id
+                      ? 'border-blue-500 text-blue-400 bg-gray-800/50'
+                      : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600'
+                  )}
+                >
+                  <div className="flex items-center gap-1 sm:gap-2">
+                    <Icon className={clsx('h-3 w-3 sm:h-4 sm:w-4', activeTab === type.id ? type.color : 'text-gray-500')} />
+                    <span className="hidden sm:inline whitespace-nowrap">{type.label}</span>
+                    <span className="sm:hidden text-xs font-medium">{mobileLabels[type.id as keyof typeof mobileLabels]}</span>
+                  </div>
+                  <span className="px-1 sm:px-1.5 py-0.5 bg-gray-700 text-gray-300 rounded-full text-xs leading-none">
+                    {(stakeholderData as any)[type.id]?.length || 0}
+                  </span>
+                </button>
+              );
+            })}
+          </nav>
+        </div>
       </div>
 
       {/* Search and Filters */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-4">
-          <div className="relative">
+          <div className="relative flex-1 sm:flex-initial">
             <MagnifyingGlassIcon className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
             <input
               type="text"
               placeholder={`Search ${currentType?.label.toLowerCase()}...`}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm w-64"
+              className="pl-10 pr-4 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm w-full sm:w-64"
             />
           </div>
         </div>
@@ -412,18 +435,18 @@ const StakeholderManagement: React.FC = () => {
       )}
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
         {stakeholderTypes.map(type => {
           const Icon = type.icon;
           return (
-            <div key={type.id} className="bg-gray-800 border border-gray-700 rounded-lg p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-gray-700 rounded-lg">
-                  <Icon className={clsx('h-4 w-4', type.color)} />
+            <div key={type.id} className="bg-gray-800 border border-gray-700 rounded-lg p-3 sm:p-4">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                <div className="p-2 bg-gray-700 rounded-lg self-start sm:self-auto">
+                  <Icon className={clsx('h-3 w-3 sm:h-4 sm:w-4', type.color)} />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-sm font-medium text-white">{(stakeholderData as any)[type.id]?.length || 0}</p>
-                  <p className="text-xs text-gray-400">{type.label}</p>
+                  <p className="text-xs text-gray-400 truncate">{type.label}</p>
                 </div>
               </div>
             </div>

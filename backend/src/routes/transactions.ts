@@ -1,6 +1,6 @@
 import express from 'express';
 import { z } from 'zod';
-import { authenticateToken, requirePermission, AuthenticatedRequest } from '../middleware/auth';
+import { authenticateToken, requirePermission, requireRole, AuthenticatedRequest } from '../middleware/auth';
 import { prisma } from '../index';
 
 const router = express.Router();
@@ -500,8 +500,8 @@ router.delete('/:id', requirePermission('transactions', 'delete'), async (req: A
   }
 });
 
-// Batch create transactions for data import
-router.post('/batch', requirePermission('transactions', 'create'), async (req: AuthenticatedRequest, res) => {
+// Batch create transactions for data import - Super Admin only
+router.post('/batch', requireRole(['super_admin']), async (req: AuthenticatedRequest, res) => {
   try {
     const transactions = req.body.transactions;
     

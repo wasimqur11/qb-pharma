@@ -29,6 +29,7 @@ import PatientManagement from './PatientManagement';
 import ConfigurationManagement from './ConfigurationManagement';
 import UserProfileBanner from './UserProfileBanner';
 import ProfileSettings from './ProfileSettings';
+import UserManual from './UserManual';
 import { 
   CurrencyDollarIcon, BanknotesIcon, ChartBarIcon, UserGroupIcon,
   BuildingOfficeIcon, UsersIcon, TruckIcon, PlusIcon, CreditCardIcon,
@@ -36,13 +37,13 @@ import {
   ClockIcon, CalendarIcon, BellIcon, Cog6ToothIcon, HomeIcon,
   DocumentTextIcon, UserIcon, ArrowTrendingUpIcon, EyeIcon,
   Squares2X2Icon, ChevronDownIcon, MagnifyingGlassIcon, FunnelIcon,
-  ArrowRightOnRectangleIcon, Bars3Icon, XMarkIcon
+  ArrowRightOnRectangleIcon, Bars3Icon, XMarkIcon, BookOpenIcon
 } from '@heroicons/react/24/outline';
 import { SYSTEM_CONFIG, getDefaultDateRange } from '../constants/systemConfig';
 import clsx from 'clsx';
 
 const DarkCorporateDashboard: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'reports' | 'stakeholders' | 'patients' | 'statements' | 'business_statement' | 'doctor_statement' | 'distributor_statement' | 'payment_estimation' | 'data_import' | 'configuration'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'reports' | 'stakeholders' | 'patients' | 'statements' | 'business_statement' | 'doctor_statement' | 'distributor_statement' | 'payment_estimation' | 'data_import' | 'configuration' | 'user_manual'>('dashboard');
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   
   const [selectedPeriod, setSelectedPeriod] = useState('30days');
@@ -108,7 +109,7 @@ const DarkCorporateDashboard: React.FC = () => {
         { id: 'stakeholders', label: 'Stakeholders', icon: UsersIcon, category: 'management', tooltip: 'Manage doctors, partners, employees, and distributors' },
         { id: 'patients', label: 'Patients', icon: UserIcon, category: 'management', tooltip: 'Patient management and credit tracking' },
         { id: 'payment_estimation', label: 'Payment Estimation', icon: CurrencyDollarIcon, category: 'management', tooltip: 'Estimate distributor payments based on weekly sales' },
-        { id: 'data_import', label: 'Data Import', icon: DocumentArrowUpIcon, category: 'management', tooltip: 'Import transaction data from Excel/CSV files' },
+        ...(user?.role === 'super_admin' ? [{ id: 'data_import', label: 'Data Import', icon: DocumentArrowUpIcon, category: 'management', tooltip: 'Import transaction data from Excel/CSV files' }] : []),
       ],
       statements: [
         { id: 'statements', label: 'Account Statement', icon: CreditCardIcon, category: 'statements', tooltip: 'View individual account statements' },
@@ -118,11 +119,20 @@ const DarkCorporateDashboard: React.FC = () => {
       ],
       system: [
         { id: 'configuration', label: 'System Settings', icon: Cog6ToothIcon, category: 'system', tooltip: 'Configure system settings and preferences' },
+        ...(user?.role === 'super_admin' ? [{ id: 'user_manual', label: 'User Manual', icon: BookOpenIcon, category: 'system', tooltip: 'Comprehensive user guide and help documentation' }] : []),
       ]
     };
 
     if (!isStakeholderUser) {
-      return allItems; // Admin/operator users see everything
+      // Non-stakeholder users (admin, manager, operator)
+      if (user?.role === 'operator') {
+        // Operators don't see system settings
+        return {
+          ...allItems,
+          system: [] // Hide system settings for operators
+        };
+      }
+      return allItems; // Admin and managers see everything
     }
 
     // Filter based on stakeholder user role
@@ -630,15 +640,17 @@ const DarkCorporateDashboard: React.FC = () => {
                 <span className="hidden 2xl:inline text-xs text-blue-200 ml-1">(Ctrl+Enter)</span>
               </button>
               
-              <button
-                onClick={() => setShowPaymentProcessor(true)}
-                className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm font-medium"
-                title="Process stakeholder payments"
-              >
-                <CreditCardIcon className="h-4 w-4" />
-                <span className="hidden xl:inline">Process Payments</span>
-                <span className="xl:hidden">Pay</span>
-              </button>
+              {user?.role !== 'operator' && (
+                <button
+                  onClick={() => setShowPaymentProcessor(true)}
+                  className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm font-medium"
+                  title="Process stakeholder payments"
+                >
+                  <CreditCardIcon className="h-4 w-4" />
+                  <span className="hidden xl:inline">Process Payments</span>
+                  <span className="xl:hidden">Pay</span>
+                </button>
+              )}
             </div>
 
 
@@ -1571,21 +1583,41 @@ const DarkCorporateDashboard: React.FC = () => {
 
   // Filter transactions based on report filters - simplified filtering
   const filteredReportTransactions = React.useMemo(() => {
+    // Add defensive checks to prevent white screen issues
+    if (!transactions || !Array.isArray(transactions)) {
+      return [];
+    }
+    
     return transactions.filter(transaction => {
-      const transactionDate = new Date(transaction.date);
-      const fromDate = new Date(reportFilters.dateFrom);
-      const toDate = new Date(reportFilters.dateTo);
-      
-      // Date filter
-      if (transactionDate < fromDate || transactionDate > toDate) return false;
-      
-      // Search term
-      if (reportFilters.searchTerm) {
-        const searchLower = reportFilters.searchTerm.toLowerCase();
-        return transaction.description.toLowerCase().includes(searchLower);
+      // Defensive checks for transaction properties
+      if (!transaction || !transaction.date || !transaction.description) {
+        return false;
       }
       
-      return true;
+      try {
+        const transactionDate = new Date(transaction.date);
+        const fromDate = new Date(reportFilters.dateFrom);
+        const toDate = new Date(reportFilters.dateTo);
+        
+        // Check for invalid dates
+        if (isNaN(transactionDate.getTime()) || isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
+          return false;
+        }
+        
+        // Date filter
+        if (transactionDate < fromDate || transactionDate > toDate) return false;
+        
+        // Search term
+        if (reportFilters.searchTerm) {
+          const searchLower = reportFilters.searchTerm.toLowerCase();
+          return transaction.description.toLowerCase().includes(searchLower);
+        }
+        
+        return true;
+      } catch (error) {
+        console.warn('Error filtering transaction:', error, transaction);
+        return false;
+      }
     });
   }, [transactions, reportFilters]);
 
@@ -1605,26 +1637,36 @@ const DarkCorporateDashboard: React.FC = () => {
   };
 
   const renderReports = () => {
-    // Calculate business performance summary using filtered transactions
-    const pharmacyRevenue = filteredReportTransactions
-      .filter(t => ['pharmacy_sale', 'patient_payment', 'distributor_credit_note'].includes(t.category))
-      .reduce((sum, t) => sum + t.amount, 0);
-    
-    const doctorRevenue = filteredReportTransactions
-      .filter(t => t.category === 'consultation_fee')
-      .reduce((sum, t) => sum + t.amount, 0);
-    
-    const totalExpenses = filteredReportTransactions
-      .filter(t => ['distributor_payment', 'doctor_expense', 'employee_payment', 'clinic_expense', 'sales_profit_distribution', 'patient_credit_sale'].includes(t.category))
-      .reduce((sum, t) => sum + t.amount, 0);
-    
-    const pharmacyExpenses = filteredReportTransactions
-      .filter(t => ['distributor_payment', 'employee_payment', 'clinic_expense', 'sales_profit_distribution', 'patient_credit_sale'].includes(t.category))
-      .reduce((sum, t) => sum + t.amount, 0);
-    
-    const doctorExpenses = filteredReportTransactions
-      .filter(t => t.category === 'doctor_expense')
-      .reduce((sum, t) => sum + t.amount, 0);
+    // Add defensive check for filtered transactions
+    if (!filteredReportTransactions || !Array.isArray(filteredReportTransactions)) {
+      return (
+        <div className="p-8 text-center">
+          <div className="text-gray-400 mb-4">Loading reports data...</div>
+        </div>
+      );
+    }
+
+    try {
+      // Calculate business performance summary using filtered transactions
+      const pharmacyRevenue = filteredReportTransactions
+        .filter(t => t && t.category && ['pharmacy_sale', 'patient_payment', 'distributor_credit_note'].includes(t.category))
+        .reduce((sum, t) => sum + (t.amount || 0), 0);
+      
+      const doctorRevenue = filteredReportTransactions
+        .filter(t => t && t.category === 'consultation_fee')
+        .reduce((sum, t) => sum + (t.amount || 0), 0);
+      
+      const totalExpenses = filteredReportTransactions
+        .filter(t => t && t.category && ['distributor_payment', 'doctor_expense', 'employee_payment', 'clinic_expense', 'sales_profit_distribution', 'patient_credit_sale'].includes(t.category))
+        .reduce((sum, t) => sum + (t.amount || 0), 0);
+      
+      const pharmacyExpenses = filteredReportTransactions
+        .filter(t => t && t.category && ['distributor_payment', 'employee_payment', 'clinic_expense', 'sales_profit_distribution', 'patient_credit_sale'].includes(t.category))
+        .reduce((sum, t) => sum + (t.amount || 0), 0);
+      
+      const doctorExpenses = filteredReportTransactions
+        .filter(t => t && t.category === 'doctor_expense')
+        .reduce((sum, t) => sum + (t.amount || 0), 0);
 
     // Calculate cash positions using filtered data
     const pharmacyCash = pharmacyRevenue - pharmacyExpenses;
@@ -1994,6 +2036,19 @@ const DarkCorporateDashboard: React.FC = () => {
 
       </div>
     );
+    } catch (error) {
+      console.error('Error rendering reports:', error);
+      return (
+        <div className="p-8 text-center">
+          <div className="text-red-400 mb-4">
+            ⚠️ Error loading reports
+          </div>
+          <div className="text-gray-400 text-sm">
+            Please refresh the page or contact support if the issue persists.
+          </div>
+        </div>
+      );
+    }
   };
 
   // Mobile Menu Drawer Component
@@ -2218,6 +2273,7 @@ const DarkCorporateDashboard: React.FC = () => {
         {activeTab === 'payment_estimation' && <DistributorPaymentEstimation />}
         {activeTab === 'data_import' && <DataImport />}
         {activeTab === 'configuration' && <ConfigurationManagement />}
+        {activeTab === 'user_manual' && <UserManual />}
       </main>
 
       <TransactionForm
@@ -2290,13 +2346,15 @@ const DarkCorporateDashboard: React.FC = () => {
           </button>
 
           {/* Process Payments */}
-          <button
-            onClick={() => setShowPaymentProcessor(true)}
-            className="flex flex-col items-center py-2 px-3 min-w-0 text-gray-400 hover:text-white hover:bg-gray-800 transition-colors rounded-md"
-          >
-            <CreditCardIcon className="h-5 w-5 mb-1" />
-            <span className="text-xs font-medium truncate">Pay</span>
-          </button>
+          {user?.role !== 'operator' && (
+            <button
+              onClick={() => setShowPaymentProcessor(true)}
+              className="flex flex-col items-center py-2 px-3 min-w-0 text-gray-400 hover:text-white hover:bg-gray-800 transition-colors rounded-md"
+            >
+              <CreditCardIcon className="h-5 w-5 mb-1" />
+              <span className="text-xs font-medium truncate">Pay</span>
+            </button>
+          )}
 
           {/* More (opens hamburger menu) */}
           <button

@@ -411,26 +411,26 @@ const StakeholderForm: React.FC<StakeholderFormProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-800 border border-gray-700 rounded-xl w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-hidden">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-2 sm:p-4">
+      <div className="bg-gray-800 border border-gray-700 rounded-xl w-full max-w-2xl shadow-2xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-700 bg-gray-750">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between px-3 sm:px-5 py-3 border-b border-gray-700 bg-gray-750">
+          <div className="flex items-center gap-2 sm:gap-3">
             <div className="p-2 bg-blue-600 rounded-lg shadow-lg">
-              <config.icon className="h-4 w-4 text-white" />
+              <config.icon className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
             </div>
-            <div>
-              <h2 className="text-base font-semibold text-white">
+            <div className="min-w-0">
+              <h2 className="text-sm sm:text-base font-semibold text-white truncate">
                 {editData ? 'Edit' : 'Add'} {config.title}
               </h2>
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-gray-400 hidden sm:block">
                 {editData ? 'Update' : 'Create new'} {config.title.toLowerCase()} information
               </p>
             </div>
           </div>
           <button 
             onClick={onClose}
-            className="p-2 text-gray-400 hover:text-white hover:bg-gray-600 rounded-lg transition-colors"
+            className="p-2 text-gray-400 hover:text-white hover:bg-gray-600 rounded-lg transition-colors flex-shrink-0"
           >
             <XMarkIcon className="h-4 w-4" />
           </button>
@@ -438,12 +438,12 @@ const StakeholderForm: React.FC<StakeholderFormProps> = ({
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="flex flex-col h-full">
-          <div className="px-5 py-4 max-h-[calc(90vh-140px)] overflow-y-auto flex-1">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="px-3 sm:px-5 py-4 max-h-[calc(95vh-140px)] sm:max-h-[calc(90vh-140px)] overflow-y-auto flex-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               {config.fields.map(field => (
                 <div 
                   key={field.key} 
-                  className={field.type === 'textarea' || field.key === 'address' ? 'md:col-span-2' : ''}
+                  className={field.type === 'textarea' || field.key === 'address' ? 'sm:col-span-2' : ''}
                 >
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     {field.label} {field.required && <span className="text-red-400">*</span>}
@@ -524,18 +524,18 @@ const StakeholderForm: React.FC<StakeholderFormProps> = ({
           </div>
 
           {/* Action Buttons */}
-          <div className="px-5 py-3 border-t border-gray-700 bg-gray-750">
-            <div className="flex gap-3">
+          <div className="px-3 sm:px-5 py-3 border-t border-gray-700 bg-gray-750">
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium text-sm"
+                className="flex-1 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium text-sm order-2 sm:order-1"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm order-1 sm:order-2"
               >
                 {editData ? 'Update' : 'Add'} {config.title}
               </button>

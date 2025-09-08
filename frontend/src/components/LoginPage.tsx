@@ -251,16 +251,6 @@ const LoginPage: React.FC = () => {
                 </button>
               </form>
 
-              {/* Demo Credentials */}
-              <div className="mt-6 pt-4 border-t border-white/20">
-                <div className="bg-black/30 backdrop-blur-sm border border-blue-400/50 rounded-xl p-4">
-                  <h3 className="text-sm font-bold text-white mb-2 drop-shadow-md">Demo Credentials</h3>
-                  <div className="text-sm text-white space-y-1 font-medium">
-                    <p><span className="font-bold">Username:</span> superadmin</p>
-                    <p><span className="font-bold">Password:</span> admin123</p>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
           
