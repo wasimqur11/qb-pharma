@@ -92,22 +92,25 @@ async function seedSystemConfigurations() {
 
     const allConfigs = [...paymentConfigs, ...systemConfigs, ...reportConfigs];
 
-    // Upsert each configuration
+    // Create configurations only if they don't exist (conditional seeding)
     for (const config of allConfigs) {
-      await prisma.systemConfiguration.upsert({
+      const existing = await prisma.systemConfiguration.findUnique({
         where: {
           category_key: {
             category: config.category,
             key: config.key
           }
-        },
-        update: {
-          value: config.value,
-          description: config.description,
-          updatedBy: config.updatedBy
-        },
-        create: config
+        }
       });
+
+      if (!existing) {
+        await prisma.systemConfiguration.create({
+          data: config
+        });
+        console.log(`✅ Created configuration: ${config.category}.${config.key}`);
+      } else {
+        console.log(`⏭️  Skipped existing configuration: ${config.category}.${config.key}`);
+      }
     }
 
     console.log(`✅ Seeded ${allConfigs.length} system configurations`);

@@ -1,0 +1,17 @@
+QB Pharma Deployment Summary
+============================
+Deployed: Mon Sep  8 13:22:22 UTC 2025
+Version: 6137111a4d750cc9cf61db5b98d3a95a0b98d5c8
+Services: nginx (frontend), systemd (backend)
+Status: SUCCESS
+Access: http://localhost/
+Admin: username=admin, password=admin123
+
+Data Seeding Policy:
+- ✅ Essential user accounts (admin, operator)
+- ✅ System configurations and settings
+- ✅ Required permissions and departments
+- ❌ NO dummy business data (doctors, patients, distributors)
+- ❌ NO sample transactions or stakeholder records
+
+Note: Business data should be added through the application interface

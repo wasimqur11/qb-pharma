@@ -4,7 +4,8 @@
 #
 # Usage:
 #   ./deploy.sh                 # Standard deployment
-#   ./deploy.sh --clean-data    # Clean non-user data before deployment
+#   ./deploy.sh --clean-data    # Clean ALL business data (transactions, stakeholders)
+#   ./deploy.sh --clean-legacy  # Clean legacy non-user data (deprecated)
 #
 # Requirements:
 #   - Node.js 18+ with npm
@@ -161,16 +162,38 @@ cd backend
 # Ensure data directory exists
 mkdir -p prisma/data
 
+# Create additional backup if database exists
+if [ -f "prisma/data/qb-pharma.db" ]; then
+    echo "📦 Creating pre-deployment database backup..."
+    cp prisma/data/qb-pharma.db prisma/data/backups/qb-pharma.db.pre-deploy.$(date +%Y%m%d_%H%M%S)
+fi
+
 # Generate Prisma client
 npx prisma generate || handle_error "Failed to generate Prisma client"
 
-# Setup database schema
-npx prisma db push --accept-data-loss || handle_error "Failed to setup database schema"
+# Use proper migration instead of destructive push
+echo "🔄 Applying database migrations safely..."
+if [ -d "prisma/migrations" ] && [ "$(ls -A prisma/migrations 2>/dev/null)" ]; then
+    # If migrations exist, deploy them
+    npx prisma migrate deploy || handle_error "Failed to apply database migrations"
+else
+    # If no migrations exist, create initial migration (for fresh setups)
+    if [ ! -f "prisma/data/qb-pharma.db" ]; then
+        echo "📝 Creating initial database schema..."
+        npx prisma db push || handle_error "Failed to create initial database schema"
+    else
+        echo "📝 Generating migration from existing schema..."
+        npx prisma db push || handle_error "Failed to update database schema"
+    fi
+fi
 
 # Check if we should clean existing data
 if [ "$1" = "--clean-data" ]; then
-    echo "🧹 Cleaning existing non-user data..."
-    npx tsx clean-data.ts 2>/dev/null || echo "⚠️ Clean script not available, continuing with fresh setup..."
+    echo "🧹 Cleaning ALL business data (transactions, stakeholders, settlements)..."
+    npx tsx clean-business-data.ts || handle_error "Failed to clean business data"
+elif [ "$1" = "--clean-legacy" ]; then
+    echo "🧹 Cleaning legacy non-user data..."
+    npx tsx clean-data.ts 2>/dev/null || echo "⚠️ Legacy clean script not available, continuing with fresh setup..."
 fi
 
 # Seed database with ONLY essential user and system data
@@ -186,7 +209,7 @@ echo "⚠️  NOTE: Dummy business data (doctors, patients, distributors) is NOT
 echo "   This is intentional to maintain a clean production environment."
 echo "   Business data should be added through the application interface."
 
-# Setup admin user (fallback in case seeding fails)
+# Setup admin user (conditional - only create if doesn't exist)
 echo "👤 Setting up admin user..."
 node -e "
 const { PrismaClient } = require('@prisma/client');
@@ -195,48 +218,85 @@ const prisma = new PrismaClient();
 
 async function setupAdmin() {
   try {
-    // Create pharma unit
-    const pharmaUnit = await prisma.pharmaUnit.upsert({
-      where: { id: 'pharma-001' },
-      update: {},
-      create: {
-        id: 'pharma-001',
-        name: 'QB Pharma Main Unit',
-        address: '123 Medical Street, Healthcare City',
-        contactEmail: 'admin@qbpharma.com',
-        contactPhone: '+1-555-0123',
-        licenseNumber: 'PH-001-2024',
-        isActive: true
-      }
+    // Check if pharma unit already exists
+    let pharmaUnit = await prisma.pharmaUnit.findUnique({
+      where: { id: 'pharma-001' }
     });
 
-    // Create admin user
-    const passwordHash = await bcrypt.hash('admin123', 12);
-    const user = await prisma.user.upsert({
-      where: { username: 'admin' },
-      update: {
-        passwordHash,
-        name: 'System Administrator',
-        role: 'super_admin',
-        email: 'admin@qbpharma.com',
-        pharmaUnitId: 'pharma-001',
-        isActive: true
-      },
-      create: {
-        id: 'user-001',
-        username: 'admin',
-        email: 'admin@qbpharma.com',
-        passwordHash,
-        name: 'System Administrator',
-        role: 'super_admin',
-        pharmaUnitId: 'pharma-001',
-        isActive: true
-      }
+    if (!pharmaUnit) {
+      pharmaUnit = await prisma.pharmaUnit.create({
+        data: {
+          id: 'pharma-001',
+          name: 'QB Pharma Main Unit',
+          address: '123 Medical Street, Healthcare City',
+          contactEmail: 'admin@qbpharma.com',
+          contactPhone: '+1-555-0123',
+          licenseNumber: 'PH-001-2024',
+          isActive: true
+        }
+      });
+      console.log('✅ Created pharma unit');
+    } else {
+      console.log('⏭️  Pharma unit already exists');
+    }
+
+    // Check if admin user already exists
+    let user = await prisma.user.findUnique({
+      where: { username: 'admin' }
     });
+
+    if (!user) {
+      const passwordHash = await bcrypt.hash('admin123', 12);
+      user = await prisma.user.create({
+        data: {
+          id: 'user-001',
+          username: 'admin',
+          email: 'admin@qbpharma.com',
+          passwordHash,
+          name: 'System Administrator',
+          role: 'super_admin',
+          pharmaUnitId: 'pharma-001',
+          isActive: true
+        }
+      });
+      console.log('✅ Created admin user');
+      console.log('   Username: admin');
+      console.log('   Password: admin123');
+    } else {
+      console.log('⏭️  Admin user already exists');
+      console.log('   Username: admin');
+      console.log('   Note: Using existing password');
+    }
+
+    // Check if data operator user already exists
+    let operatorUser = await prisma.user.findUnique({
+      where: { username: 'dataoperator' }
+    });
+
+    if (!operatorUser) {
+      const operatorPasswordHash = await bcrypt.hash('operator123', 12);
+      operatorUser = await prisma.user.create({
+        data: {
+          id: 'user-002',
+          username: 'dataoperator',
+          email: 'operator@qbpharma.com',
+          passwordHash: operatorPasswordHash,
+          name: 'Data Operator',
+          role: 'operator',
+          pharmaUnitId: 'pharma-001',
+          isActive: true
+        }
+      });
+      console.log('✅ Created data operator user');
+      console.log('   Username: dataoperator');
+      console.log('   Password: operator123');
+      console.log('   Access: Limited permissions for data entry');
+    } else {
+      console.log('⏭️  Data operator user already exists');
+      console.log('   Username: dataoperator');
+      console.log('   Note: Using existing password');
+    }
     
-    console.log('✅ Admin user setup completed');
-    console.log('   Username: admin');
-    console.log('   Password: admin123');
   } catch (error) {
     console.error('❌ Error setting up admin user:', error.message);
     throw error;
@@ -499,19 +559,21 @@ fi
 echo ""
 echo "🎉 QB Pharma Deployment Completed Successfully!"
 echo ""
-echo "✅ Clean Production Deployment Completed:"
+echo "✅ Safe Production Deployment Completed:"
 echo "   - CRUD operations working with proper authentication"
 echo "   - Permission parsing fixed for comma-separated actions"
-echo "   - Database seeded with ONLY essential admin users and permissions"
-echo "   - System configurations seeded for payment estimation functionality"
+echo "   - Database deployed with proper migrations (no data loss)"
+echo "   - Conditional seeding: only creates missing admin users and configurations"
+echo "   - Existing data preserved during updates"
 echo "   - NO dummy business data seeded (doctors, patients, distributors)"
-echo "   - Clean production-ready environment with no sample data"
+echo "   - Pre-deployment database backups created"
 echo ""
 echo "📋 Service Information:"
 echo "   Frontend:     http://localhost/ (nginx)"
 echo "   Backend API:  http://localhost:3001/api"
 echo "   Health Check: http://localhost:3001/health"
 echo "   Admin Login:  username: admin, password: admin123"
+echo "   Operator Login: username: dataoperator, password: operator123"
 echo ""
 echo "📁 Important Paths:"
 echo "   Project:      $PROJECT_DIR"
@@ -527,7 +589,7 @@ echo "   Restart:      sudo systemctl restart qb-pharma-backend"
 echo "   Logs:         sudo journalctl -u qb-pharma-backend -f"
 echo "   Nginx:        sudo systemctl status nginx"
 echo "   Nginx Test:   sudo nginx -t"
-echo "   Clean Data:   cd backend && npx tsx clean-seed.ts"
+echo "   Clean Business Data: cd backend && npx tsx clean-business-data.ts"
 echo ""
 echo "🌐 Access Your Application:"
 echo "   Main Site:    http://localhost/"
@@ -555,13 +617,21 @@ Services: nginx (frontend), systemd (backend)
 Status: SUCCESS
 Access: http://localhost/
 Admin: username=admin, password=admin123
+Operator: username=dataoperator, password=operator123
 
-Data Seeding Policy:
-- ✅ Essential user accounts (admin, operator)
-- ✅ System configurations and settings
-- ✅ Required permissions and departments
+Data Safety Policy:
+- ✅ Essential user accounts (conditional creation only)
+- ✅ System configurations (conditional creation only)
+- ✅ Pre-deployment database backups
+- ✅ Safe database migrations (no --accept-data-loss)
+- ✅ Existing data preservation during updates
+- ✅ Business data cleanup available (--clean-data option)
 - ❌ NO dummy business data (doctors, patients, distributors)
 - ❌ NO sample transactions or stakeholder records
+
+Cleanup Options:
+- ./deploy.sh --clean-data    # Remove all business data (transactions, stakeholders)
+- cd backend && npx tsx clean-business-data.ts  # Manual business data cleanup
 
 Note: Business data should be added through the application interface
 EOF

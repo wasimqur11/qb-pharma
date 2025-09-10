@@ -105,6 +105,58 @@ async function main() {
 
     console.log('✅ Created super admin permissions');
 
+    // Create data operator user with limited access
+    const operatorPassword = await bcrypt.hash('operator123', 12);
+    
+    const dataOperator = await prisma.user.upsert({
+      where: { username: 'dataoperator' },
+      update: {},
+      create: {
+        username: 'dataoperator',
+        email: 'operator@qbpharma.com',
+        passwordHash: operatorPassword,
+        name: 'Data Operator',
+        phone: '+1-555-0124',
+        role: 'operator',
+        pharmaUnitId: pharmaUnit.id,
+        isActive: true
+      }
+    });
+
+    console.log('✅ Created data operator user:', dataOperator.username);
+
+    // Create limited permissions for data operator
+    await prisma.userPermission.createMany({
+      data: [
+        {
+          userId: dataOperator.id,
+          module: 'transactions',
+          actions: 'create,read,update',
+          scope: 'unit'
+        },
+        {
+          userId: dataOperator.id,
+          module: 'stakeholders',
+          actions: 'create,read,update',
+          scope: 'unit'
+        },
+        {
+          userId: dataOperator.id,
+          module: 'reports',
+          actions: 'read',
+          scope: 'unit'
+        },
+        {
+          userId: dataOperator.id,
+          module: 'dashboard',
+          actions: 'read',
+          scope: 'unit'
+        }
+      ]
+    });
+
+    console.log('✅ Created data operator permissions');
+
     // Create sample departments
     const departments = [
       { name: 'Administration', description: 'Administrative staff and management' },
@@ -131,6 +183,11 @@ async function main() {
     console.log('Super Admin:');
     console.log('  Username: admin');
     console.log('  Password: admin123');
+    console.log('');
+    console.log('Data Operator:');
+    console.log('  Username: dataoperator');
+    console.log('  Password: operator123');
+    console.log('  Access: Limited to transactions, stakeholders, reports (unit scope)');
     console.log('');
 
   } catch (error) {
