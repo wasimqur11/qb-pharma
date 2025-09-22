@@ -40,12 +40,12 @@ const AdminPortal: React.FC = () => {
   });
 
   const roles: { value: UserRole; label: string; color: string }[] = [
-    { value: 'admin', label: 'Administrator', color: 'bg-red-100 text-red-800' },
-    { value: 'manager', label: 'Manager', color: 'bg-blue-100 text-blue-800' },
-    { value: 'operator', label: 'Operator', color: 'bg-green-100 text-green-800' },
-    { value: 'doctor', label: 'Doctor', color: 'bg-purple-100 text-purple-800' },
-    { value: 'partner', label: 'Business Partner', color: 'bg-yellow-100 text-yellow-800' },
-    { value: 'distributor', label: 'Distributor', color: 'bg-indigo-100 text-indigo-800' }
+    { value: 'admin', label: 'Administrator', color: 'bg-red-900/80 text-red-200 border border-red-700/50' },
+    { value: 'manager', label: 'Manager', color: 'bg-blue-900/80 text-blue-200 border border-blue-700/50' },
+    { value: 'operator', label: 'Operator', color: 'bg-green-900/80 text-green-200 border border-green-700/50' },
+    { value: 'doctor', label: 'Doctor', color: 'bg-purple-900/80 text-purple-200 border border-purple-700/50' },
+    { value: 'partner', label: 'Business Partner', color: 'bg-yellow-900/80 text-yellow-200 border border-yellow-700/50' },
+    { value: 'distributor', label: 'Distributor', color: 'bg-indigo-900/80 text-indigo-200 border border-indigo-700/50' }
   ];
 
   // Load users
@@ -72,7 +72,7 @@ const AdminPortal: React.FC = () => {
   const loadUsers = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get('/users');
+      const response = await apiClient.get('/api/users');
       if (response.success) {
         setUsers(response.data?.users || []);
       }
@@ -86,7 +86,7 @@ const AdminPortal: React.FC = () => {
 
   const handleCreateUser = async () => {
     try {
-      const response = await apiClient.post('/auth/register', formData);
+      const response = await apiClient.post('/api/auth/register', formData);
       if (response.success) {
         await loadUsers();
         setShowCreateModal(false);
@@ -101,7 +101,7 @@ const AdminPortal: React.FC = () => {
     if (!selectedUser) return;
     
     try {
-      const response = await apiClient.put(`/users/${selectedUser.id}`, formData);
+      const response = await apiClient.put(`/api/users/${selectedUser.id}`, formData);
       if (response.success) {
         await loadUsers();
         setShowEditModal(false);
@@ -117,7 +117,7 @@ const AdminPortal: React.FC = () => {
     if (!selectedUser) return;
     
     try {
-      const response = await apiClient.delete(`/users/${selectedUser.id}`);
+      const response = await apiClient.delete(`/api/users/${selectedUser.id}`);
       if (response.success) {
         await loadUsers();
         setShowDeleteModal(false);
@@ -130,7 +130,7 @@ const AdminPortal: React.FC = () => {
 
   const handleToggleUserStatus = async (user: User) => {
     try {
-      const response = await apiClient.put(`/users/${user.id}/status`, {
+      const response = await apiClient.put(`/api/users/${user.id}`, {
         isActive: !user.isActive
       });
       if (response.success) {
@@ -171,7 +171,7 @@ const AdminPortal: React.FC = () => {
   };
 
   const getRoleInfo = (role: UserRole) => {
-    return roles.find(r => r.value === role) || { value: role, label: role, color: 'bg-gray-100 text-gray-800' };
+    return roles.find(r => r.value === role) || { value: role, label: role, color: 'bg-slate-900/80 text-slate-200 border border-slate-700/50' };
   };
 
   // Temporarily allow all authenticated users for testing
