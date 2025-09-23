@@ -12,6 +12,7 @@ import transactionRoutes from './routes/transactions';
 import stakeholderRoutes from './routes/stakeholders';
 import dashboardRoutes from './routes/dashboard';
 import configurationRoutes from './routes/configurations';
+import notificationRoutes from './routes/notifications';
 
 // Load environment variables
 dotenv.config();
@@ -45,6 +46,9 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Trust proxy for rate limiting when behind nginx
+app.set('trust proxy', 1);
+
 // Rate limiting (disabled in development for data import)
 if (process.env.NODE_ENV === 'production') {
   const limiter = rateLimit({
@@ -75,6 +79,7 @@ app.use('/api/transactions', transactionRoutes);
 app.use('/api/stakeholders', stakeholderRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/configurations', configurationRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {

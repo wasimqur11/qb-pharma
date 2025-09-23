@@ -211,3 +211,22 @@ model SystemConfiguration {
   @@unique([category, key], name: "category_key")
   @@map("system_configurations")
 }
+
+model NotificationLog {
+  id              String   @id @default(cuid())
+  type            String   // 'email' | 'sms' | 'whatsapp'
+  recipient       String
+  subject         String?
+  message         String
+  status          String   // 'pending' | 'sent' | 'failed' | 'delivered'
+  errorMessage    String?
+  transactionId   String?
+  stakeholderId   String?
+  stakeholderType String?
+  retryCount      Int      @default(0)
+  sentAt          DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("notification_logs")
+}
