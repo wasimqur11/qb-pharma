@@ -163,6 +163,10 @@ class ApiClient {
     await this.post('/api/auth/logout');
   }
 
+  async changePassword(passwordData: { currentPassword: string; newPassword: string }): Promise<ApiResponse<any>> {
+    return this.post('/api/auth/change-password', passwordData);
+  }
+
   // Health check
   async healthCheck(): Promise<ApiResponse<{ status: string; timestamp: string }>> {
     return this.get('/health');

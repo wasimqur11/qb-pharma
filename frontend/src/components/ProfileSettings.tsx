@@ -14,6 +14,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { useUserPreferences } from '../contexts/UserPreferencesContext';
 import { useAuth } from '../contexts/AuthContext';
+import apiClient from '../utils/apiClient';
 
 interface ProfileSettingsProps {
   isOpen: boolean;
@@ -34,6 +35,9 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ isOpen, onClose }) =>
     newPassword: '',
     confirmPassword: ''
   });
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState(false);
 
   useEffect(() => {
     setLocalPrefs(preferences);
@@ -58,6 +62,40 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ isOpen, onClose }) =>
     resetToDefaults();
     setLocalPrefs(preferences);
     setHasChanges(false);
+  };
+
+  const handlePasswordChange = async () => {
+    if (!passwordForm.currentPassword || !passwordForm.newPassword || passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordError('Please fill all fields correctly and ensure passwords match');
+      return;
+    }
+
+    if (passwordForm.newPassword.length < 8) {
+      setPasswordError('New password must be at least 8 characters long');
+      return;
+    }
+
+    setPasswordLoading(true);
+    setPasswordError('');
+
+    try {
+      const response = await apiClient.changePassword({
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword
+      });
+
+      if (response.success) {
+        setPasswordSuccess(true);
+        setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+        setTimeout(() => setPasswordSuccess(false), 3000);
+      } else {
+        setPasswordError(response.error || 'Failed to change password');
+      }
+    } catch (error) {
+      setPasswordError('Failed to change password. Please try again.');
+    } finally {
+      setPasswordLoading(false);
+    }
   };
 
   const tabs = [
@@ -260,11 +298,25 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ isOpen, onClose }) =>
                     />
                   </div>
                   
+                  {passwordError && (
+                    <div className="p-3 bg-red-900/30 border border-red-500 rounded-lg text-red-400 text-sm">
+                      {passwordError}
+                    </div>
+                  )}
+
+                  {passwordSuccess && (
+                    <div className="p-3 bg-green-900/30 border border-green-500 rounded-lg text-green-400 text-sm flex items-center gap-2">
+                      <CheckIcon className="h-4 w-4" />
+                      Password changed successfully!
+                    </div>
+                  )}
+
                   <button
-                    disabled={!passwordForm.currentPassword || !passwordForm.newPassword || passwordForm.newPassword !== passwordForm.confirmPassword}
+                    onClick={handlePasswordChange}
+                    disabled={!passwordForm.currentPassword || !passwordForm.newPassword || passwordForm.newPassword !== passwordForm.confirmPassword || passwordLoading}
                     className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
-                    Change Password
+                    {passwordLoading ? 'Changing...' : 'Change Password'}
                   </button>
                 </div>
               </div>

@@ -2,14 +2,19 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import type { User, AuthState, UserRole } from '../types';
 
+interface LoginResult {
+  success: boolean;
+  error?: string;
+}
+
 interface AuthContextType {
   // Auth state
   isAuthenticated: boolean;
   user: User | null;
   isLoading: boolean;
-  
+
   // Auth operations
-  login: (username: string, password: string) => Promise<boolean>;
+  login: (username: string, password: string) => Promise<LoginResult>;
   logout: () => void;
   
   // User management
@@ -82,52 +87,59 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     checkExistingSession();
   }, []);
 
-  const login = async (username: string, password: string): Promise<boolean> => {
+  const login = async (username: string, password: string): Promise<LoginResult> => {
     setAuthState(prev => ({ ...prev, isLoading: true }));
-    
+
     try {
       // Import apiClient dynamically to avoid circular dependency
       const { default: apiClient } = await import('../utils/apiClient');
-      
+
       // Call backend API for authentication
       const response = await apiClient.login({ username, password });
-      
+
       if (response.success && response.data) {
         const { user, token } = response.data;
-        
+
         // Save to localStorage for persistence
         localStorage.setItem('qb_pharma_user', JSON.stringify(user));
         localStorage.setItem('qb_pharma_auth', 'true');
         localStorage.setItem('qb_pharma_token', token);
-        
+
         setAuthState({
           isAuthenticated: true,
           user: { ...user, lastLogin: new Date() },
           isLoading: false
         });
-        
-        return true;
+
+        return { success: true };
       } else {
         console.error('Login failed:', response.error);
-        
+
         setAuthState({
           isAuthenticated: false,
           user: null,
           isLoading: false
         });
-        
-        return false;
+
+        // Return specific error message from backend
+        return {
+          success: false,
+          error: response.error || 'Login failed. Please try again.'
+        };
       }
     } catch (error) {
       console.error('Login error:', error);
-      
+
       setAuthState({
         isAuthenticated: false,
         user: null,
         isLoading: false
       });
-      
-      return false;
+
+      return {
+        success: false,
+        error: 'Network error. Please check your connection and try again.'
+      };
     }
   };
 

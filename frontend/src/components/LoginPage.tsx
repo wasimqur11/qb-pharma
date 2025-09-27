@@ -21,8 +21,11 @@ const LoginPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+    console.log('Login attempt with:', { username: formData.username, password: formData.password ? '[HIDDEN]' : 'EMPTY' });
+
     if (!formData.username || !formData.password) {
+      console.log('Setting error: empty fields');
       setError('Please enter both username and password');
       return;
     }
@@ -31,12 +34,16 @@ const LoginPage: React.FC = () => {
     setError('');
 
     try {
-      const success = await login(formData.username, formData.password);
-      
-      if (!success) {
-        setError('Invalid username or password');
+      console.log('Calling login function...');
+      const result = await login(formData.username, formData.password);
+      console.log('Login result:', result);
+
+      if (!result.success) {
+        console.log('Setting error:', result.error);
+        setError(result.error || 'Login failed. Please try again.');
       }
     } catch (err) {
+      console.error('Login caught error:', err);
       setError('Login failed. Please try again.');
     } finally {
       setIsSubmitting(false);
@@ -177,6 +184,11 @@ const LoginPage: React.FC = () => {
                   </div>
                 )}
 
+                {/* Debug: Always show current error state */}
+                <div className="bg-yellow-500/20 backdrop-blur-sm border border-yellow-400/30 rounded-xl p-2 text-xs">
+                  <span className="text-yellow-200">Debug - Error state: "{error}" | Length: {error.length} | Truthy: {error ? 'true' : 'false'}</span>
+                </div>
+
                 {/* Username Field */}
                 <div className="space-y-2">
                   <label htmlFor="username" className="block text-sm font-semibold text-white drop-shadow-md">
@@ -191,7 +203,6 @@ const LoginPage: React.FC = () => {
                       name="username"
                       type="text"
                       autoComplete="username"
-                      required
                       value={formData.username}
                       onChange={handleInputChange('username')}
                       className="w-full pl-12 pr-4 py-4 bg-black/30 backdrop-blur-sm border border-white/40 rounded-xl text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all duration-300 text-sm font-medium shadow-inner"
@@ -214,7 +225,6 @@ const LoginPage: React.FC = () => {
                       name="password"
                       type={showPassword ? 'text' : 'password'}
                       autoComplete="current-password"
-                      required
                       value={formData.password}
                       onChange={handleInputChange('password')}
                       className="w-full pl-12 pr-14 py-4 bg-black/30 backdrop-blur-sm border border-white/40 rounded-xl text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all duration-300 text-sm font-medium shadow-inner"
