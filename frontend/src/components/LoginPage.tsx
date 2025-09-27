@@ -19,13 +19,8 @@ const LoginPage: React.FC = () => {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    console.log('Login attempt with:', { username: formData.username, password: formData.password ? '[HIDDEN]' : 'EMPTY' });
-
+  const handleSubmit = async () => {
     if (!formData.username || !formData.password) {
-      console.log('Setting error: empty fields');
       setError('Please enter both username and password');
       return;
     }
@@ -34,16 +29,13 @@ const LoginPage: React.FC = () => {
     setError('');
 
     try {
-      console.log('Calling login function...');
       const result = await login(formData.username, formData.password);
-      console.log('Login result:', result);
 
       if (!result.success) {
-        console.log('Setting error:', result.error);
         setError(result.error || 'Login failed. Please try again.');
       }
     } catch (err) {
-      console.error('Login caught error:', err);
+      console.error('Login error caught:', err);
       setError('Login failed. Please try again.');
     } finally {
       setIsSubmitting(false);
@@ -175,19 +167,16 @@ const LoginPage: React.FC = () => {
             {/* Glass effect overlay */}
             <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-black/20 rounded-2xl"></div>
             <div className="relative z-10">
-              <form className="space-y-6" onSubmit={handleSubmit}>
+              <div className="space-y-6">
                 {/* Error Message */}
                 {error && (
                   <div className="bg-red-500/20 backdrop-blur-sm border border-red-400/30 rounded-xl p-3 flex items-center gap-2">
                     <ExclamationTriangleIcon className="h-4 w-4 text-red-300 flex-shrink-0" />
-                    <p className="text-red-200 text-xs">{error}</p>
+                    <p className="text-red-200 text-sm">{error}</p>
                   </div>
                 )}
 
-                {/* Debug: Always show current error state */}
-                <div className="bg-yellow-500/20 backdrop-blur-sm border border-yellow-400/30 rounded-xl p-2 text-xs">
-                  <span className="text-yellow-200">Debug - Error state: "{error}" | Length: {error.length} | Truthy: {error ? 'true' : 'false'}</span>
-                </div>
+
 
                 {/* Username Field */}
                 <div className="space-y-2">
@@ -246,8 +235,9 @@ const LoginPage: React.FC = () => {
 
                 {/* Submit Button */}
                 <button
-                  type="submit"
+                  type="button"
                   disabled={isSubmitting}
+                  onClick={handleSubmit}
                   className="w-full flex justify-center py-3 px-4 bg-gradient-to-r from-blue-600 to-purple-600 backdrop-blur-sm border border-white/40 rounded-xl shadow-xl text-sm font-bold text-white hover:from-blue-500 hover:to-purple-500 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-[1.02] drop-shadow-lg"
                 >
                   {isSubmitting ? (
@@ -259,7 +249,7 @@ const LoginPage: React.FC = () => {
                     'Sign in'
                   )}
                 </button>
-              </form>
+              </div>
 
             </div>
           </div>

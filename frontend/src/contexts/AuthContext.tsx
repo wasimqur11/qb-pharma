@@ -88,7 +88,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const login = async (username: string, password: string): Promise<LoginResult> => {
-    setAuthState(prev => ({ ...prev, isLoading: true }));
+    // Don't change auth state when starting login - this prevents component remounting
 
     try {
       // Import apiClient dynamically to avoid circular dependency
@@ -105,6 +105,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         localStorage.setItem('qb_pharma_auth', 'true');
         localStorage.setItem('qb_pharma_token', token);
 
+        // Only change auth state on successful login
         setAuthState({
           isAuthenticated: true,
           user: { ...user, lastLogin: new Date() },
@@ -115,13 +116,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       } else {
         console.error('Login failed:', response.error);
 
-        setAuthState({
-          isAuthenticated: false,
-          user: null,
-          isLoading: false
-        });
-
-        // Return specific error message from backend
+        // Don't change auth state on failed login - keep component mounted
         return {
           success: false,
           error: response.error || 'Login failed. Please try again.'
@@ -130,12 +125,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } catch (error) {
       console.error('Login error:', error);
 
-      setAuthState({
-        isAuthenticated: false,
-        user: null,
-        isLoading: false
-      });
-
+      // Don't change auth state on error - keep component mounted
       return {
         success: false,
         error: 'Network error. Please check your connection and try again.'
