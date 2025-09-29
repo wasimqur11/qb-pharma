@@ -31,6 +31,7 @@ import UserProfileBanner from './UserProfileBanner';
 import ProfileSettings from './ProfileSettings';
 import UserManual from './UserManual';
 import AdminPortal from './AdminPortal';
+import NotificationSettings from './NotificationSettings';
 import { 
   CurrencyDollarIcon, BanknotesIcon, ChartBarIcon, UserGroupIcon,
   BuildingOfficeIcon, UsersIcon, TruckIcon, PlusIcon, CreditCardIcon,
@@ -45,7 +46,7 @@ import { SYSTEM_CONFIG, getDefaultDateRange } from '../constants/systemConfig';
 import clsx from 'clsx';
 
 const DarkCorporateDashboard: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'reports' | 'stakeholders' | 'patients' | 'statements' | 'business_statement' | 'doctor_statement' | 'distributor_statement' | 'payment_estimation' | 'data_import' | 'configuration' | 'user_manual' | 'admin_portal'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'reports' | 'stakeholders' | 'patients' | 'statements' | 'business_statement' | 'doctor_statement' | 'distributor_statement' | 'payment_estimation' | 'data_import' | 'configuration' | 'user_manual' | 'admin_portal' | 'notifications'>('dashboard');
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   
   const [selectedPeriod, setSelectedPeriod] = useState('30days');
@@ -122,7 +123,10 @@ const DarkCorporateDashboard: React.FC = () => {
       system: [
         { id: 'configuration', label: 'System Settings', icon: Cog6ToothIcon, category: 'system', tooltip: 'Configure system settings and preferences' },
         { id: 'admin_portal', label: 'Admin Portal', icon: ShieldCheckIcon, category: 'system', tooltip: 'User management and administration' },
-        ...(user?.role === 'super_admin' ? [{ id: 'user_manual', label: 'User Manual', icon: BookOpenIcon, category: 'system', tooltip: 'Comprehensive user guide and help documentation' }] : []),
+        ...(user?.role === 'super_admin' ? [
+          { id: 'notifications', label: 'Notifications', icon: BellIcon, category: 'system', tooltip: 'Configure email, SMS, and WhatsApp notifications' },
+          { id: 'user_manual', label: 'User Manual', icon: BookOpenIcon, category: 'system', tooltip: 'Comprehensive user guide and help documentation' }
+        ] : []),
       ]
     };
 
@@ -2277,6 +2281,7 @@ const DarkCorporateDashboard: React.FC = () => {
         {activeTab === 'data_import' && <DataImport />}
         {activeTab === 'configuration' && <ConfigurationManagement />}
         {activeTab === 'admin_portal' && <AdminPortal />}
+        {activeTab === 'notifications' && <NotificationSettings />}
         {activeTab === 'user_manual' && <UserManual />}
       </main>
 

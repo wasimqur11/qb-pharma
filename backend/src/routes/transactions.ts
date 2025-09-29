@@ -2,6 +2,7 @@ import express from 'express';
 import { z } from 'zod';
 import { authenticateToken, requirePermission, requireRole, AuthenticatedRequest } from '../middleware/auth';
 import { prisma } from '../index';
+import NotificationService from '../services/notificationService';
 
 const router = express.Router();
 
@@ -227,7 +228,30 @@ router.post('/', requirePermission('transactions', 'create'), async (req: Authen
         }
       }
     });
-    
+
+    // Send notification asynchronously (don't wait for completion)
+    const notificationCategories = [
+      'pharmacy_sale', 'sales_profit_distribution', 'consultation_fee',
+      'doctor_expense', 'distributor_payment', 'distributor_credit_purchase',
+      'distributor_credit_note'
+    ];
+
+    if (notificationCategories.includes(transactionData.category)) {
+      setImmediate(async () => {
+        try {
+          const notificationService = NotificationService.getInstance();
+          await notificationService.sendTransactionNotification(
+            transaction.id,
+            transactionData.category,
+            transactionData.stakeholderId,
+            transactionData.stakeholderType
+          );
+        } catch (error) {
+          console.error('Failed to send transaction notification:', error);
+        }
+      });
+    }
+
     // Format response
     const formattedTransaction = {
       id: transaction.id,

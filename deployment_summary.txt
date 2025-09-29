@@ -1,17 +1,25 @@
 QB Pharma Deployment Summary
 ============================
-Deployed: Mon Sep  8 13:22:22 UTC 2025
-Version: 6137111a4d750cc9cf61db5b98d3a95a0b98d5c8
+Deployed: Tue Sep 23 08:54:36 UTC 2025
+Version: 4d04e8aed1d90fdb44dbb2f8d82dec3b46b541f8
 Services: nginx (frontend), systemd (backend)
 Status: SUCCESS
 Access: http://localhost/
 Admin: username=admin, password=admin123
+Operator: username=dataoperator, password=operator123
 
-Data Seeding Policy:
-- ✅ Essential user accounts (admin, operator)
-- ✅ System configurations and settings
-- ✅ Required permissions and departments
+Data Safety Policy:
+- ✅ Essential user accounts (conditional creation only)
+- ✅ System configurations (conditional creation only)
+- ✅ Pre-deployment database backups
+- ✅ Safe database migrations (no --accept-data-loss)
+- ✅ Existing data preservation during updates
+- ✅ Business data cleanup available (--clean-data option)
 - ❌ NO dummy business data (doctors, patients, distributors)
 - ❌ NO sample transactions or stakeholder records
+
+Cleanup Options:
+- ./deploy.sh --clean-data    # Remove all business data (transactions, stakeholders)
+- cd backend && npx tsx clean-business-data.ts  # Manual business data cleanup
 
 Note: Business data should be added through the application interface
