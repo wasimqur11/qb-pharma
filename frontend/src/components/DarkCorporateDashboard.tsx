@@ -58,9 +58,49 @@ const DarkCorporateDashboard: React.FC = () => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showProfileSettings, setShowProfileSettings] = useState(false);
-  
-  const { 
-    transactions, 
+
+  // Navigation dropdown states
+  const [openDropdowns, setOpenDropdowns] = useState<{[key: string]: boolean}>({
+    management: false,
+    statements: false,
+    system: false
+  });
+
+  // Dropdown utility functions
+  const toggleDropdown = (dropdown: string) => {
+    setOpenDropdowns(prev => {
+      // If the clicked dropdown is already open, close it
+      if (prev[dropdown]) {
+        return {
+          management: false,
+          statements: false,
+          system: false
+        };
+      }
+      // Otherwise, close all others and open the clicked one
+      return {
+        management: dropdown === 'management',
+        statements: dropdown === 'statements',
+        system: dropdown === 'system'
+      };
+    });
+  };
+
+  const closeAllDropdowns = () => {
+    setOpenDropdowns({
+      management: false,
+      statements: false,
+      system: false
+    });
+  };
+
+  const handleTabClick = (tabId: string) => {
+    setActiveTab(tabId as any);
+    closeAllDropdowns();
+  };
+
+  const {
+    transactions,
     addTransaction,
     updateTransaction,
     getDashboardStats,
@@ -85,20 +125,29 @@ const DarkCorporateDashboard: React.FC = () => {
     isStakeholderUser 
   } = useRoleBasedData();
 
-  // Close user menu when clicking outside
+  // Close user menu and navigation dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+
       if (showUserMenu) {
-        const target = event.target as HTMLElement;
         if (!target.closest('.user-menu-container')) {
           setShowUserMenu(false);
+        }
+      }
+
+      // Close navigation dropdowns when clicking outside
+      const hasOpenDropdown = Object.values(openDropdowns).some(isOpen => isOpen);
+      if (hasOpenDropdown) {
+        if (!target.closest('.nav-dropdown-container')) {
+          closeAllDropdowns();
         }
       }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showUserMenu]);
+  }, [showUserMenu, openDropdowns.management, openDropdowns.statements, openDropdowns.system]);
   // const { showSuccess } = useToast();
   
   // Define navigation items based on user role
@@ -180,6 +229,69 @@ const DarkCorporateDashboard: React.FC = () => {
 
   const navigationItems = getNavigationItems();
   const [dateRange, setDateRange] = useState(getDefaultDateRange());
+
+  // Helper function to render navigation dropdown
+  const renderNavigationDropdown = (
+    title: string,
+    items: any[],
+    dropdownKey: string,
+    colorScheme: {
+      border: string,
+      text: string,
+      bg: string,
+      hover: string
+    }
+  ) => {
+    if (!items || items.length === 0) return null;
+
+    const isOpen = openDropdowns[dropdownKey] || false;
+    const hasActiveItem = items.some(item => activeTab === item.id);
+
+    return (
+      <div className="relative nav-dropdown-container">
+        <button
+          onClick={() => toggleDropdown(dropdownKey)}
+          className={clsx(
+            'flex items-center gap-2 px-3 py-2.5 text-sm font-medium border-b-2 transition-all duration-200 whitespace-nowrap',
+            hasActiveItem
+              ? `${colorScheme.border.replace('border-l-', 'border-')} ${colorScheme.text} ${colorScheme.bg}`
+              : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600 hover:bg-gray-800/50'
+          )}
+        >
+          <span>{title}</span>
+          <ChevronDownIcon
+            className={clsx(
+              'h-4 w-4 transition-transform duration-200',
+              isOpen ? 'rotate-180' : ''
+            )}
+          />
+        </button>
+
+        {isOpen && (
+          <div className="absolute top-full left-0 mt-1 min-w-48 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-[9999] max-h-96 overflow-y-auto">
+            <div className="py-2">
+              {items.map(item => (
+                <button
+                  key={item.id}
+                  onClick={() => handleTabClick(item.id)}
+                  title={item.tooltip}
+                  className={clsx(
+                    'w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium transition-colors text-left',
+                    activeTab === item.id
+                      ? `${colorScheme.bg} ${colorScheme.text} border-l-4 ${colorScheme.border}`
+                      : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                  )}
+                >
+                  <item.icon className="h-4 w-4" />
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // Report filter state - initialize with Settlement Point date range or fallback
   const [reportFilters, setReportFilters] = useState(() => {
@@ -740,19 +852,19 @@ const DarkCorporateDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Desktop Navigation Tabs - Hidden on mobile */}
-      <div className="hidden lg:block px-4 pb-0 border-b border-gray-800">
-        <nav className="flex items-center gap-1 -mb-px overflow-x-auto scrollbar-hide">
-          {/* Primary Navigation - Daily Operations */}
+      {/* Desktop Navigation Dropdowns - Hidden on mobile */}
+      <div className="hidden lg:block px-4 pb-0 border-b border-gray-800 relative">
+        <nav className="flex items-center gap-4 -mb-px overflow-visible">
+          {/* Primary Navigation - Always visible as direct buttons */}
           {navigationItems.primary.map(item => (
             <button
               key={item.id}
-              onClick={() => setActiveTab(item.id as any)}
+              onClick={() => handleTabClick(item.id)}
               title={item.tooltip}
               className={clsx(
                 'flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-all duration-200 whitespace-nowrap',
-                activeTab === item.id 
-                  ? 'border-blue-500 text-blue-400 bg-blue-500/10' 
+                activeTab === item.id
+                  ? 'border-blue-500 text-blue-400 bg-blue-500/10'
                   : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600 hover:bg-gray-800/50'
               )}
             >
@@ -760,87 +872,50 @@ const DarkCorporateDashboard: React.FC = () => {
               <span className="hidden sm:inline">{item.label}</span>
             </button>
           ))}
-          
-          {/* Separator */}
-          <div className="mx-2 h-6 w-px bg-gray-700"></div>
-          
-          {/* Management - Frequent Operations */}
-          {navigationItems.management.length > 0 && (
-            <>
-              {/* Separator */}
-              <div className="mx-2 h-6 w-px bg-gray-700"></div>
-            </>
+
+          {/* Separators and Dropdowns */}
+          {navigationItems.primary.length > 0 && (navigationItems.management.length > 0 || navigationItems.statements.length > 0 || navigationItems.system.length > 0) && (
+            <div className="h-6 w-px bg-gray-700"></div>
           )}
-          {navigationItems.management.map(item => (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id as any)}
-              title={item.tooltip}
-              className={clsx(
-                'flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-all duration-200 whitespace-nowrap',
-                activeTab === item.id 
-                  ? 'border-green-500 text-green-400 bg-green-500/10' 
-                  : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600 hover:bg-gray-800/50'
-              )}
-            >
-              <item.icon className="h-4 w-4" />
-              <span className="hidden sm:inline">{item.label}</span>
-            </button>
-          ))}
-          
-          {/* Separator */}
-          <div className="mx-2 h-6 w-px bg-gray-700"></div>
-          
-          {/* Analysis & Statements - Periodic Review */}
-          {navigationItems.statements.length > 0 && (
-            <>
-              {/* Separator */}
-              <div className="mx-2 h-6 w-px bg-gray-700"></div>
-            </>
+
+          {/* Management Dropdown */}
+          {renderNavigationDropdown(
+            'Management',
+            navigationItems.management,
+            'management',
+            {
+              border: 'border-l-green-500',
+              text: 'text-green-400',
+              bg: 'bg-green-500/10',
+              hover: 'hover:bg-green-500/20'
+            }
           )}
-          {navigationItems.statements.map(item => (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id as any)}
-              title={item.tooltip}
-              className={clsx(
-                'flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-all duration-200 whitespace-nowrap',
-                activeTab === item.id 
-                  ? 'border-purple-500 text-purple-400 bg-purple-500/10' 
-                  : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600 hover:bg-gray-800/50'
-              )}
-            >
-              <item.icon className="h-4 w-4" />
-              <span className="hidden sm:inline">{item.label}</span>
-            </button>
-          ))}
-          
-          {/* Separator */}
-          <div className="mx-2 h-6 w-px bg-gray-700"></div>
-          
-          {/* Configuration - Administrative */}
-          {navigationItems.system.length > 0 && (
-            <>
-              {/* Separator */}
-              <div className="mx-2 h-6 w-px bg-gray-700"></div>
-            </>
+
+          {/* Statements Dropdown */}
+          {renderNavigationDropdown(
+            'Reports & Statements',
+            navigationItems.statements,
+            'statements',
+            {
+              border: 'border-l-purple-500',
+              text: 'text-purple-400',
+              bg: 'bg-purple-500/10',
+              hover: 'hover:bg-purple-500/20'
+            }
           )}
-          {navigationItems.system.map(item => (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id as any)}
-              title={item.tooltip}
-              className={clsx(
-                'flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-all duration-200 whitespace-nowrap',
-                activeTab === item.id 
-                  ? 'border-orange-500 text-orange-400 bg-orange-500/10' 
-                  : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600 hover:bg-gray-800/50'
-              )}
-            >
-              <item.icon className="h-4 w-4" />
-              <span className="hidden sm:inline">{item.label}</span>
-            </button>
-          ))}
+
+          {/* System Dropdown */}
+          {renderNavigationDropdown(
+            'System',
+            navigationItems.system,
+            'system',
+            {
+              border: 'border-l-orange-500',
+              text: 'text-orange-400',
+              bg: 'bg-orange-500/10',
+              hover: 'hover:bg-orange-500/20'
+            }
+          )}
         </nav>
       </div>
     </div>
