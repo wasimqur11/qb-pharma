@@ -10,7 +10,12 @@ import {
   MagnifyingGlassIcon,
   ChevronDownIcon,
   DocumentArrowUpIcon,
-  UserIcon
+  UserIcon,
+  ArrowDownTrayIcon,
+  CreditCardIcon,
+  CalendarIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon
 } from '@heroicons/react/24/outline';
 import type { Partner, Doctor, BusinessPartner, Employee, Distributor, Patient, StakeholderType } from '../types';
 import { useStakeholders } from '../contexts/StakeholderContext';
@@ -18,6 +23,7 @@ import { useAuth } from '../contexts/AuthContext';
 import StakeholderForm from './StakeholderForm';
 import DistributorBulkUpload from './DistributorBulkUpload';
 import clsx from 'clsx';
+import * as XLSX from 'xlsx';
 
 type StakeholderData = Partner | Doctor | BusinessPartner | Employee | Distributor | Patient;
 
@@ -35,6 +41,8 @@ const StakeholderManagement: React.FC = () => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   
   const {
     doctors,
@@ -79,9 +87,25 @@ const StakeholderManagement: React.FC = () => {
 
   const currentType = stakeholderTypes.find(t => t.id === activeTab);
   const currentData = (stakeholderData as any)[activeTab] || [];
-  const filteredData = currentData.filter((item: any) => 
-    item.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredData = currentData.filter((item: any) => {
+    // Safety check: ensure item and item.name exist
+    if (!item || typeof item.name !== 'string') {
+      console.warn('Invalid item in stakeholder data:', item);
+      return false;
+    }
+    return item.name.toLowerCase().includes(searchTerm.toLowerCase());
+  });
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredData.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedData = filteredData.slice(startIndex, endIndex);
+
+  // Reset to page 1 when tab changes or search term changes
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, searchTerm]);
 
   const handleStakeholderSubmit = async (data: any) => {
     try {
@@ -102,6 +126,7 @@ const StakeholderManagement: React.FC = () => {
             break;
         }
         setEditingItem(null);
+        alert(`${currentType?.label.slice(0, -1)} updated successfully!`);
       } else {
         // Add new
         switch (activeTab) {
@@ -153,11 +178,13 @@ const StakeholderManagement: React.FC = () => {
             });
             break;
         }
+        alert(`${currentType?.label.slice(0, -1)} added successfully!`);
       }
       setShowAddForm(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving stakeholder:', error);
-      alert('Failed to save stakeholder. Please try again.');
+      const errorMessage = error?.response?.data?.error || error?.message || 'Failed to save stakeholder';
+      alert(`Error: ${errorMessage}. Please try again.`);
     }
   };
 
@@ -192,6 +219,84 @@ const StakeholderManagement: React.FC = () => {
 
 
   const formatCurrency = (amount: number) => `₹${amount.toLocaleString()}`;
+
+  // Calculate distributor summary metrics
+  const getDistributorSummary = () => {
+    try {
+      if (activeTab !== 'distributor' || !distributors || !distributors.length) return null;
+
+      const totalCreditBalance = distributors.reduce((sum, d) => sum + (Number(d.creditBalance) || 0), 0);
+      const totalDistributors = distributors.length;
+      const avgCreditBalance = totalDistributors > 0 ? totalCreditBalance / totalDistributors : 0;
+
+      // Count upcoming payments (within 7 days)
+      const today = new Date();
+      const sevenDaysFromNow = new Date();
+      sevenDaysFromNow.setDate(today.getDate() + 7);
+
+      const upcomingPayments = distributors.filter(d => {
+        if (!d.nextPaymentDue) return false;
+        try {
+          const dueDate = new Date(d.nextPaymentDue);
+          return !isNaN(dueDate.getTime()) && dueDate >= today && dueDate <= sevenDaysFromNow;
+        } catch {
+          return false;
+        }
+      }).length;
+
+      return {
+        totalCreditBalance: isNaN(totalCreditBalance) ? 0 : totalCreditBalance,
+        totalDistributors,
+        avgCreditBalance: isNaN(avgCreditBalance) ? 0 : avgCreditBalance,
+        upcomingPayments
+      };
+    } catch (error) {
+      console.error('Error calculating distributor summary:', error);
+      return null;
+    }
+  };
+
+  // Download distributor list as Excel
+  const downloadDistributorExcel = () => {
+    if (activeTab !== 'distributor' || !distributors.length) return;
+
+    const excelData = filteredData.map((d: any) => ({
+      'Company Name': d.name,
+      'Contact Person': d.contactPerson,
+      'Email': d.email,
+      'Phone': d.phone,
+      'Address': d.address,
+      'Credit Balance': d.creditBalance || 0,
+      'Payment Schedule': d.paymentSchedule,
+      'Payment Percentage': d.paymentPercentage,
+      'Next Payment Due': d.nextPaymentDue ? new Date(d.nextPaymentDue).toLocaleDateString() : 'NA',
+      'Last Payment Date': d.lastPaymentDate ? new Date(d.lastPaymentDate).toLocaleDateString() : 'NA',
+      'Created At': new Date(d.createdAt).toLocaleDateString()
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(excelData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Distributors');
+
+    // Set column widths
+    const columnWidths = [
+      { wch: 25 }, // Company Name
+      { wch: 20 }, // Contact Person
+      { wch: 30 }, // Email
+      { wch: 15 }, // Phone
+      { wch: 40 }, // Address
+      { wch: 15 }, // Credit Balance
+      { wch: 15 }, // Payment Schedule
+      { wch: 18 }, // Payment Percentage
+      { wch: 18 }, // Next Payment Due
+      { wch: 18 }, // Last Payment Date
+      { wch: 15 }  // Created At
+    ];
+    ws['!cols'] = columnWidths;
+
+    const timestamp = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(wb, `distributors_list_${timestamp}.xlsx`);
+  };
 
   const getTableColumns = (type: string): TableColumn[] => {
     switch (type) {
@@ -260,7 +365,17 @@ const StakeholderManagement: React.FC = () => {
 
   const StakeholderTable: React.FC<{ data: StakeholderData[]; type: string }> = ({ data, type }) => {
     const columns = getTableColumns(type);
-    
+
+    // Safety check
+    if (!data || !Array.isArray(data)) {
+      console.error('Invalid data passed to StakeholderTable:', data);
+      return (
+        <div className="bg-gray-800 border border-gray-700 rounded-lg p-8 text-center">
+          <p className="text-red-400">Error loading table data. Please refresh the page.</p>
+        </div>
+      );
+    }
+
     return (
       <div className="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
@@ -280,33 +395,39 @@ const StakeholderManagement: React.FC = () => {
               </tr>
             </thead>
             <tbody className="bg-gray-800 divide-y divide-gray-700">
-              {data.map((item) => (
-                <tr key={item.id} className="hover:bg-gray-750 transition-colors">
-                  {columns.map(col => (
-                    <td key={col.key} className={`px-2 sm:px-4 py-3 text-xs sm:text-sm text-gray-300 ${col.key === 'address' ? '' : 'whitespace-nowrap'} ${col.width || ''}`}>
-                      {col.render ? col.render((item as any)[col.key]) : (item as any)[col.key]}
+              {data.map((item) => {
+                if (!item || !item.id) {
+                  console.error('Invalid item in table data:', item);
+                  return null;
+                }
+                return (
+                  <tr key={item.id} className="hover:bg-gray-750 transition-colors">
+                    {columns.map(col => (
+                      <td key={col.key} className={`px-2 sm:px-4 py-3 text-xs sm:text-sm text-gray-300 ${col.key === 'address' ? '' : 'whitespace-nowrap'} ${col.width || ''}`}>
+                        {col.render ? col.render((item as any)[col.key]) : (item as any)[col.key]}
+                      </td>
+                    ))}
+                    <td className="px-2 sm:px-4 py-3 whitespace-nowrap text-right text-sm">
+                      <div className="flex items-center justify-end gap-1 sm:gap-2">
+                        <button
+                          onClick={() => handleEdit(item)}
+                          className="p-1.5 text-gray-400 hover:text-blue-400 hover:bg-gray-700 rounded transition-colors"
+                          title="Edit"
+                        >
+                          <PencilIcon className="h-3 w-3 sm:h-4 sm:w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(item.id)}
+                          className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-gray-700 rounded transition-colors"
+                          title="Delete"
+                        >
+                          <TrashIcon className="h-3 w-3 sm:h-4 sm:w-4" />
+                        </button>
+                      </div>
                     </td>
-                  ))}
-                  <td className="px-2 sm:px-4 py-3 whitespace-nowrap text-right text-sm">
-                    <div className="flex items-center justify-end gap-1 sm:gap-2">
-                      <button 
-                        onClick={() => handleEdit(item)}
-                        className="p-1.5 text-gray-400 hover:text-blue-400 hover:bg-gray-700 rounded transition-colors"
-                        title="Edit"
-                      >
-                        <PencilIcon className="h-3 w-3 sm:h-4 sm:w-4" />
-                      </button>
-                      <button 
-                        onClick={() => handleDelete(item.id)}
-                        className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-gray-700 rounded transition-colors"
-                        title="Delete"
-                      >
-                        <TrashIcon className="h-3 w-3 sm:h-4 sm:w-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -324,14 +445,26 @@ const StakeholderManagement: React.FC = () => {
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
           {activeTab === 'distributor' && (
-            <button
-              onClick={() => setShowBulkUpload(true)}
-              className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm"
-            >
-              <DocumentArrowUpIcon className="h-4 w-4" />
-              <span className="hidden sm:inline">Bulk Upload</span>
-              <span className="sm:hidden">Upload</span>
-            </button>
+            <>
+              <button
+                onClick={downloadDistributorExcel}
+                disabled={!distributors.length}
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors font-medium text-sm"
+                title="Download Excel"
+              >
+                <ArrowDownTrayIcon className="h-4 w-4" />
+                <span className="hidden sm:inline">Download Excel</span>
+                <span className="sm:hidden">Excel</span>
+              </button>
+              <button
+                onClick={() => setShowBulkUpload(true)}
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm"
+              >
+                <DocumentArrowUpIcon className="h-4 w-4" />
+                <span className="hidden sm:inline">Bulk Upload</span>
+                <span className="sm:hidden">Upload</span>
+              </button>
+            </>
           )}
           <button
             onClick={() => setShowAddForm(true)}
@@ -383,6 +516,72 @@ const StakeholderManagement: React.FC = () => {
         </div>
       </div>
 
+      {/* Distributor Summary - Only shown for distributor tab */}
+      {activeTab === 'distributor' && (() => {
+        const summary = getDistributorSummary();
+        if (!summary) return null;
+
+        return (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Total Credit Balance */}
+            <div className="bg-gradient-to-br from-red-900/30 to-red-800/20 border border-red-600/50 rounded-lg p-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs text-red-300 font-medium uppercase tracking-wider mb-1">Total Credit Balance</p>
+                  <p className="text-2xl font-bold text-white">{formatCurrency(summary.totalCreditBalance)}</p>
+                  <p className="text-xs text-red-400 mt-1">Amount we owe</p>
+                </div>
+                <div className="p-2 bg-red-600/30 rounded-lg">
+                  <CreditCardIcon className="h-5 w-5 text-red-400" />
+                </div>
+              </div>
+            </div>
+
+            {/* Total Distributors */}
+            <div className="bg-gradient-to-br from-cyan-900/30 to-cyan-800/20 border border-cyan-600/50 rounded-lg p-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs text-cyan-300 font-medium uppercase tracking-wider mb-1">Total Distributors</p>
+                  <p className="text-2xl font-bold text-white">{summary.totalDistributors}</p>
+                  <p className="text-xs text-cyan-400 mt-1">Active partners</p>
+                </div>
+                <div className="p-2 bg-cyan-600/30 rounded-lg">
+                  <TruckIcon className="h-5 w-5 text-cyan-400" />
+                </div>
+              </div>
+            </div>
+
+            {/* Average Credit Balance */}
+            <div className="bg-gradient-to-br from-purple-900/30 to-purple-800/20 border border-purple-600/50 rounded-lg p-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs text-purple-300 font-medium uppercase tracking-wider mb-1">Avg Credit Balance</p>
+                  <p className="text-2xl font-bold text-white">{formatCurrency(summary.avgCreditBalance)}</p>
+                  <p className="text-xs text-purple-400 mt-1">Per distributor</p>
+                </div>
+                <div className="p-2 bg-purple-600/30 rounded-lg">
+                  <CreditCardIcon className="h-5 w-5 text-purple-400" />
+                </div>
+              </div>
+            </div>
+
+            {/* Upcoming Payments */}
+            <div className="bg-gradient-to-br from-orange-900/30 to-orange-800/20 border border-orange-600/50 rounded-lg p-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs text-orange-300 font-medium uppercase tracking-wider mb-1">Upcoming Payments</p>
+                  <p className="text-2xl font-bold text-white">{summary.upcomingPayments}</p>
+                  <p className="text-xs text-orange-400 mt-1">Due within 7 days</p>
+                </div>
+                <div className="p-2 bg-orange-600/30 rounded-lg">
+                  <CalendarIcon className="h-5 w-5 text-orange-400" />
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Search and Filters */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-4">
@@ -405,7 +604,94 @@ const StakeholderManagement: React.FC = () => {
 
       {/* Stakeholder Table */}
       {filteredData.length > 0 ? (
-        <StakeholderTable data={filteredData} type={activeTab} />
+        <>
+          <StakeholderTable data={paginatedData} type={activeTab} />
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-gray-800 border border-gray-700 rounded-lg px-4 py-3">
+              {/* Items per page selector */}
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-gray-400">Show:</span>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="bg-gray-700 border border-gray-600 text-white rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+                <span className="text-gray-400">per page</span>
+              </div>
+
+              {/* Page info and navigation */}
+              <div className="flex items-center gap-4">
+                <span className="text-sm text-gray-400">
+                  Showing {startIndex + 1}-{Math.min(endIndex, filteredData.length)} of {filteredData.length}
+                </span>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    title="Previous page"
+                  >
+                    <ChevronLeftIcon className="h-5 w-5" />
+                  </button>
+
+                  {/* Page numbers */}
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => {
+                      // Show first page, last page, current page, and pages around current
+                      const showPage = page === 1 ||
+                                      page === totalPages ||
+                                      (page >= currentPage - 1 && page <= currentPage + 1);
+
+                      const showEllipsis = (page === currentPage - 2 && currentPage > 3) ||
+                                          (page === currentPage + 2 && currentPage < totalPages - 2);
+
+                      if (showEllipsis) {
+                        return <span key={page} className="px-2 text-gray-500">...</span>;
+                      }
+
+                      if (!showPage) return null;
+
+                      return (
+                        <button
+                          key={page}
+                          onClick={() => setCurrentPage(page)}
+                          className={clsx(
+                            'min-w-[32px] h-8 px-2 rounded text-sm font-medium transition-colors',
+                            currentPage === page
+                              ? 'bg-blue-600 text-white'
+                              : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                          )}
+                        >
+                          {page}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    title="Next page"
+                  >
+                    <ChevronRightIcon className="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       ) : (
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-8 text-center">
           <div className="flex flex-col items-center gap-3">

@@ -41,14 +41,17 @@ interface UploadResult {
   processed: number;
   errors: ValidationError[];
   data?: DistributorUploadData[];
+  failed?: number;
+  duplicates?: number;
 }
 
 const DistributorBulkUpload: React.FC<DistributorBulkUploadProps> = ({ isOpen, onClose }) => {
-  const { addDistributor } = useStakeholders();
+  const { addDistributor, loadAllData } = useStakeholders();
   const [dragActive, setDragActive] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const config = {
@@ -270,32 +273,123 @@ const DistributorBulkUpload: React.FC<DistributorBulkUploadProps> = ({ isOpen, o
 
   const handleProcessFile = async () => {
     if (!file) return;
-    
+
     setIsProcessing(true);
+    setUploadProgress({ current: 0, total: 0 });
+
     try {
       const result = await processExcelFile(file);
-      setUploadResult(result);
-      
-      if (result.success && result.data) {
-        // Add distributors to the system
-        for (const distributorData of result.data) {
-          const nextPaymentDue = new Date();
-          nextPaymentDue.setDate(nextPaymentDue.getDate() + 
-            (distributorData.paymentSchedule === 'weekly' ? 7 : 
-             distributorData.paymentSchedule === 'bi-weekly' ? 14 : 30));
 
-          await addDistributor({
-            name: distributorData.name,
-            contactPerson: distributorData.contactPerson,
-            email: distributorData.email,
-            phone: distributorData.phone,
-            address: distributorData.address,
-            creditBalance: distributorData.creditBalance,
-            paymentSchedule: distributorData.paymentSchedule,
-            paymentPercentage: distributorData.paymentPercentage,
-            nextPaymentDue: nextPaymentDue.toISOString().split('T')[0]
+      if (result.success && result.data) {
+        const totalRecords = result.data.length;
+        setUploadProgress({ current: 0, total: totalRecords });
+
+        let successCount = 0;
+        let failedCount = 0;
+        let duplicateCount = 0;
+        const uploadErrors: ValidationError[] = [...result.errors];
+
+        // Process distributors in small batches to avoid UI freezing
+        const BATCH_SIZE = 3;
+        for (let i = 0; i < result.data.length; i += BATCH_SIZE) {
+          const batch = result.data.slice(i, Math.min(i + BATCH_SIZE, result.data.length));
+
+          // Process batch concurrently with proper error handling
+          const batchPromises = batch.map(async (distributorData, batchIndex) => {
+            const rowNumber = i + batchIndex + 2; // +2 for header row and 0-based index
+            try {
+              const nextPaymentDue = new Date();
+              nextPaymentDue.setDate(nextPaymentDue.getDate() +
+                (distributorData.paymentSchedule === 'weekly' ? 7 :
+                 distributorData.paymentSchedule === 'bi-weekly' ? 14 : 30));
+
+              // Call API directly without updating local state to prevent overwhelming React
+              const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/stakeholders/distributors`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify({
+                  name: distributorData.name,
+                  contactPerson: distributorData.contactPerson,
+                  email: distributorData.email,
+                  phone: distributorData.phone,
+                  address: distributorData.address,
+                  creditBalance: distributorData.creditBalance,
+                  paymentSchedule: distributorData.paymentSchedule,
+                  paymentPercentage: distributorData.paymentPercentage,
+                  nextPaymentDue: nextPaymentDue.toISOString().split('T')[0]
+                })
+              });
+
+              const responseData = await response.json();
+
+              if (!response.ok) {
+                throw new Error(responseData.error || 'Failed to add distributor');
+              }
+
+              return { success: true, rowNumber };
+            } catch (error: any) {
+              // Check if it's a duplicate error
+              const isDuplicate = error?.message?.includes('duplicate') ||
+                                 error?.message?.includes('already exists');
+
+              return {
+                success: false,
+                rowNumber,
+                isDuplicate,
+                error: error?.message || 'Unknown error'
+              };
+            }
           });
+
+          const batchResults = await Promise.all(batchPromises);
+
+          // Update counts
+          batchResults.forEach((res) => {
+            if (res.success) {
+              successCount++;
+            } else {
+              failedCount++;
+              if (res.isDuplicate) {
+                duplicateCount++;
+                uploadErrors.push({
+                  row: res.rowNumber,
+                  field: 'Company Name',
+                  message: 'Duplicate: A distributor with this name already exists'
+                });
+              } else {
+                uploadErrors.push({
+                  row: res.rowNumber,
+                  field: 'Upload',
+                  message: res.error || 'Failed to add distributor'
+                });
+              }
+            }
+          });
+
+          // Update progress - use callback to avoid stale state
+          setUploadProgress(prev => ({ ...prev, current: i + batch.length }));
+
+          // Delay to allow UI to update and prevent overwhelming the browser
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
+
+        setUploadResult({
+          success: successCount > 0,
+          processed: successCount,
+          failed: failedCount,
+          duplicates: duplicateCount,
+          errors: uploadErrors
+        });
+
+        // Refresh all stakeholder data to sync across all clients
+        if (successCount > 0) {
+          await loadAllData();
+        }
+      } else {
+        setUploadResult(result);
       }
     } catch (error) {
       setUploadResult({
@@ -308,7 +402,9 @@ const DistributorBulkUpload: React.FC<DistributorBulkUploadProps> = ({ isOpen, o
         }]
       });
     }
+
     setIsProcessing(false);
+    setUploadProgress({ current: 0, total: 0 });
   };
 
   const downloadTemplate = () => {
@@ -344,6 +440,7 @@ const DistributorBulkUpload: React.FC<DistributorBulkUploadProps> = ({ isOpen, o
   const resetUpload = () => {
     setFile(null);
     setUploadResult(null);
+    setUploadProgress({ current: 0, total: 0 });
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -496,11 +593,45 @@ const DistributorBulkUpload: React.FC<DistributorBulkUploadProps> = ({ isOpen, o
           ) : (
             /* Upload Results */
             <div className="space-y-4">
+              {/* Summary Statistics */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Success Count */}
+                <div className="bg-green-900/30 border border-green-600 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <CheckCircleIcon className="h-5 w-5 text-green-400" />
+                    <h4 className="text-sm font-medium text-green-400">Successful</h4>
+                  </div>
+                  <p className="text-2xl font-bold text-white">{uploadResult.processed || 0}</p>
+                  <p className="text-xs text-gray-400 mt-1">Records added successfully</p>
+                </div>
+
+                {/* Duplicate Count */}
+                <div className="bg-yellow-900/30 border border-yellow-600 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <ExclamationTriangleIcon className="h-5 w-5 text-yellow-400" />
+                    <h4 className="text-sm font-medium text-yellow-400">Duplicates</h4>
+                  </div>
+                  <p className="text-2xl font-bold text-white">{uploadResult.duplicates || 0}</p>
+                  <p className="text-xs text-gray-400 mt-1">Company names already exist</p>
+                </div>
+
+                {/* Failed Count */}
+                <div className="bg-red-900/30 border border-red-600 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <XMarkIcon className="h-5 w-5 text-red-400" />
+                    <h4 className="text-sm font-medium text-red-400">Failed</h4>
+                  </div>
+                  <p className="text-2xl font-bold text-white">{(uploadResult.failed || 0) - (uploadResult.duplicates || 0)}</p>
+                  <p className="text-xs text-gray-400 mt-1">Other validation errors</p>
+                </div>
+              </div>
+
+              {/* Overall Status */}
               <div className={clsx(
                 "p-4 rounded-lg border",
-                uploadResult.success 
-                  ? "bg-green-900/30 border-green-600" 
-                  : "bg-red-900/30 border-red-600"
+                uploadResult.success
+                  ? "bg-green-900/20 border-green-600/50"
+                  : "bg-red-900/20 border-red-600/50"
               )}>
                 <div className="flex items-center gap-3">
                   {uploadResult.success ? (
@@ -513,33 +644,75 @@ const DistributorBulkUpload: React.FC<DistributorBulkUploadProps> = ({ isOpen, o
                       "font-medium",
                       uploadResult.success ? "text-green-400" : "text-red-400"
                     )}>
-                      {uploadResult.success ? 'Upload Successful!' : 'Upload Failed'}
+                      {uploadResult.success
+                        ? uploadResult.failed
+                          ? 'Upload Completed with Some Errors'
+                          : 'Upload Completed Successfully!'
+                        : 'Upload Failed'
+                      }
                     </h3>
                     <p className="text-sm text-gray-300">
-                      {uploadResult.success 
-                        ? `${uploadResult.processed} distributors imported successfully`
-                        : `${uploadResult.errors.length} errors found`
-                      }
+                      Total: {(uploadResult.processed || 0) + (uploadResult.failed || 0)} records processed
                     </p>
                   </div>
                 </div>
               </div>
 
+              {/* Detailed Error Breakdown */}
               {uploadResult.errors.length > 0 && (
                 <div className="bg-gray-750 border border-gray-600 rounded-lg p-4">
-                  <h4 className="text-sm font-medium text-white mb-3">
-                    Errors ({uploadResult.errors.length}):
+                  <h4 className="text-sm font-medium text-white mb-3 flex items-center gap-2">
+                    <ExclamationTriangleIcon className="h-5 w-5 text-yellow-400" />
+                    Detailed Error Report ({uploadResult.errors.length} issues)
                   </h4>
-                  <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {uploadResult.errors.map((error, index) => (
-                      <div key={index} className="text-sm text-red-400 flex items-start gap-2 py-1">
-                        <span className="text-red-400 mt-0.5">•</span>
-                        <span>
-                          <strong>Row {error.row}, {error.field}:</strong> {error.message}
-                        </span>
+
+                  {/* Categorize errors */}
+                  {(() => {
+                    const duplicateErrors = uploadResult.errors.filter(e => e.message.includes('Duplicate') || e.message.includes('already exists'));
+                    const validationErrors = uploadResult.errors.filter(e => !e.message.includes('Duplicate') && !e.message.includes('already exists'));
+
+                    return (
+                      <div className="space-y-4">
+                        {/* Duplicate Errors */}
+                        {duplicateErrors.length > 0 && (
+                          <div>
+                            <h5 className="text-xs font-semibold text-yellow-400 mb-2 uppercase">
+                              Duplicate Entries ({duplicateErrors.length})
+                            </h5>
+                            <div className="space-y-1 max-h-40 overflow-y-auto bg-gray-800 rounded p-2">
+                              {duplicateErrors.map((error, index) => (
+                                <div key={index} className="text-sm text-yellow-300 flex items-start gap-2 py-0.5">
+                                  <span className="text-yellow-400 mt-0.5">•</span>
+                                  <span>
+                                    <strong className="text-yellow-400">Row {error.row}:</strong> {error.message}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Validation Errors */}
+                        {validationErrors.length > 0 && (
+                          <div>
+                            <h5 className="text-xs font-semibold text-red-400 mb-2 uppercase">
+                              Validation Errors ({validationErrors.length})
+                            </h5>
+                            <div className="space-y-1 max-h-40 overflow-y-auto bg-gray-800 rounded p-2">
+                              {validationErrors.map((error, index) => (
+                                <div key={index} className="text-sm text-red-300 flex items-start gap-2 py-0.5">
+                                  <span className="text-red-400 mt-0.5">•</span>
+                                  <span>
+                                    <strong className="text-red-400">Row {error.row}, {error.field}:</strong> {error.message}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -581,7 +754,10 @@ const DistributorBulkUpload: React.FC<DistributorBulkUploadProps> = ({ isOpen, o
                 {isProcessing ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Processing...
+                    {uploadProgress.total > 0
+                      ? `Processing... ${uploadProgress.current}/${uploadProgress.total}`
+                      : 'Processing...'
+                    }
                   </>
                 ) : (
                   <>

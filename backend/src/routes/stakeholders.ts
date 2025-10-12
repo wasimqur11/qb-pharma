@@ -238,7 +238,23 @@ router.post('/:type', requirePermission('stakeholders', 'create'), async (req: A
     }
     
     const validatedData = validationSchema.parse({ ...req.body, pharmaUnitId });
-    
+
+    // Check for duplicate distributor name within the same pharma unit
+    if (type === 'distributors') {
+      const existingDistributor = await prisma.distributor.findFirst({
+        where: {
+          name: validatedData.name,
+          pharmaUnitId
+        }
+      });
+
+      if (existingDistributor) {
+        return res.status(400).json({
+          error: 'A distributor with this company name already exists in your pharma unit'
+        });
+      }
+    }
+
     // Create stakeholder
     switch (type) {
       case 'doctors':
@@ -421,7 +437,24 @@ router.put('/:type/:id', requirePermission('stakeholders', 'update'), async (req
     }
     
     const updateData = validationSchema.parse(req.body);
-    
+
+    // Check for duplicate distributor name when updating (excluding current distributor)
+    if (type === 'distributors' && updateData.name) {
+      const duplicateDistributor = await prisma.distributor.findFirst({
+        where: {
+          name: updateData.name,
+          pharmaUnitId: existingStakeholder.pharmaUnitId,
+          NOT: { id }
+        }
+      });
+
+      if (duplicateDistributor) {
+        return res.status(400).json({
+          error: 'A distributor with this company name already exists in your pharma unit'
+        });
+      }
+    }
+
     // Update stakeholder
     let updatedStakeholder: any;
     switch (type) {

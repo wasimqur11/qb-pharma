@@ -142,17 +142,33 @@ export const StakeholderProvider: React.FC<StakeholderProviderProps> = ({ childr
     }
   }, [isAuthenticated, authLoading]);
 
+  // Auto-refresh data every 30 seconds to keep data in sync across multiple sessions
+  useEffect(() => {
+    if (!isAuthenticated || authLoading) {
+      return;
+    }
+
+    const refreshInterval = setInterval(() => {
+      loadAllData();
+    }, 30000); // Refresh every 30 seconds
+
+    return () => clearInterval(refreshInterval);
+  }, [isAuthenticated, authLoading]);
+
   // Doctor operations
   const addDoctor = async (doctorData: Omit<Doctor, 'id' | 'createdAt'>) => {
     try {
       const response = await apiClient.createStakeholder('doctors', doctorData);
-      if (response.success) {
+      if (response.success && response.data) {
         setDoctors(prev => [...prev, response.data]);
       } else {
-        console.error('Failed to add doctor:', response.error);
+        const errorMsg = response.error || 'Failed to add doctor';
+        console.error('Failed to add doctor:', errorMsg);
+        throw new Error(errorMsg);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to add doctor:', error);
+      throw error; // Re-throw to let caller handle it
     }
   };
 
@@ -188,13 +204,16 @@ export const StakeholderProvider: React.FC<StakeholderProviderProps> = ({ childr
   const addBusinessPartner = async (partnerData: Omit<BusinessPartner, 'id' | 'createdAt'>) => {
     try {
       const response = await apiClient.createStakeholder('business-partners', partnerData);
-      if (response.success) {
+      if (response.success && response.data) {
         setBusinessPartners(prev => [...prev, response.data]);
       } else {
-        console.error('Failed to add business partner:', response.error);
+        const errorMsg = response.error || 'Failed to add business partner';
+        console.error('Failed to add business partner:', errorMsg);
+        throw new Error(errorMsg);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to add business partner:', error);
+      throw error; // Re-throw to let caller handle it
     }
   };
 
@@ -230,13 +249,16 @@ export const StakeholderProvider: React.FC<StakeholderProviderProps> = ({ childr
   const addEmployee = async (employeeData: Omit<Employee, 'id' | 'createdAt'>) => {
     try {
       const response = await apiClient.createStakeholder('employees', employeeData);
-      if (response.success) {
+      if (response.success && response.data) {
         setEmployees(prev => [...prev, response.data]);
       } else {
-        console.error('Failed to add employee:', response.error);
+        const errorMsg = response.error || 'Failed to add employee';
+        console.error('Failed to add employee:', errorMsg);
+        throw new Error(errorMsg);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to add employee:', error);
+      throw error; // Re-throw to let caller handle it
     }
   };
 
@@ -284,13 +306,16 @@ export const StakeholderProvider: React.FC<StakeholderProviderProps> = ({ childr
   const addDistributor = async (distributorData: Omit<Distributor, 'id' | 'createdAt'>) => {
     try {
       const response = await apiClient.createStakeholder('distributors', distributorData);
-      if (response.success) {
+      if (response.success && response.data) {
         setDistributors(prev => [...prev, response.data]);
       } else {
-        console.error('Failed to add distributor:', response.error);
+        const errorMsg = response.error || 'Failed to add distributor';
+        console.error('Failed to add distributor:', errorMsg);
+        throw new Error(errorMsg);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to add distributor:', error);
+      throw error; // Re-throw to let caller handle it
     }
   };
 
@@ -326,13 +351,16 @@ export const StakeholderProvider: React.FC<StakeholderProviderProps> = ({ childr
   const addPatient = async (patientData: Omit<Patient, 'id' | 'createdAt' | 'updatedAt' | 'currentCredit'>) => {
     try {
       const response = await apiClient.createStakeholder('patients', patientData);
-      if (response.success) {
+      if (response.success && response.data) {
         setPatients(prev => [...prev, response.data]);
       } else {
-        console.error('Failed to add patient:', response.error);
+        const errorMsg = response.error || 'Failed to add patient';
+        console.error('Failed to add patient:', errorMsg);
+        throw new Error(errorMsg);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to add patient:', error);
+      throw error; // Re-throw to let caller handle it
     }
   };
 
