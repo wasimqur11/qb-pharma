@@ -304,11 +304,11 @@ const DistributorBulkUpload: React.FC<DistributorBulkUploadProps> = ({ isOpen, o
                  distributorData.paymentSchedule === 'bi-weekly' ? 14 : 30));
 
               // Call API directly without updating local state to prevent overwhelming React
-              const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/stakeholders/distributors`, {
+              const response = await fetch(`/api/stakeholders/distributors`, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${localStorage.getItem('token')}`
+                  'Authorization': `Bearer ${localStorage.getItem('qb_pharma_token')}`
                 },
                 body: JSON.stringify({
                   name: distributorData.name,
