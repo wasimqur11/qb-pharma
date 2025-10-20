@@ -196,6 +196,10 @@ class ApiClient {
     return this.get(endpoint);
   }
 
+  async getAllTransactions(): Promise<ApiResponse<any[]>> {
+    return this.get('/api/transactions?all=true');
+  }
+
   async createTransaction(transactionData: any): Promise<ApiResponse<any>> {
     // Filter out fields that backend will set automatically
     const { createdBy, id, createdAt, ...cleanData } = transactionData;

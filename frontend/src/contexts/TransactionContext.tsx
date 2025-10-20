@@ -113,9 +113,10 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
 
     setIsLoading(true);
     try {
-      console.log('Loading transactions from database...');
-      
-      const response = await apiClient.getTransactions();
+      console.log('Loading all transactions from database...');
+
+      // Use getAllTransactions to fetch all records for accurate calculations
+      const response = await apiClient.getAllTransactions();
       if (response.success) {
         // Handle new response structure with pagination
         const transactionsData = response.data?.transactions || response.data || [];
@@ -126,7 +127,7 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
           createdAt: new Date(t.createdAt)
         }));
         setTransactions(parsedTransactions);
-        console.log('Loaded', parsedTransactions?.length || 0, 'transactions from database');
+        console.log('Loaded', parsedTransactions?.length || 0, 'transactions from database (all records)');
       } else {
         console.error('Failed to load transactions:', response.error);
         setTransactions([]);

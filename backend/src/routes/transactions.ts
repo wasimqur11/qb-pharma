@@ -44,11 +44,11 @@ const UpdateTransactionSchema = z.object({
 // Get all transactions (with role-based filtering)
 router.get('/', requirePermission('transactions', 'read'), async (req: AuthenticatedRequest, res) => {
   try {
-    const { category, stakeholderId, stakeholderType, startDate, endDate, page = '1', limit = '50' } = req.query;
-    
+    const { category, stakeholderId, stakeholderType, startDate, endDate, page = '1', limit = '50', all } = req.query;
+
     // Build filter conditions based on role
     const whereClause: any = {};
-    
+
     // Role-based filtering
     if (req.user?.role === 'doctor' && req.user.linkedStakeholderId) {
       // Doctor: only their consultation transactions
@@ -72,20 +72,20 @@ router.get('/', requirePermission('transactions', 'read'), async (req: Authentic
       whereClause.pharmaUnitId = req.user.pharmaUnitId;
     }
     // Super admin: all transactions (no additional filters)
-    
+
     // Apply query filters
     if (category && typeof category === 'string') {
       whereClause.category = category;
     }
-    
+
     if (stakeholderId && typeof stakeholderId === 'string') {
       whereClause.stakeholderId = stakeholderId;
     }
-    
+
     if (stakeholderType && typeof stakeholderType === 'string') {
       whereClause.stakeholderType = stakeholderType;
     }
-    
+
     if (startDate || endDate) {
       whereClause.date = {};
       if (startDate && typeof startDate === 'string') {
@@ -95,12 +95,13 @@ router.get('/', requirePermission('transactions', 'read'), async (req: Authentic
         whereClause.date.lte = new Date(endDate);
       }
     }
-    
-    // Pagination
+
+    // Pagination - support ?all=true to fetch all records
+    const fetchAll = all === 'true';
     const pageNum = Math.max(1, parseInt(page as string));
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit as string)));
-    const skip = (pageNum - 1) * limitNum;
-    
+    const limitNum = fetchAll ? undefined : Math.min(100, Math.max(1, parseInt(limit as string)));
+    const skip = fetchAll ? undefined : (pageNum - 1) * limitNum!;
+
     // Get transactions with related data
     const [transactions, totalCount] = await Promise.all([
       prisma.transaction.findMany({
@@ -147,11 +148,16 @@ router.get('/', requirePermission('transactions', 'read'), async (req: Authentic
     
     res.json({
       transactions: formattedTransactions,
-      pagination: {
-        page: pageNum,
-        limit: limitNum,
+      pagination: fetchAll ? {
+        page: 1,
+        limit: totalCount,
         total: totalCount,
-        totalPages: Math.ceil(totalCount / limitNum)
+        totalPages: 1
+      } : {
+        page: pageNum,
+        limit: limitNum!,
+        total: totalCount,
+        totalPages: Math.ceil(totalCount / limitNum!)
       }
     });
   } catch (error) {
