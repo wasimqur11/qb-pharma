@@ -224,6 +224,36 @@ const DistributorPaymentEstimation: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody className="bg-gray-800 divide-y divide-gray-700">
+                      {/* Summary Row */}
+                      <tr className="bg-blue-900/40 border-b-2 border-blue-500">
+                        <td className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap">
+                          <div className="text-xs sm:text-sm font-bold text-blue-300 uppercase">
+                            Total ({distributorEstimates.length} Distributors)
+                          </div>
+                        </td>
+                        <td className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap">
+                          <div className="text-xs sm:text-sm font-bold text-blue-300">
+                            {formatCurrency(distributorEstimates.reduce((sum, est) => sum + est.creditBalance, 0))}
+                          </div>
+                        </td>
+                        <td className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap">
+                          <div className="text-xs sm:text-sm font-bold text-blue-300">
+                            {formatCurrency(distributorEstimates.reduce((sum, est) => sum + est.maxPayment, 0))}
+                          </div>
+                        </td>
+                        <td className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap">
+                          <div className="text-xs sm:text-sm font-bold text-green-400">
+                            {formatCurrency(totalEstimatedPayments)}
+                          </div>
+                        </td>
+                        <td className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap">
+                          <div className="text-xs sm:text-sm font-bold text-blue-300">
+                            {distributorEstimates.reduce((sum, est) => sum + est.paymentPercentage, 0).toFixed(1)}%
+                          </div>
+                        </td>
+                      </tr>
+
+                      {/* Individual Distributor Rows */}
                       {distributorEstimates.map((estimate) => (
                         <tr key={estimate.distributorId} className="hover:bg-gray-700 transition-colors">
                           <td className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap">
