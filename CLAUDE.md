@@ -100,12 +100,41 @@ The `deploy.sh` script is designed to be always up-to-date and handle both scena
 - Deploy script handles both fresh installs and incremental updates intelligently
 - Prisma schema changes require migration creation and deployment
 
+## ⚠️ CRITICAL: DATABASE PROTECTION POLICY
+
+**DO NOT MAKE CHANGES TO DATABASE SCHEMA OR DATA DURING REGULAR DEPLOYMENTS**
+
+### Database Change Policy
+- **NEVER** modify Prisma schema during code deployments
+- **NEVER** run database migrations automatically in deploy.sh
+- **NEVER** seed or modify production data without explicit approval
+- **ALWAYS** treat database changes as separate, planned operations
+
+### When Database Changes Are Required
+1. **Create a separate database migration plan**
+2. **Document all schema changes and their impact**
+3. **Test migrations thoroughly in development first**
+4. **Schedule database maintenance window**
+5. **Run migrations separately from code deployments**
+6. **Verify data integrity after migrations**
+
+### Deploy Script Behavior
+- The deploy.sh script is ONLY for code updates (frontend/backend)
+- Database seeding ONLY runs on fresh installations (empty database)
+- Existing data is ALWAYS preserved during updates
+- Database backups are created before any deployment
+
 ## CRITICAL: Deploy Script Updates
-**MANDATORY**: When making ANY changes to backend functionality, database schema, seeding, API endpoints, or system configurations, you MUST immediately update the deploy.sh script to reflect these changes. This includes:
-- Adding new seeding scripts or database operations
-- Including new permissions or user setup requirements  
+**MANDATORY**: When making ANY changes to backend functionality, API endpoints, or system configurations, you MUST immediately update the deploy.sh script to reflect these changes. This includes:
+- Adding new API endpoints or route handlers
+- Including new permissions or user setup requirements
 - Updating build processes or dependencies
 - Adding new environment variables or configuration files
 - Any changes that affect fresh deployments or updates
+
+**PROHIBITED in deploy.sh:**
+- Automatic Prisma schema changes (db push/migrate)
+- Database seeding on existing databases
+- Any operation that modifies existing data structure
 
 The deploy.sh script must always be kept current and comprehensive to ensure seamless deployments.

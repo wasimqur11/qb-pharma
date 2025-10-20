@@ -2,8 +2,32 @@
 # QB Pharma Deployment Script - Updated for Production
 # Handles both fresh deployments and updates with enhanced error handling
 #
+# ⚠️ CRITICAL DATABASE PROTECTION POLICY ⚠️
+# ==========================================
+# THIS SCRIPT DOES NOT MODIFY DATABASE SCHEMA OR EXISTING DATA
+#
+# What this script DOES:
+#   ✓ Deploy frontend and backend code updates
+#   ✓ Install/update dependencies
+#   ✓ Build and restart services
+#   ✓ Create database backups before deployment
+#   ✓ Seed ONLY if database is completely empty (fresh install)
+#
+# What this script DOES NOT DO:
+#   ✗ Run database migrations automatically
+#   ✗ Modify Prisma schema
+#   ✗ Seed or modify existing production data
+#   ✗ Change database structure
+#
+# For database schema changes:
+#   - Create a separate migration plan
+#   - Test in development environment first
+#   - Schedule maintenance window
+#   - Run migrations manually and separately
+#   - Verify data integrity after changes
+#
 # Usage:
-#   ./deploy.sh                 # Standard deployment
+#   ./deploy.sh                 # Standard deployment (preserves data)
 #   ./deploy.sh --clean-data    # Clean ALL business data (transactions, stakeholders)
 #   ./deploy.sh --clean-legacy  # Clean legacy non-user data (deprecated)
 #
@@ -14,7 +38,8 @@
 #
 # Features:
 #   - Automatic dependency installation
-#   - Database schema setup and seeding
+#   - Database backup before deployment
+#   - Conditional seeding (fresh installs only)
 #   - CRUD operations fix with proper permission parsing
 #   - Nginx reverse proxy configuration
 #   - Systemd service management
