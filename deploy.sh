@@ -196,13 +196,24 @@ elif [ "$1" = "--clean-legacy" ]; then
     npx tsx clean-data.ts 2>/dev/null || echo "⚠️ Legacy clean script not available, continuing with fresh setup..."
 fi
 
-# Seed database with ONLY essential user and system data
-echo "👤 Seeding database with essential user data only (NO dummy business data)..."
-npm run db:seed:users || handle_error "Failed to seed user data"
+# Only seed if database is empty (fresh deployment)
+echo "🔍 Checking if database needs seeding..."
+USER_COUNT=$(sqlite3 prisma/data/qb-pharma.db "SELECT COUNT(*) FROM users;" 2>/dev/null || echo "0")
 
-# Seed system configurations (required for application functionality)
-echo "⚙️ Seeding essential system configurations..."
-npx tsx seed-configurations.ts || handle_error "Failed to seed system configurations"
+if [ "$USER_COUNT" = "0" ]; then
+    echo "👤 Fresh database detected - Seeding essential user data only (NO dummy business data)..."
+    npm run db:seed:users || handle_error "Failed to seed user data"
+
+    echo "⚙️ Seeding essential system configurations..."
+    npx tsx seed-configurations.ts || handle_error "Failed to seed system configurations"
+else
+    echo "✅ Database already has data - SKIPPING seeding to preserve existing data"
+    echo "   User count: $USER_COUNT"
+
+    # Only update system configurations if they don't exist
+    echo "⚙️ Updating system configurations (non-destructive)..."
+    npx tsx seed-configurations.ts || echo "⚠️ Configuration update skipped"
+fi
 
 # Explicitly warn against dummy data seeding
 echo "⚠️  NOTE: Dummy business data (doctors, patients, distributors) is NOT seeded"

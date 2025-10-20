@@ -27,6 +27,7 @@ import DataImport from './DataImport';
 import DepartmentManagement from './DepartmentManagement';
 import PatientManagement from './PatientManagement';
 import ConfigurationManagement from './ConfigurationManagement';
+import DailyCreditDebitReport from './DailyCreditDebitReport';
 import UserProfileBanner from './UserProfileBanner';
 import ProfileSettings from './ProfileSettings';
 import UserManual from './UserManual';
@@ -46,7 +47,7 @@ import { SYSTEM_CONFIG, getDefaultDateRange } from '../constants/systemConfig';
 import clsx from 'clsx';
 
 const DarkCorporateDashboard: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'reports' | 'stakeholders' | 'patients' | 'statements' | 'business_statement' | 'doctor_statement' | 'distributor_statement' | 'payment_estimation' | 'data_import' | 'configuration' | 'user_manual' | 'admin_portal' | 'notifications'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'reports' | 'credit_debit_report' | 'stakeholders' | 'patients' | 'statements' | 'business_statement' | 'doctor_statement' | 'distributor_statement' | 'payment_estimation' | 'data_import' | 'configuration' | 'user_manual' | 'admin_portal' | 'notifications'>('dashboard');
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   
   const [selectedPeriod, setSelectedPeriod] = useState('30days');
@@ -156,6 +157,7 @@ const DarkCorporateDashboard: React.FC = () => {
       primary: [
         { id: 'dashboard', label: 'Dashboard', icon: Squares2X2Icon, category: 'dashboard', tooltip: 'Comprehensive business dashboard and analytics' },
         { id: 'reports', label: 'Business Report', icon: DocumentTextIcon, category: 'reports', tooltip: 'Daily business analytics and financial insights' },
+        { id: 'credit_debit_report', label: 'Credit-Debit Report', icon: BanknotesIcon, category: 'reports', tooltip: 'Daily credit-debit breakdown with PDF export' },
       ],
       management: [
         { id: 'stakeholders', label: 'Stakeholders', icon: UsersIcon, category: 'management', tooltip: 'Manage doctors, partners, employees, and distributors' },
@@ -2346,6 +2348,7 @@ const DarkCorporateDashboard: React.FC = () => {
 
         {activeTab === 'dashboard' && renderUnifiedDashboard()}
         {activeTab === 'reports' && renderReports()}
+        {activeTab === 'credit_debit_report' && <DailyCreditDebitReport />}
         {activeTab === 'stakeholders' && <StakeholderManagement />}
         {activeTab === 'patients' && <PatientManagement />}
         {activeTab === 'statements' && <AccountStatement />}
