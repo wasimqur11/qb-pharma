@@ -157,7 +157,6 @@ const DarkCorporateDashboard: React.FC = () => {
       primary: [
         { id: 'dashboard', label: 'Dashboard', icon: Squares2X2Icon, category: 'dashboard', tooltip: 'Comprehensive business dashboard and analytics' },
         { id: 'reports', label: 'Business Report', icon: DocumentTextIcon, category: 'reports', tooltip: 'Daily business analytics and financial insights' },
-        { id: 'credit_debit_report', label: 'Credit-Debit Report', icon: BanknotesIcon, category: 'reports', tooltip: 'Daily credit-debit breakdown with PDF export' },
       ],
       management: [
         { id: 'stakeholders', label: 'Stakeholders', icon: UsersIcon, category: 'management', tooltip: 'Manage doctors, partners, employees, and distributors' },
@@ -167,6 +166,7 @@ const DarkCorporateDashboard: React.FC = () => {
       ],
       statements: [
         { id: 'statements', label: 'Account Statement', icon: CreditCardIcon, category: 'statements', tooltip: 'View individual account statements' },
+        { id: 'credit_debit_report', label: 'Credit-Debit Report', icon: ChartBarIcon, category: 'statements', tooltip: 'Daily credit-debit breakdown with PDF export' },
         { id: 'business_statement', label: 'Business Statement', icon: BanknotesIcon, category: 'statements', tooltip: 'Comprehensive business partnership statement' },
         { id: 'doctor_statement', label: 'Doctor Statement', icon: ChartBarIcon, category: 'statements', tooltip: 'Doctor commission and consultation statements' },
         { id: 'distributor_statement', label: 'Distributor Statement', icon: TruckIcon, category: 'statements', tooltip: 'Distributor payment and credit statements' },
