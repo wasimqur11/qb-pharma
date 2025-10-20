@@ -516,6 +516,132 @@ router.put('/:type/:id', requirePermission('stakeholders', 'update'), async (req
   }
 });
 
+// Bulk upload stakeholders
+router.post('/:type/bulk', requirePermission('stakeholders', 'create'), async (req: AuthenticatedRequest, res) => {
+  try {
+    const { type } = req.params;
+    const { stakeholders: stakeholdersData } = req.body;
+
+    const validTypes = ['doctors', 'business-partners', 'employees', 'distributors', 'patients'];
+    if (!validTypes.includes(type)) {
+      return res.status(400).json({ error: 'Invalid stakeholder type' });
+    }
+
+    if (!Array.isArray(stakeholdersData) || stakeholdersData.length === 0) {
+      return res.status(400).json({ error: 'Stakeholders array is required' });
+    }
+
+    // Determine pharma unit
+    let pharmaUnitId = req.user?.pharmaUnitId;
+    if (req.user?.role === 'super_admin' && req.body.pharmaUnitId) {
+      pharmaUnitId = req.body.pharmaUnitId;
+    }
+
+    if (!pharmaUnitId) {
+      return res.status(400).json({ error: 'Pharma unit is required' });
+    }
+
+    let validationSchema: any;
+    switch (type) {
+      case 'doctors':
+        validationSchema = DoctorSchema;
+        break;
+      case 'business-partners':
+        validationSchema = BusinessPartnerSchema;
+        break;
+      case 'employees':
+        validationSchema = EmployeeSchema;
+        break;
+      case 'distributors':
+        validationSchema = DistributorSchema;
+        break;
+      case 'patients':
+        validationSchema = PatientSchema;
+        break;
+    }
+
+    const results = {
+      successful: [] as any[],
+      failed: [] as any[]
+    };
+
+    // Process each stakeholder
+    for (let i = 0; i < stakeholdersData.length; i++) {
+      try {
+        const stakeholderData = { ...stakeholdersData[i], pharmaUnitId };
+        const validatedData = validationSchema.parse(stakeholderData);
+
+        // Check for duplicates for distributors
+        if (type === 'distributors') {
+          const existingDistributor = await prisma.distributor.findFirst({
+            where: {
+              name: validatedData.name,
+              pharmaUnitId
+            }
+          });
+
+          if (existingDistributor) {
+            results.failed.push({
+              row: i + 1,
+              data: stakeholderData,
+              error: `Distributor "${validatedData.name}" already exists`
+            });
+            continue;
+          }
+        }
+
+        // Create stakeholder
+        let createdStakeholder: any;
+        switch (type) {
+          case 'doctors':
+            createdStakeholder = await prisma.doctor.create({ data: validatedData });
+            break;
+          case 'business-partners':
+            createdStakeholder = await prisma.businessPartner.create({ data: validatedData });
+            break;
+          case 'employees':
+            createdStakeholder = await prisma.employee.create({ data: validatedData });
+            break;
+          case 'distributors':
+            createdStakeholder = await prisma.distributor.create({ data: validatedData });
+            break;
+          case 'patients':
+            createdStakeholder = await prisma.patient.create({ data: validatedData });
+            break;
+        }
+
+        results.successful.push({
+          row: i + 1,
+          stakeholder: createdStakeholder
+        });
+      } catch (error) {
+        console.error(`Bulk upload error for row ${i + 1}:`, error);
+
+        let errorMessage = 'Failed to create stakeholder';
+        if (error instanceof z.ZodError) {
+          errorMessage = error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
+        } else if (error instanceof Error) {
+          errorMessage = error.message;
+        }
+
+        results.failed.push({
+          row: i + 1,
+          data: stakeholdersData[i],
+          error: errorMessage
+        });
+      }
+    }
+
+    res.json({
+      message: `Bulk upload completed: ${results.successful.length} successful, ${results.failed.length} failed`,
+      results
+    });
+  } catch (error) {
+    console.error('Bulk upload error:', error);
+    res.status(500).json({ error: 'Failed to process bulk upload' });
+  }
+});
+
 // Delete stakeholder
 router.delete('/:type/:id', requirePermission('stakeholders', 'delete'), async (req: AuthenticatedRequest, res) => {
   try {
