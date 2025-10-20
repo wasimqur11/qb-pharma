@@ -13,6 +13,7 @@ import {
 import { useStakeholders } from './StakeholderContext';
 import { useAuth } from './AuthContext';
 import apiClient from '../utils/apiClient';
+import { useAutoSync } from '../hooks/useAutoSync';
 
 interface TransactionContextType {
   // Data
@@ -144,6 +145,19 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
       loadTransactions();
     }
   }, [isAuthenticated, authLoading]);
+
+  // Auto-sync: Poll for data changes and reload when detected
+  useAutoSync({
+    enabled: isAuthenticated && !authLoading,
+    pollInterval: 10000, // Poll every 10 seconds
+    onDataChange: (changedTypes) => {
+      console.log('[TransactionContext] Auto-sync detected changes:', changedTypes);
+      // Reload transactions if transaction data changed
+      if (changedTypes.includes('transactions')) {
+        loadTransactions();
+      }
+    }
+  });
 
   // Operations
   const addTransaction = async (transactionData: Omit<Transaction, 'id' | 'createdAt'>) => {

@@ -13,6 +13,7 @@ import stakeholderRoutes from './routes/stakeholders';
 import dashboardRoutes from './routes/dashboard';
 import configurationRoutes from './routes/configurations';
 import notificationRoutes from './routes/notifications';
+import syncRoutes from './routes/sync';
 
 // Load environment variables
 dotenv.config();
@@ -80,6 +81,7 @@ app.use('/api/stakeholders', stakeholderRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/configurations', configurationRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/sync', syncRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {

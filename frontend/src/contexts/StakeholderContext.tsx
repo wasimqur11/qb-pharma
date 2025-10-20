@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { Doctor, BusinessPartner, Employee, Distributor, Patient } from '../types';
 import apiClient from '../utils/apiClient';
 import { useAuth } from './AuthContext';
+import { useAutoSync } from '../hooks/useAutoSync';
 
 interface StakeholderContextType {
   // Data
@@ -142,18 +143,22 @@ export const StakeholderProvider: React.FC<StakeholderProviderProps> = ({ childr
     }
   }, [isAuthenticated, authLoading]);
 
-  // Auto-refresh data every 30 seconds to keep data in sync across multiple sessions
-  useEffect(() => {
-    if (!isAuthenticated || authLoading) {
-      return;
+  // Auto-sync: Smart polling that only refreshes when changes are detected
+  useAutoSync({
+    enabled: isAuthenticated && !authLoading,
+    pollInterval: 10000, // Poll every 10 seconds for changes
+    onDataChange: (changedTypes) => {
+      console.log('[StakeholderContext] Auto-sync detected changes:', changedTypes);
+
+      // Only reload if stakeholder data actually changed
+      const stakeholderTypes = ['doctors', 'businessPartners', 'employees', 'distributors', 'patients'];
+      const hasStakeholderChanges = changedTypes.some(type => stakeholderTypes.includes(type));
+
+      if (hasStakeholderChanges) {
+        loadAllData();
+      }
     }
-
-    const refreshInterval = setInterval(() => {
-      loadAllData();
-    }, 30000); // Refresh every 30 seconds
-
-    return () => clearInterval(refreshInterval);
-  }, [isAuthenticated, authLoading]);
+  });
 
   // Doctor operations
   const addDoctor = async (doctorData: Omit<Doctor, 'id' | 'createdAt'>) => {
