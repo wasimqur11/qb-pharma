@@ -100,6 +100,30 @@ The `deploy.sh` script is designed to be always up-to-date and handle both scena
 - Deploy script handles both fresh installs and incremental updates intelligently
 - Prisma schema changes require migration creation and deployment
 
+### ⚠️ CRITICAL: Database Path Configuration
+
+**Database Location:** `/root/qb-pharma/backend/prisma/data/qb-pharma.db`
+
+**IMPORTANT:** The DATABASE_URL in `.env` MUST use an absolute path:
+```
+DATABASE_URL="file:/root/qb-pharma/backend/prisma/data/qb-pharma.db"
+```
+
+**DO NOT use relative paths like:**
+```
+DATABASE_URL="file:./prisma/data/qb-pharma.db"  # ❌ WRONG - causes nested prisma/prisma/ directory
+```
+
+**Why:** Relative paths cause Prisma to create a nested `prisma/prisma/data/` directory when running commands like `npx prisma db push` or `npx prisma generate` from different working directories. This results in:
+- Multiple database files in different locations
+- Prisma connecting to an empty database while the actual production data is elsewhere
+- Authentication failures and missing data in the application
+
+**Prevention:**
+- The deploy.sh script now enforces absolute paths
+- Validation checks detect and remove nested `prisma/prisma/` directories automatically
+- Never manually run Prisma commands with relative DATABASE_URL paths
+
 ## ⚠️ CRITICAL: DATABASE PROTECTION POLICY
 
 **DO NOT MAKE CHANGES TO DATABASE SCHEMA OR DATA DURING REGULAR DEPLOYMENTS**

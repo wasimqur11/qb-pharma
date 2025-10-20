@@ -159,7 +159,7 @@ cat > backend/.env << EOF
 NODE_ENV=production
 PORT=3001
 HOST=0.0.0.0
-DATABASE_URL="file:./prisma/data/qb-pharma.db"
+DATABASE_URL="file:$PROJECT_DIR/backend/prisma/data/qb-pharma.db"
 JWT_SECRET=$JWT_SECRET
 FRONTEND_URL=http://localhost
 RATE_LIMIT_WINDOW_MS=900000
@@ -238,6 +238,22 @@ else
     # Only update system configurations if they don't exist
     echo "⚙️ Updating system configurations (non-destructive)..."
     npx tsx seed-configurations.ts || echo "⚠️ Configuration update skipped"
+fi
+
+# Validate database location and prevent nested prisma directory issue
+echo "🔍 Validating database location..."
+if [ -d "prisma/prisma" ]; then
+    echo "⚠️  WARNING: Nested prisma/prisma directory detected - removing it"
+    rm -rf prisma/prisma
+fi
+
+# Verify correct database exists
+if [ ! -f "prisma/data/qb-pharma.db" ]; then
+    echo "⚠️  WARNING: Database not found at expected location: prisma/data/qb-pharma.db"
+else
+    echo "✅ Database verified at correct location: prisma/data/qb-pharma.db"
+    DB_SIZE=$(du -h prisma/data/qb-pharma.db | cut -f1)
+    echo "   Database size: $DB_SIZE"
 fi
 
 # Explicitly warn against dummy data seeding
