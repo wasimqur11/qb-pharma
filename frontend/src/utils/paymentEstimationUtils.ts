@@ -321,7 +321,15 @@ export async function calculateDistributorPaymentEstimates(
     const currentBalance = distributor.currentBalance;
     const maxPayment = currentBalance * (maxPaymentPercentage / 100);
     const proportionalShare = distributorAllocation * (currentBalance / totalCreditBalance);
-    const estimatedPayment = Math.min(proportionalShare, maxPayment);
+    const rawEstimatedPayment = Math.min(proportionalShare, maxPayment);
+
+    // Smart rounding: Round to nearest 100, but ensure it doesn't exceed constraints
+    const roundedUp = Math.ceil(rawEstimatedPayment / 100) * 100;
+    const roundedDown = Math.floor(rawEstimatedPayment / 100) * 100;
+
+    // Use rounded up if it doesn't exceed max payment, otherwise round down
+    // This keeps amounts clean (multiples of 100) while respecting limits
+    const estimatedPayment = roundedUp <= maxPayment ? roundedUp : roundedDown;
 
     return {
       distributorId: distributor.id,

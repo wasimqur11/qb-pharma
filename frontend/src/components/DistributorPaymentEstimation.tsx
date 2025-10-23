@@ -5,7 +5,8 @@ import {
   calculateDistributorPaymentEstimates,
   formatDateRange,
   formatCurrency,
-  type PaymentEstimationResult
+  type PaymentEstimationResult,
+  ConfigurationService
 } from '../utils/paymentEstimationUtils';
 import { SYSTEM_CONFIG } from '../constants/systemConfig';
 import PaymentEstimationConfig from './PaymentEstimationConfig';
@@ -48,6 +49,21 @@ const DistributorPaymentEstimation: React.FC = () => {
     key: 'estimatedPayment',
     direction: 'desc'
   });
+
+  // Load configuration from database on mount
+  React.useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const configService = ConfigurationService.getInstance();
+        const dbConfig = await configService.getPaymentEstimationConfig();
+        setConfig(dbConfig);
+      } catch (error) {
+        console.error('Failed to load configuration, using defaults:', error);
+        // Keep using default values
+      }
+    };
+    loadConfig();
+  }, []);
 
   React.useEffect(() => {
     const fetchEstimationResult = async () => {
