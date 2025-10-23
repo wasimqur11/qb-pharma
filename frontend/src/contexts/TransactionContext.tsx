@@ -194,7 +194,7 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
 
   // Handle stakeholder-specific updates after transaction creation
   const handleStakeholderUpdates = async (transaction: Transaction) => {
-    
+
     // Auto-update employee salary due date if this is an employee payment
     if (transaction.category === 'employee_payment' && transaction.stakeholderId) {
       try {
@@ -203,24 +203,11 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
         console.error('Failed to update employee salary due date:', error);
       }
     }
-    
-    // Auto-update distributor credit balance if this is a credit purchase or credit note
-    if ((transaction.category === 'distributor_credit_purchase' || transaction.category === 'distributor_credit_note') && transaction.stakeholderId) {
-      // Use callback to get current distributor state to avoid stale closure
-      const currentDistributor = distributors.find(d => d.id === transaction.stakeholderId);
-      if (currentDistributor) {
-        const balanceChange = transaction.category === 'distributor_credit_purchase' 
-          ? transaction.amount  // Add for credit purchase
-          : -transaction.amount; // Subtract for credit note (return)
-        try {
-          await updateDistributor(transaction.stakeholderId, {
-            creditBalance: Math.max(0, currentDistributor.creditBalance + balanceChange)
-          });
-        } catch (error) {
-          console.error('Failed to update distributor credit balance:', error);
-        }
-      }
-    }
+
+    // NOTE: Distributor credit balance is NOT updated here
+    // The creditBalance field stores only the opening balance (imported from offline ledger)
+    // Current balance is calculated on-demand from all transactions via calculateDistributorCurrentBalance()
+    // This allows transactions to be added in any chronological order
 
     // Auto-update patient credit balance if this is a credit sale
     if (transaction.category === 'patient_credit_sale' && transaction.stakeholderId) {
@@ -602,10 +589,30 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
   const calculateDistributorCurrentBalance = (distributorId: string): number => {
     const distributor = distributors.find(d => d.id === distributorId);
     if (!distributor) return 0;
-    
-    // Since the distributor's creditBalance is automatically maintained by addTransaction(),
-    // we can simply return the stored balance to avoid double-counting transactions
-    return distributor.creditBalance;
+
+    // Start with opening balance (imported from offline ledger)
+    // The creditBalance field stores the opening balance and is never updated by transactions
+    let balance = distributor.creditBalance;
+
+    // Get all transactions for this distributor
+    const distributorTransactions = transactions.filter(
+      t => t.stakeholderId === distributorId &&
+      ['distributor_credit_purchase', 'distributor_payment', 'distributor_credit_note'].includes(t.category)
+    );
+
+    // Calculate current balance by adding/subtracting ALL transactions
+    // This allows transactions to be added in any chronological order
+    distributorTransactions.forEach(transaction => {
+      if (transaction.category === 'distributor_credit_purchase') {
+        balance += transaction.amount; // Credit increases what we owe
+      } else if (transaction.category === 'distributor_payment') {
+        balance -= transaction.amount; // Payment decreases what we owe
+      } else if (transaction.category === 'distributor_credit_note') {
+        balance -= transaction.amount; // Return decreases what we owe
+      }
+    });
+
+    return Math.max(0, balance); // Never negative
   };
 
   const getDistributorCredits = () => {

@@ -102,9 +102,14 @@ const DistributorAccountStatement: React.FC = () => {
     
     // Add opening balance entry to show the starting position
     if (startingCreditBalance > 0) {
+      // Use the distributor's initialBalanceDate if available, otherwise use the filter start date
+      const openingBalanceDate = distributor.initialBalanceDate
+        ? new Date(distributor.initialBalanceDate)
+        : startDate;
+
       statements.push({
         id: 'opening-balance',
-        date: startDate,
+        date: openingBalanceDate,
         description: 'Opening Balance',
         category: 'distributor_credit_purchase', // Neutral category for display
         debit: 0,
