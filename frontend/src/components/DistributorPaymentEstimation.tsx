@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { useStakeholders } from '../contexts/StakeholderContext';
 import { useTransactions } from '../contexts/TransactionContext';
-import { 
+import {
   calculateDistributorPaymentEstimates,
   formatDateRange,
   formatCurrency,
@@ -9,11 +9,11 @@ import {
 } from '../utils/paymentEstimationUtils';
 import { SYSTEM_CONFIG } from '../constants/systemConfig';
 import PaymentEstimationConfig from './PaymentEstimationConfig';
-import { CalendarIcon, CurrencyDollarIcon, UserGroupIcon, Cog6ToothIcon } from '@heroicons/react/24/outline';
+import { CalendarIcon, CurrencyDollarIcon, UserGroupIcon, Cog6ToothIcon, ChevronUpIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 
 const DistributorPaymentEstimation: React.FC = () => {
   const { distributors } = useStakeholders();
-  const { transactions } = useTransactions();
+  const { transactions, calculateDistributorCurrentBalance } = useTransactions();
   const [config, setConfig] = React.useState<{
     profitPercentage: number;
     distributorPercentage: number;
@@ -41,12 +41,24 @@ const DistributorPaymentEstimation: React.FC = () => {
     remainingFunds: 0
   });
   const [loading, setLoading] = React.useState(true);
+  const [sortConfig, setSortConfig] = React.useState<{
+    key: 'distributorName' | 'creditBalance' | 'maxPayment' | 'estimatedPayment' | 'paymentPercentage';
+    direction: 'asc' | 'desc';
+  }>({
+    key: 'estimatedPayment',
+    direction: 'desc'
+  });
 
   React.useEffect(() => {
     const fetchEstimationResult = async () => {
       try {
         setLoading(true);
-        const result = await calculateDistributorPaymentEstimates(transactions, distributors, config);
+        const result = await calculateDistributorPaymentEstimates(
+          transactions,
+          distributors,
+          config,
+          calculateDistributorCurrentBalance
+        );
         setEstimationResult(result);
       } catch (error) {
         console.error('Error calculating payment estimates:', error);
@@ -56,9 +68,70 @@ const DistributorPaymentEstimation: React.FC = () => {
     };
 
     fetchEstimationResult();
-  }, [transactions, distributors, config]);
+  }, [transactions, distributors, config, calculateDistributorCurrentBalance]);
 
   const { weeklyData, currentWeekData, distributorEstimates, totalEstimatedPayments, remainingFunds } = estimationResult;
+
+  // Sort distributor estimates based on current sort configuration
+  const sortedDistributorEstimates = useMemo(() => {
+    const sorted = [...distributorEstimates].sort((a, b) => {
+      let aValue: string | number;
+      let bValue: string | number;
+
+      switch (sortConfig.key) {
+        case 'distributorName':
+          aValue = a.distributorName.toLowerCase();
+          bValue = b.distributorName.toLowerCase();
+          break;
+        case 'creditBalance':
+          aValue = a.creditBalance;
+          bValue = b.creditBalance;
+          break;
+        case 'maxPayment':
+          aValue = a.maxPayment;
+          bValue = b.maxPayment;
+          break;
+        case 'estimatedPayment':
+          aValue = a.estimatedPayment;
+          bValue = b.estimatedPayment;
+          break;
+        case 'paymentPercentage':
+          aValue = a.paymentPercentage;
+          bValue = b.paymentPercentage;
+          break;
+        default:
+          return 0;
+      }
+
+      if (aValue < bValue) {
+        return sortConfig.direction === 'asc' ? -1 : 1;
+      }
+      if (aValue > bValue) {
+        return sortConfig.direction === 'asc' ? 1 : -1;
+      }
+      return 0;
+    });
+
+    return sorted;
+  }, [distributorEstimates, sortConfig]);
+
+  // Handle sort request
+  const handleSort = (key: typeof sortConfig.key) => {
+    setSortConfig(prevConfig => ({
+      key,
+      direction: prevConfig.key === key && prevConfig.direction === 'asc' ? 'desc' : 'asc'
+    }));
+  };
+
+  // Render sort icon
+  const renderSortIcon = (columnKey: typeof sortConfig.key) => {
+    if (sortConfig.key !== columnKey) {
+      return <ChevronUpIcon className="h-3 w-3 text-gray-600 opacity-50" />;
+    }
+    return sortConfig.direction === 'asc'
+      ? <ChevronUpIcon className="h-3 w-3 text-blue-400" />
+      : <ChevronDownIcon className="h-3 w-3 text-blue-400" />;
+  };
 
   if (loading) {
     return (
@@ -201,25 +274,55 @@ const DistributorPaymentEstimation: React.FC = () => {
                   <table className="min-w-full divide-y divide-gray-700">
                     <thead className="bg-gray-900">
                       <tr>
-                        <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                          <span className="hidden sm:inline">Distributor</span>
-                          <span className="sm:hidden">Name</span>
+                        <th
+                          className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200 transition-colors"
+                          onClick={() => handleSort('distributorName')}
+                        >
+                          <div className="flex items-center gap-1">
+                            <span className="hidden sm:inline">Distributor</span>
+                            <span className="sm:hidden">Name</span>
+                            {renderSortIcon('distributorName')}
+                          </div>
                         </th>
-                        <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                          <span className="hidden sm:inline">Credit Balance</span>
-                          <span className="sm:hidden">Balance</span>
+                        <th
+                          className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200 transition-colors"
+                          onClick={() => handleSort('creditBalance')}
+                        >
+                          <div className="flex items-center gap-1">
+                            <span className="hidden sm:inline">Credit Balance</span>
+                            <span className="sm:hidden">Balance</span>
+                            {renderSortIcon('creditBalance')}
+                          </div>
                         </th>
-                        <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                          <span className="hidden sm:inline">Max Payment ({config.maxPaymentPercentage}%)</span>
-                          <span className="sm:hidden">Max</span>
+                        <th
+                          className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200 transition-colors"
+                          onClick={() => handleSort('maxPayment')}
+                        >
+                          <div className="flex items-center gap-1">
+                            <span className="hidden sm:inline">Max Payment ({config.maxPaymentPercentage}%)</span>
+                            <span className="sm:hidden">Max</span>
+                            {renderSortIcon('maxPayment')}
+                          </div>
                         </th>
-                        <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                          <span className="hidden sm:inline">Estimated Payment</span>
-                          <span className="sm:hidden">Est.</span>
+                        <th
+                          className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200 transition-colors"
+                          onClick={() => handleSort('estimatedPayment')}
+                        >
+                          <div className="flex items-center gap-1">
+                            <span className="hidden sm:inline">Estimated Payment</span>
+                            <span className="sm:hidden">Est.</span>
+                            {renderSortIcon('estimatedPayment')}
+                          </div>
                         </th>
-                        <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                          <span className="hidden sm:inline">% of Distribution</span>
-                          <span className="sm:hidden">%</span>
+                        <th
+                          className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-200 transition-colors"
+                          onClick={() => handleSort('paymentPercentage')}
+                        >
+                          <div className="flex items-center gap-1">
+                            <span className="hidden sm:inline">% of Distribution</span>
+                            <span className="sm:hidden">%</span>
+                            {renderSortIcon('paymentPercentage')}
+                          </div>
                         </th>
                       </tr>
                     </thead>
@@ -253,8 +356,8 @@ const DistributorPaymentEstimation: React.FC = () => {
                         </td>
                       </tr>
 
-                      {/* Individual Distributor Rows */}
-                      {distributorEstimates.map((estimate) => (
+                      {/* Individual Distributor Rows - Sorted */}
+                      {sortedDistributorEstimates.map((estimate) => (
                         <tr key={estimate.distributorId} className="hover:bg-gray-700 transition-colors">
                           <td className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap">
                             <div className="text-xs sm:text-sm font-medium text-white">

@@ -227,7 +227,8 @@ export async function calculateDistributorPaymentEstimates(
     profitPercentage?: number;
     distributorPercentage?: number;
     maxPaymentPercentage?: number;
-  }
+  },
+  calculateBalance?: (distributorId: string) => number
 ): Promise<PaymentEstimationResult> {
   const { start: weekStart, end: weekEnd } = getPreviousWeekRange();
   const { start: currentWeekStart, end: currentWeekEnd } = getCurrentWeekRange();
@@ -282,10 +283,23 @@ export async function calculateDistributorPaymentEstimates(
     weekStart: currentWeekStart,
     weekEnd: currentWeekEnd
   };
-  
-  // Filter distributors with positive credit balance
-  const eligibleDistributors = distributors.filter(d => d.creditBalance > 0);
-  
+
+  // Helper function to get current balance - either calculated or from stored field
+  const getCurrentBalance = (distributorId: string, fallbackBalance: number): number => {
+    if (calculateBalance) {
+      return calculateBalance(distributorId);
+    }
+    return fallbackBalance;
+  };
+
+  // Calculate current balances for all distributors and filter those with positive balance
+  const distributorsWithBalances = distributors.map(d => ({
+    ...d,
+    currentBalance: getCurrentBalance(d.id, d.creditBalance)
+  }));
+
+  const eligibleDistributors = distributorsWithBalances.filter(d => d.currentBalance > 0);
+
   if (eligibleDistributors.length === 0) {
     return {
       weeklyData,
@@ -295,23 +309,24 @@ export async function calculateDistributorPaymentEstimates(
       remainingFunds: distributorAllocation
     };
   }
-  
+
   // Calculate total credit balance for proportional distribution
   const totalCreditBalance = eligibleDistributors.reduce(
-    (sum, distributor) => sum + distributor.creditBalance,
+    (sum, distributor) => sum + distributor.currentBalance,
     0
   );
-  
+
   // Calculate initial estimates and caps
   const distributorEstimates: DistributorPaymentEstimate[] = eligibleDistributors.map(distributor => {
-    const maxPayment = distributor.creditBalance * (maxPaymentPercentage / 100);
-    const proportionalShare = distributorAllocation * (distributor.creditBalance / totalCreditBalance);
+    const currentBalance = distributor.currentBalance;
+    const maxPayment = currentBalance * (maxPaymentPercentage / 100);
+    const proportionalShare = distributorAllocation * (currentBalance / totalCreditBalance);
     const estimatedPayment = Math.min(proportionalShare, maxPayment);
-    
+
     return {
       distributorId: distributor.id,
       distributorName: distributor.name,
-      creditBalance: distributor.creditBalance,
+      creditBalance: currentBalance,
       maxPayment,
       estimatedPayment,
       paymentPercentage: (estimatedPayment / distributorAllocation) * 100
