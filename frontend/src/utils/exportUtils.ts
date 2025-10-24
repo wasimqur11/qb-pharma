@@ -838,6 +838,354 @@ export const exportEnhancedBusinessReportToPDF = async (reportData: BusinessRepo
   pdf.save(fileName);
 };
 
+// Daily Credit-Debit Report Export Functions
+interface DailyBalance {
+  date: string;
+  openingBalance: number;
+  credits: number;
+  debits: number;
+  closingBalance: number;
+  creditTransactions: number;
+  debitTransactions: number;
+}
+
+interface DailyCreditDebitSummary {
+  openingBalance: number;
+  totalCredits: number;
+  totalDebits: number;
+  finalBalance: number;
+}
+
+export const exportDailyCreditDebitToPDF = async (
+  dailyBalances: DailyBalance[],
+  reportTitle: string,
+  dateRange: { from: string; to: string },
+  summary: DailyCreditDebitSummary
+): Promise<void> => {
+  const pdf = new jsPDF('l', 'mm', 'a4');
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const margin = 20;
+  const contentWidth = pageWidth - (margin * 2);
+
+  const formatCurrency = (amount: number) => {
+    const sign = amount < 0 ? '-' : '';
+    return `${sign}${SYSTEM_CONFIG.CURRENCY_SYMBOL}${Math.abs(amount).toLocaleString('en-IN')}`;
+  };
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+
+  // ============ HEADER ============
+  let currentY = margin;
+
+  // Company name
+  pdf.setTextColor(33, 33, 33);
+  pdf.setFontSize(18);
+  pdf.setFont('helvetica', 'bold');
+  pdf.text(SYSTEM_CONFIG.DEFAULT_REPORT_TITLE, margin, currentY);
+  currentY += 8;
+
+  // Report title
+  pdf.setFontSize(14);
+  pdf.setFont('helvetica', 'normal');
+  pdf.text(reportTitle, margin, currentY);
+  currentY += 6;
+
+  // Date range and generation info
+  pdf.setFontSize(9);
+  pdf.setTextColor(100, 100, 100);
+  pdf.text(`Report Period: ${formatDate(dateRange.from)} to ${formatDate(dateRange.to)}`, margin, currentY);
+
+  const genDate = new Date().toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+  const genText = `Generated: ${genDate}`;
+  const genWidth = pdf.getTextWidth(genText);
+  pdf.text(genText, pageWidth - margin - genWidth, currentY);
+
+  currentY += 4;
+
+  // Separator line
+  pdf.setDrawColor(200, 200, 200);
+  pdf.setLineWidth(0.5);
+  pdf.line(margin, currentY, pageWidth - margin, currentY);
+  currentY += 8;
+
+  // ============ SUMMARY SECTION ============
+  pdf.setTextColor(33, 33, 33);
+  pdf.setFontSize(11);
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('SUMMARY', margin, currentY);
+  currentY += 6;
+
+  // Summary table
+  const summaryData = [
+    ['Opening Balance', formatCurrency(summary.openingBalance), formatDate(dateRange.from)],
+    ['Total Credits (In)', formatCurrency(summary.totalCredits), 'Money received'],
+    ['Total Debits (Out)', formatCurrency(summary.totalDebits), 'Money paid'],
+    ['Closing Balance', formatCurrency(summary.finalBalance), formatDate(dateRange.to)]
+  ];
+
+  autoTable(pdf, {
+    startY: currentY,
+    body: summaryData,
+    theme: 'plain',
+    styles: {
+      fontSize: 10,
+      cellPadding: 4,
+      textColor: [33, 33, 33]
+    },
+    columnStyles: {
+      0: {
+        fontStyle: 'bold',
+        cellWidth: 60,
+        halign: 'left'
+      },
+      1: {
+        cellWidth: 50,
+        halign: 'right',
+        fontStyle: 'bold'
+      },
+      2: {
+        cellWidth: 80,
+        halign: 'left',
+        textColor: [120, 120, 120],
+        fontSize: 9
+      }
+    },
+    didDrawCell: (data: any) => {
+      // Add subtle bottom border to each row
+      if (data.section === 'body' && data.column.index === 0) {
+        const { x, y, width, height } = data.cell;
+        pdf.setDrawColor(230, 230, 230);
+        pdf.setLineWidth(0.3);
+        pdf.line(x, y + height, x + contentWidth, y + height);
+      }
+    }
+  });
+
+  currentY = (pdf as any).lastAutoTable.finalY + 10;
+
+  // ============ DAILY BREAKDOWN ============
+  pdf.setTextColor(33, 33, 33);
+  pdf.setFontSize(11);
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('DAILY BREAKDOWN', margin, currentY);
+  currentY += 2;
+
+  // Prepare table data
+  const tableData = dailyBalances.map(day => [
+    formatDate(day.date),
+    formatCurrency(day.openingBalance),
+    formatCurrency(day.credits),
+    `${day.creditTransactions}`,
+    formatCurrency(day.debits),
+    `${day.debitTransactions}`,
+    formatCurrency(day.closingBalance)
+  ]);
+
+  // Add totals row
+  const totalCreditTxns = dailyBalances.reduce((sum, d) => sum + d.creditTransactions, 0);
+  const totalDebitTxns = dailyBalances.reduce((sum, d) => sum + d.debitTransactions, 0);
+
+  tableData.push([
+    'TOTAL',
+    '',
+    formatCurrency(summary.totalCredits),
+    `${totalCreditTxns}`,
+    formatCurrency(summary.totalDebits),
+    `${totalDebitTxns}`,
+    formatCurrency(summary.finalBalance)
+  ]);
+
+  autoTable(pdf, {
+    startY: currentY,
+    head: [['Date', 'Opening Bal.', 'Credits', '#', 'Debits', '#', 'Closing Bal.']],
+    body: tableData,
+    theme: 'striped',
+    headStyles: {
+      fillColor: [245, 245, 245],
+      textColor: [33, 33, 33],
+      fontStyle: 'bold',
+      fontSize: 9,
+      halign: 'center',
+      lineWidth: 0.1,
+      lineColor: [200, 200, 200]
+    },
+    styles: {
+      fontSize: 9,
+      cellPadding: 3,
+      textColor: [33, 33, 33],
+      lineWidth: 0.1,
+      lineColor: [220, 220, 220]
+    },
+    alternateRowStyles: {
+      fillColor: [252, 252, 252]
+    },
+    columnStyles: {
+      0: {
+        cellWidth: 35,
+        fontStyle: 'normal',
+        halign: 'left'
+      },
+      1: {
+        cellWidth: 38,
+        halign: 'right'
+      },
+      2: {
+        cellWidth: 35,
+        halign: 'right',
+        fontStyle: 'bold'
+      },
+      3: {
+        cellWidth: 15,
+        halign: 'center',
+        textColor: [120, 120, 120],
+        fontSize: 8
+      },
+      4: {
+        cellWidth: 35,
+        halign: 'right',
+        fontStyle: 'bold'
+      },
+      5: {
+        cellWidth: 15,
+        halign: 'center',
+        textColor: [120, 120, 120],
+        fontSize: 8
+      },
+      6: {
+        cellWidth: 38,
+        halign: 'right',
+        fontStyle: 'bold'
+      }
+    },
+    didParseCell: (data: any) => {
+      // Style the totals row
+      if (data.row.index === tableData.length - 1) {
+        data.cell.styles.fillColor = [240, 240, 240];
+        data.cell.styles.fontStyle = 'bold';
+        data.cell.styles.fontSize = 10;
+        data.cell.styles.lineWidth = 0.5;
+        data.cell.styles.lineColor = [180, 180, 180];
+      }
+    }
+  });
+
+  // ============ FOOTER ============
+  const pageCount = pdf.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    pdf.setPage(i);
+
+    pdf.setDrawColor(200, 200, 200);
+    pdf.setLineWidth(0.3);
+    pdf.line(margin, pageHeight - 15, pageWidth - margin, pageHeight - 15);
+
+    pdf.setTextColor(120, 120, 120);
+    pdf.setFontSize(8);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(SYSTEM_CONFIG.DEFAULT_REPORT_TITLE, margin, pageHeight - 10);
+    pdf.text(`Page ${i} of ${pageCount}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
+
+    const confText = 'Confidential';
+    const confWidth = pdf.getTextWidth(confText);
+    pdf.text(confText, pageWidth - margin - confWidth, pageHeight - 10);
+  }
+
+  const fileName = `Daily_Credit_Debit_Report_${dateRange.from}_to_${dateRange.to}.pdf`;
+  pdf.save(fileName);
+};
+
+export const exportDailyCreditDebitToExcel = async (
+  dailyBalances: DailyBalance[],
+  reportTitle: string,
+  dateRange: { from: string; to: string },
+  summary: DailyCreditDebitSummary
+): Promise<void> => {
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+
+  // Create workbook
+  const wb = XLSX.utils.book_new();
+
+  // Summary section
+  const summaryData = [
+    [reportTitle],
+    [`Period: ${formatDate(dateRange.from)} to ${formatDate(dateRange.to)}`],
+    [''],
+    ['Summary'],
+    ['Opening Balance', summary.openingBalance, formatDate(dateRange.from)],
+    ['Total Credits (IN)', summary.totalCredits, 'Money Received'],
+    ['Total Debits (OUT)', summary.totalDebits, 'Money Paid'],
+    ['Closing Balance', summary.finalBalance, formatDate(dateRange.to)],
+    [''],
+    ['Daily Breakdown'],
+    ['Date', 'Opening Balance', 'Credits', '# Credit Txns', 'Debits', '# Debit Txns', 'Closing Balance']
+  ];
+
+  // Daily data
+  const dailyData = dailyBalances.map(day => [
+    formatDate(day.date),
+    day.openingBalance,
+    day.credits,
+    day.creditTransactions,
+    day.debits,
+    day.debitTransactions,
+    day.closingBalance
+  ]);
+
+  // Totals row
+  const totalCreditTxns = dailyBalances.reduce((sum, d) => sum + d.creditTransactions, 0);
+  const totalDebitTxns = dailyBalances.reduce((sum, d) => sum + d.debitTransactions, 0);
+
+  dailyData.push([
+    'TOTALS',
+    '',
+    summary.totalCredits,
+    totalCreditTxns,
+    summary.totalDebits,
+    totalDebitTxns,
+    summary.finalBalance
+  ]);
+
+  // Combine all data
+  const wsData = [...summaryData, ...dailyData];
+
+  // Create worksheet
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+  // Set column widths
+  ws['!cols'] = [
+    { wch: 15 }, // Date
+    { wch: 18 }, // Opening Balance
+    { wch: 15 }, // Credits
+    { wch: 15 }, // # Credit Txns
+    { wch: 15 }, // Debits
+    { wch: 15 }, // # Debit Txns
+    { wch: 18 }  // Closing Balance
+  ];
+
+  // Add worksheet to workbook
+  XLSX.utils.book_append_sheet(wb, ws, 'Daily Credit-Debit');
+
+  // Generate filename
+  const fileName = `Daily_Credit_Debit_Report_${dateRange.from}_to_${dateRange.to}.xlsx`;
+
+  // Save file
+  const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([wbout], { type: 'application/octet-stream' });
+  saveAs(blob, fileName);
+};
+
 export const formatCurrency = (amount: number): string => {
   return `${SYSTEM_CONFIG.CURRENCY_SYMBOL}${amount.toLocaleString()}`;
 };

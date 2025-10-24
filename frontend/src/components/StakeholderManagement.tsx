@@ -20,6 +20,7 @@ import {
 import type { Partner, Doctor, BusinessPartner, Employee, Distributor, Patient, StakeholderType } from '../types';
 import { useStakeholders } from '../contexts/StakeholderContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useTransactions } from '../contexts/TransactionContext';
 import StakeholderForm from './StakeholderForm';
 import DistributorBulkUpload from './DistributorBulkUpload';
 import clsx from 'clsx';
@@ -36,6 +37,7 @@ interface TableColumn {
 
 const StakeholderManagement: React.FC = () => {
   const { user } = useAuth();
+  const { calculateDistributorCurrentBalance } = useTransactions();
   const [activeTab, setActiveTab] = useState<StakeholderType>(user?.role === 'operator' ? 'distributor' : 'doctor');
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
@@ -225,7 +227,11 @@ const StakeholderManagement: React.FC = () => {
     try {
       if (activeTab !== 'distributor' || !distributors || !distributors.length) return null;
 
-      const totalCreditBalance = distributors.reduce((sum, d) => sum + (Number(d.creditBalance) || 0), 0);
+      // Calculate current balance from transactions for accurate totals
+      const totalCreditBalance = distributors.reduce((sum, d) => {
+        const currentBalance = calculateDistributorCurrentBalance(d.id);
+        return sum + currentBalance;
+      }, 0);
       const totalDistributors = distributors.length;
       const avgCreditBalance = totalDistributors > 0 ? totalCreditBalance / totalDistributors : 0;
 
@@ -260,19 +266,23 @@ const StakeholderManagement: React.FC = () => {
   const downloadDistributorExcel = () => {
     if (activeTab !== 'distributor' || !distributors.length) return;
 
-    const excelData = filteredData.map((d: any) => ({
-      'Company Name': d.name,
-      'Contact Person': d.contactPerson,
-      'Email': d.email,
-      'Phone': d.phone,
-      'Address': d.address,
-      'Credit Balance': d.creditBalance || 0,
-      'Payment Schedule': d.paymentSchedule,
-      'Payment Percentage': d.paymentPercentage,
-      'Next Payment Due': d.nextPaymentDue ? new Date(d.nextPaymentDue).toLocaleDateString() : 'NA',
-      'Last Payment Date': d.lastPaymentDate ? new Date(d.lastPaymentDate).toLocaleDateString() : 'NA',
-      'Created At': new Date(d.createdAt).toLocaleDateString()
-    }));
+    const excelData = filteredData.map((d: any) => {
+      // Calculate current balance from transactions for accurate export
+      const currentBalance = calculateDistributorCurrentBalance(d.id);
+      return {
+        'Company Name': d.name,
+        'Contact Person': d.contactPerson,
+        'Email': d.email,
+        'Phone': d.phone,
+        'Address': d.address,
+        'Current Balance': currentBalance || 0,
+        'Payment Schedule': d.paymentSchedule,
+        'Payment Percentage': d.paymentPercentage,
+        'Next Payment Due': d.nextPaymentDue ? new Date(d.nextPaymentDue).toLocaleDateString() : 'NA',
+        'Last Payment Date': d.lastPaymentDate ? new Date(d.lastPaymentDate).toLocaleDateString() : 'NA',
+        'Created At': new Date(d.createdAt).toLocaleDateString()
+      };
+    });
 
     const ws = XLSX.utils.json_to_sheet(excelData);
     const wb = XLSX.utils.book_new();
@@ -337,7 +347,11 @@ const StakeholderManagement: React.FC = () => {
               {value}
             </div>
           )},
-          { key: 'creditBalance', label: 'Credit Balance', render: (value: number) => value ? formatCurrency(value) : 'NA', width: 'w-28' },
+          { key: 'creditBalance', label: 'Current Balance', render: (value: number, item: any) => {
+            // Calculate current balance from transactions for accurate display
+            const currentBalance = calculateDistributorCurrentBalance(item.id);
+            return currentBalance > 0 ? formatCurrency(currentBalance) : '₹0';
+          }, width: 'w-28' },
           { key: 'paymentSchedule', label: 'Pay Schedule', render: (value: string) => value.charAt(0).toUpperCase() + value.slice(1), width: 'w-24' },
           { key: 'paymentPercentage', label: 'Pay %', render: (value: number) => `${value}%`, width: 'w-16' },
           { key: 'nextPaymentDue', label: 'Next Due', render: (value: string) => new Date(value).toLocaleDateString(), width: 'w-24' },
@@ -404,7 +418,7 @@ const StakeholderManagement: React.FC = () => {
                   <tr key={item.id} className="hover:bg-gray-750 transition-colors">
                     {columns.map(col => (
                       <td key={col.key} className={`px-2 sm:px-4 py-3 text-xs sm:text-sm text-gray-300 ${col.key === 'address' ? '' : 'whitespace-nowrap'} ${col.width || ''}`}>
-                        {col.render ? col.render((item as any)[col.key]) : (item as any)[col.key]}
+                        {col.render ? col.render((item as any)[col.key], item) : (item as any)[col.key]}
                       </td>
                     ))}
                     <td className="px-2 sm:px-4 py-3 whitespace-nowrap text-right text-sm">

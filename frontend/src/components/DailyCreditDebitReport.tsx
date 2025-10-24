@@ -33,10 +33,12 @@ const DailyCreditDebitReport: React.FC = () => {
   const [dateTo, setDateTo] = useState(() => new Date().toISOString().split('T')[0]);
 
   // Credit categories (Money IN to pharmacy)
-  const creditCategories = ['pharmacy_sale', 'patient_payment', 'distributor_credit_note'];
+  const creditCategories = ['pharmacy_sale', 'patient_payment'];
 
   // Debit categories (Money OUT from pharmacy)
   const debitCategories = ['distributor_payment', 'employee_payment', 'clinic_expense', 'patient_credit_sale'];
+
+  // Note: distributor_credit_note is excluded - it's not a cash transaction, just reduces distributor debt
 
   // Calculate daily balances
   const dailyBalances = useMemo(() => {
@@ -121,13 +123,16 @@ const DailyCreditDebitReport: React.FC = () => {
       });
     });
 
+    // Calculate summary before reversing the array (finalBalance is the last day's closing balance)
+    const finalBalance = dailyData[dailyData.length - 1]?.closingBalance || openingBalance;
+
     return {
       dailyBalances: dailyData.reverse(), // Show newest first
       openingBalance,
       summary: {
         totalCredits: dailyData.reduce((sum, d) => sum + d.credits, 0),
         totalDebits: dailyData.reduce((sum, d) => sum + d.debits, 0),
-        finalBalance: dailyData[dailyData.length - 1]?.closingBalance || openingBalance
+        finalBalance: finalBalance
       }
     };
   }, [transactions, dateFrom, dateTo]);

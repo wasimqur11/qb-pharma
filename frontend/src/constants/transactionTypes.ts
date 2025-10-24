@@ -148,8 +148,8 @@ export const getTransactionTypeColor = (id: TransactionCategory): string => {
 export const REVENUE_CATEGORIES: TransactionCategory[] = [
   'pharmacy_sale',
   'consultation_fee',
-  'patient_payment',
-  'distributor_credit_note' // Returning items to distributor increases our cash/reduces debt
+  'patient_payment'
+  // Note: distributor_credit_note is NOT revenue - it only reduces distributor debt, no cash changes hands
 ];
 
 export const EXPENSE_CATEGORIES: TransactionCategory[] = [
@@ -163,8 +163,8 @@ export const EXPENSE_CATEGORIES: TransactionCategory[] = [
 
 export const PHARMACY_REVENUE_CATEGORIES: TransactionCategory[] = [
   'pharmacy_sale',
-  'patient_payment',
-  'distributor_credit_note'
+  'patient_payment'
+  // Note: distributor_credit_note removed - it's not revenue, just a credit balance adjustment
 ];
 
 // Operational pharmacy expenses (not including profit distributions)
