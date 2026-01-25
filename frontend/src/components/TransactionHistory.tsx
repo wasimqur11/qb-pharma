@@ -882,7 +882,12 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions: p
                   return (
                     <tr key={transaction.id} className="hover:bg-gray-750 transition-colors">
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-300">
-                        {transaction.date.toLocaleDateString()}
+                        <div className="flex flex-col">
+                          <span>{transaction.date.toLocaleDateString()}</span>
+                          <span className="text-xs text-gray-500">
+                            {transaction.date.toLocaleDateString('en-IN', { weekday: 'long' })}
+                          </span>
+                        </div>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center gap-2">

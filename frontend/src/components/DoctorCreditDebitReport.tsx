@@ -5,7 +5,7 @@ import {
   ArrowUpIcon,
   ArrowDownIcon,
   BanknotesIcon,
-  ChartBarIcon
+  UserGroupIcon
 } from '@heroicons/react/24/outline';
 import { useTransactions } from '../contexts/TransactionContext';
 import { SYSTEM_CONFIG } from '../constants/systemConfig';
@@ -21,7 +21,7 @@ interface DailyBalance {
   debitTransactions: number;
 }
 
-const DailyCreditDebitReport: React.FC = () => {
+const DoctorCreditDebitReport: React.FC = () => {
   const { transactions } = useTransactions();
 
   // Date range state
@@ -32,23 +32,21 @@ const DailyCreditDebitReport: React.FC = () => {
   });
   const [dateTo, setDateTo] = useState(() => new Date().toISOString().split('T')[0]);
 
-  // Credit categories (Money IN to pharmacy)
-  const creditCategories = ['pharmacy_sale', 'patient_payment'];
+  // Credit categories for doctors (Money earned by doctors - what we owe them)
+  const creditCategories = ['consultation_fee'];
 
-  // Debit categories (Money OUT from pharmacy)
-  const debitCategories = ['distributor_payment', 'employee_payment', 'clinic_expense', 'patient_credit_sale', 'sales_profit_distribution'];
-
-  // Note: distributor_credit_note is excluded - it's not a cash transaction, just reduces distributor debt
+  // Debit categories for doctors (Money paid to doctors - reduces what we owe)
+  const debitCategories = ['doctor_expense'];
 
   // Calculate daily balances
   const dailyBalances = useMemo(() => {
-    // Filter pharmacy transactions only (exclude doctor transactions)
-    const pharmacyTransactions = transactions.filter(t =>
+    // Filter doctor transactions only
+    const doctorTransactions = transactions.filter(t =>
       [...creditCategories, ...debitCategories].includes(t.category)
     );
 
     // Filter by date range
-    const filteredTransactions = pharmacyTransactions.filter(t => {
+    const filteredTransactions = doctorTransactions.filter(t => {
       const transactionDate = new Date(t.date);
       const fromDate = new Date(dateFrom);
       const toDate = new Date(dateTo);
@@ -79,7 +77,7 @@ const DailyCreditDebitReport: React.FC = () => {
     }
 
     // Calculate opening balance (all transactions before dateFrom)
-    const openingBalance = pharmacyTransactions
+    const openingBalance = doctorTransactions
       .filter(t => new Date(t.date) < new Date(dateFrom))
       .reduce((balance, t) => {
         if (creditCategories.includes(t.category)) {
@@ -123,7 +121,7 @@ const DailyCreditDebitReport: React.FC = () => {
       });
     });
 
-    // Calculate summary before reversing the array (finalBalance is the last day's closing balance)
+    // Calculate summary before reversing the array
     const finalBalance = dailyData[dailyData.length - 1]?.closingBalance || openingBalance;
 
     return {
@@ -159,7 +157,7 @@ const DailyCreditDebitReport: React.FC = () => {
     const { exportDailyCreditDebitToExcel } = await import('../utils/exportUtils');
     await exportDailyCreditDebitToExcel(
       dailyBalances.dailyBalances,
-      'Pharmacy Daily Credit-Debit Report',
+      'Doctor Daily Credit-Debit Report',
       { from: dateFrom, to: dateTo },
       {
         openingBalance: dailyBalances.openingBalance,
@@ -174,7 +172,7 @@ const DailyCreditDebitReport: React.FC = () => {
     const { exportDailyCreditDebitToPDF } = await import('../utils/exportUtils');
     await exportDailyCreditDebitToPDF(
       dailyBalances.dailyBalances,
-      'Pharmacy Daily Credit-Debit Report',
+      'Doctor Daily Credit-Debit Report',
       { from: dateFrom, to: dateTo },
       {
         openingBalance: dailyBalances.openingBalance,
@@ -190,8 +188,8 @@ const DailyCreditDebitReport: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">Pharmacy Daily Credit-Debit Report</h2>
-          <p className="text-gray-400 text-sm mt-1">Track daily cash flow and closing balances</p>
+          <h2 className="text-2xl font-bold text-white">Doctor Daily Credit-Debit Report</h2>
+          <p className="text-gray-400 text-sm mt-1">Track all doctor consultations and payments (combined)</p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -246,12 +244,12 @@ const DailyCreditDebitReport: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
-            <BanknotesIcon className="h-4 w-4 text-blue-400" />
-            <p className="text-xs font-medium text-gray-400 uppercase">Opening Balance</p>
+            <UserGroupIcon className="h-4 w-4 text-blue-400" />
+            <p className="text-xs font-medium text-gray-400 uppercase">Opening Dues</p>
           </div>
           <p className={clsx(
             "text-2xl font-bold",
-            dailyBalances.openingBalance >= 0 ? "text-blue-400" : "text-red-400"
+            dailyBalances.openingBalance >= 0 ? "text-blue-400" : "text-green-400"
           )}>
             {formatCurrency(dailyBalances.openingBalance)}
           </p>
@@ -264,29 +262,29 @@ const DailyCreditDebitReport: React.FC = () => {
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
             <ArrowUpIcon className="h-4 w-4 text-green-400" />
-            <p className="text-xs font-medium text-gray-400 uppercase">Total Credits</p>
+            <p className="text-xs font-medium text-gray-400 uppercase">Total Earned</p>
           </div>
           <p className="text-2xl font-bold text-green-400">{formatCurrency(dailyBalances.summary.totalCredits)}</p>
-          <p className="text-xs text-gray-500 mt-1">Money received</p>
+          <p className="text-xs text-gray-500 mt-1">Consultation fees</p>
         </div>
 
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
             <ArrowDownIcon className="h-4 w-4 text-red-400" />
-            <p className="text-xs font-medium text-gray-400 uppercase">Total Debits</p>
+            <p className="text-xs font-medium text-gray-400 uppercase">Total Paid</p>
           </div>
           <p className="text-2xl font-bold text-red-400">{formatCurrency(dailyBalances.summary.totalDebits)}</p>
-          <p className="text-xs text-gray-500 mt-1">Money paid out</p>
+          <p className="text-xs text-gray-500 mt-1">Payments to doctors</p>
         </div>
 
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
             <BanknotesIcon className="h-4 w-4 text-yellow-400" />
-            <p className="text-xs font-medium text-gray-400 uppercase">Closing Balance</p>
+            <p className="text-xs font-medium text-gray-400 uppercase">Current Dues</p>
           </div>
           <p className={clsx(
             "text-2xl font-bold",
-            dailyBalances.summary.finalBalance >= 0 ? "text-yellow-400" : "text-red-400"
+            dailyBalances.summary.finalBalance >= 0 ? "text-yellow-400" : "text-green-400"
           )}>
             {formatCurrency(dailyBalances.summary.finalBalance)}
           </p>
@@ -308,12 +306,12 @@ const DailyCreditDebitReport: React.FC = () => {
             <thead className="bg-gray-750">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Date</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Opening Balance</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Credits</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Opening Dues</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Earned</th>
                 <th className="px-4 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider"># Txns</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Debits</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Paid</th>
                 <th className="px-4 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider"># Txns</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Closing Balance</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Closing Dues</th>
               </tr>
             </thead>
             <tbody className="bg-gray-800 divide-y divide-gray-700">
@@ -330,7 +328,7 @@ const DailyCreditDebitReport: React.FC = () => {
                     </td>
                     <td className={clsx(
                       "px-4 py-3 whitespace-nowrap text-right text-sm font-semibold",
-                      day.openingBalance >= 0 ? "text-blue-400" : "text-red-400"
+                      day.openingBalance >= 0 ? "text-blue-400" : "text-green-400"
                     )}>
                       {formatCurrency(day.openingBalance)}
                     </td>
@@ -348,7 +346,7 @@ const DailyCreditDebitReport: React.FC = () => {
                     </td>
                     <td className={clsx(
                       "px-4 py-3 whitespace-nowrap text-right text-sm font-bold",
-                      day.closingBalance >= 0 ? "text-yellow-400" : "text-red-400"
+                      day.closingBalance >= 0 ? "text-yellow-400" : "text-green-400"
                     )}>
                       {formatCurrency(day.closingBalance)}
                     </td>
@@ -382,7 +380,7 @@ const DailyCreditDebitReport: React.FC = () => {
                   </td>
                   <td className={clsx(
                     "px-4 py-3 text-right text-sm",
-                    dailyBalances.summary.finalBalance >= 0 ? "text-yellow-400" : "text-red-400"
+                    dailyBalances.summary.finalBalance >= 0 ? "text-yellow-400" : "text-green-400"
                   )}>
                     {formatCurrency(dailyBalances.summary.finalBalance)}
                   </td>
@@ -396,4 +394,4 @@ const DailyCreditDebitReport: React.FC = () => {
   );
 };
 
-export default DailyCreditDebitReport;
+export default DoctorCreditDebitReport;

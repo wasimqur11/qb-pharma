@@ -28,12 +28,15 @@ import DepartmentManagement from './DepartmentManagement';
 import PatientManagement from './PatientManagement';
 import ConfigurationManagement from './ConfigurationManagement';
 import DailyCreditDebitReport from './DailyCreditDebitReport';
+import DoctorCreditDebitReport from './DoctorCreditDebitReport';
+import DistributorCreditDebitReport from './DistributorCreditDebitReport';
+import WeeklyBusinessInsights from './WeeklyBusinessInsights';
 import UserProfileBanner from './UserProfileBanner';
 import ProfileSettings from './ProfileSettings';
 import UserManual from './UserManual';
 import AdminPortal from './AdminPortal';
 import NotificationSettings from './NotificationSettings';
-import { 
+import {
   CurrencyDollarIcon, BanknotesIcon, ChartBarIcon, UserGroupIcon,
   BuildingOfficeIcon, UsersIcon, TruckIcon, PlusIcon, CreditCardIcon,
   DocumentArrowUpIcon, ChartPieIcon, ArrowUpIcon, ArrowDownIcon,
@@ -41,13 +44,14 @@ import {
   DocumentTextIcon, UserIcon, ArrowTrendingUpIcon, EyeIcon,
   Squares2X2Icon, ChevronDownIcon, MagnifyingGlassIcon, FunnelIcon,
   ArrowRightOnRectangleIcon, Bars3Icon, XMarkIcon, BookOpenIcon,
-  ShieldCheckIcon
+  ShieldCheckIcon, PresentationChartLineIcon
 } from '@heroicons/react/24/outline';
 import { SYSTEM_CONFIG, getDefaultDateRange } from '../constants/systemConfig';
+import { PHARMACY_REVENUE_CATEGORIES, PHARMACY_EXPENSE_CATEGORIES } from '../constants/transactionTypes';
 import clsx from 'clsx';
 
 const DarkCorporateDashboard: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'reports' | 'credit_debit_report' | 'stakeholders' | 'patients' | 'statements' | 'business_statement' | 'doctor_statement' | 'distributor_statement' | 'payment_estimation' | 'data_import' | 'configuration' | 'user_manual' | 'admin_portal' | 'notifications'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'reports' | 'credit_debit_report' | 'doctor_credit_debit_report' | 'distributor_credit_debit_report' | 'weekly_insights' | 'stakeholders' | 'patients' | 'statements' | 'business_statement' | 'doctor_statement' | 'distributor_statement' | 'payment_estimation' | 'data_import' | 'configuration' | 'user_manual' | 'admin_portal' | 'notifications'>('dashboard');
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   
   const [selectedPeriod, setSelectedPeriod] = useState('30days');
@@ -162,11 +166,14 @@ const DarkCorporateDashboard: React.FC = () => {
         { id: 'stakeholders', label: 'Stakeholders', icon: UsersIcon, category: 'management', tooltip: 'Manage doctors, partners, employees, and distributors' },
         { id: 'patients', label: 'Patients', icon: UserIcon, category: 'management', tooltip: 'Patient management and credit tracking' },
         { id: 'payment_estimation', label: 'Payment Estimation', icon: CurrencyDollarIcon, category: 'management', tooltip: 'Estimate distributor payments based on weekly sales' },
+        { id: 'weekly_insights', label: 'Weekly Insights', icon: PresentationChartLineIcon, category: 'management', tooltip: 'Comprehensive weekly business analysis and insights' },
         ...(user?.role === 'super_admin' ? [{ id: 'data_import', label: 'Data Import', icon: DocumentArrowUpIcon, category: 'management', tooltip: 'Import transaction data from Excel/CSV files' }] : []),
       ],
       statements: [
         { id: 'statements', label: 'Account Statement', icon: CreditCardIcon, category: 'statements', tooltip: 'View individual account statements' },
-        { id: 'credit_debit_report', label: 'Credit-Debit Report', icon: ChartBarIcon, category: 'statements', tooltip: 'Daily credit-debit breakdown with PDF export' },
+        { id: 'credit_debit_report', label: 'Pharmacy Credit-Debit', icon: ChartBarIcon, category: 'statements', tooltip: 'Daily pharmacy credit-debit breakdown with PDF export' },
+        { id: 'doctor_credit_debit_report', label: 'Doctor Credit-Debit', icon: UserGroupIcon, category: 'statements', tooltip: 'Daily doctor earnings and payments report' },
+        { id: 'distributor_credit_debit_report', label: 'Distributor Credit-Debit', icon: TruckIcon, category: 'statements', tooltip: 'Daily distributor credit purchases and payments report' },
         { id: 'business_statement', label: 'Business Statement', icon: BanknotesIcon, category: 'statements', tooltip: 'Comprehensive business partnership statement' },
         { id: 'doctor_statement', label: 'Doctor Statement', icon: ChartBarIcon, category: 'statements', tooltip: 'Doctor commission and consultation statements' },
         { id: 'distributor_statement', label: 'Distributor Statement', icon: TruckIcon, category: 'statements', tooltip: 'Distributor payment and credit statements' },
@@ -199,7 +206,7 @@ const DarkCorporateDashboard: React.FC = () => {
         return {
           primary: [allItems.primary[0]], // Dashboard only
           management: [],
-          statements: [allItems.statements[0], allItems.statements[2]], // Account & Doctor statements
+          statements: [allItems.statements[0], allItems.statements[2], allItems.statements[5]], // Account, Doctor Credit-Debit & Doctor statements
           system: []
         };
 
@@ -207,7 +214,7 @@ const DarkCorporateDashboard: React.FC = () => {
         return {
           primary: allItems.primary, // Dashboard & Business Report
           management: [],
-          statements: [allItems.statements[0], allItems.statements[1]], // Account & Business statements
+          statements: [allItems.statements[0], allItems.statements[1], allItems.statements[4]], // Account, Pharmacy Credit-Debit & Business statements
           system: []
         };
 
@@ -215,7 +222,7 @@ const DarkCorporateDashboard: React.FC = () => {
         return {
           primary: [allItems.primary[0]], // Dashboard only
           management: [],
-          statements: [allItems.statements[0], allItems.statements[3]], // Account & Distributor statements
+          statements: [allItems.statements[0], allItems.statements[3], allItems.statements[6]], // Account, Distributor Credit-Debit & Distributor statements
           system: []
         };
 
@@ -687,6 +694,15 @@ const DarkCorporateDashboard: React.FC = () => {
     let fromDate;
 
     switch (period) {
+      case 'settlement':
+        // Use date range from last settlement point
+        const defaultRange = getDefaultDateRange();
+        setReportFilters(prev => ({
+          ...prev,
+          dateFrom: defaultRange.from,
+          dateTo: defaultRange.to
+        }));
+        return; // Exit early since we've already set the filters
       case '7days':
         fromDate = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
         break;
@@ -1682,12 +1698,13 @@ const DarkCorporateDashboard: React.FC = () => {
         const transactionDate = new Date(transaction.date);
         const fromDate = new Date(reportFilters.dateFrom);
         const toDate = new Date(reportFilters.dateTo);
-        
+        toDate.setHours(23, 59, 59, 999); // Include entire end date
+
         // Check for invalid dates
         if (isNaN(transactionDate.getTime()) || isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
           return false;
         }
-        
+
         // Date filter
         if (transactionDate < fromDate || transactionDate > toDate) return false;
         
@@ -1733,22 +1750,25 @@ const DarkCorporateDashboard: React.FC = () => {
     try {
       // Calculate business performance summary using filtered transactions
       const pharmacyRevenue = filteredReportTransactions
-        .filter(t => t && t.category && ['pharmacy_sale', 'patient_payment', 'distributor_credit_note'].includes(t.category))
+        .filter(t => t && t.category && PHARMACY_REVENUE_CATEGORIES.includes(t.category))
         .reduce((sum, t) => sum + (t.amount || 0), 0);
-      
-      const doctorRevenue = filteredReportTransactions
+
+      // Doctor transactions are independent from pharmacy settlement points
+      // Use all transactions, not filtered by settlement date
+      const doctorRevenue = transactions
         .filter(t => t && t.category === 'consultation_fee')
         .reduce((sum, t) => sum + (t.amount || 0), 0);
-      
+
       const totalExpenses = filteredReportTransactions
         .filter(t => t && t.category && ['distributor_payment', 'doctor_expense', 'employee_payment', 'clinic_expense', 'sales_profit_distribution', 'patient_credit_sale'].includes(t.category))
         .reduce((sum, t) => sum + (t.amount || 0), 0);
-      
+
       const pharmacyExpenses = filteredReportTransactions
-        .filter(t => t && t.category && ['distributor_payment', 'employee_payment', 'clinic_expense', 'sales_profit_distribution', 'patient_credit_sale'].includes(t.category))
+        .filter(t => t && t.category && PHARMACY_EXPENSE_CATEGORIES.includes(t.category))
         .reduce((sum, t) => sum + (t.amount || 0), 0);
-      
-      const doctorExpenses = filteredReportTransactions
+
+      // Doctor expenses are independent from pharmacy settlement points
+      const doctorExpenses = transactions
         .filter(t => t && t.category === 'doctor_expense')
         .reduce((sum, t) => sum + (t.amount || 0), 0);
 
@@ -2349,6 +2369,9 @@ const DarkCorporateDashboard: React.FC = () => {
         {activeTab === 'dashboard' && renderUnifiedDashboard()}
         {activeTab === 'reports' && renderReports()}
         {activeTab === 'credit_debit_report' && <DailyCreditDebitReport />}
+        {activeTab === 'doctor_credit_debit_report' && <DoctorCreditDebitReport />}
+        {activeTab === 'distributor_credit_debit_report' && <DistributorCreditDebitReport />}
+        {activeTab === 'weekly_insights' && <WeeklyBusinessInsights />}
         {activeTab === 'stakeholders' && <StakeholderManagement />}
         {activeTab === 'patients' && <PatientManagement />}
         {activeTab === 'statements' && <AccountStatement />}

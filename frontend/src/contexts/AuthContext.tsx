@@ -51,32 +51,54 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     user: null,
     isLoading: true
   });
-  
+
   // Users are now managed by backend - no local state needed
   const [users, setUsers] = useState<User[]>([]);
-  
+
   // Credentials are now handled by backend authentication
 
   // Stakeholder linking is now handled by backend (user.linkedStakeholderId)
 
+  // Inactivity timeout - 24 hours
+  const INACTIVITY_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+
   // Check for existing session on app load
   useEffect(() => {
-    const checkExistingSession = () => {
-      const savedUser = localStorage.getItem('qb_pharma_user');
+    const checkExistingSession = async () => {
+      const savedToken = localStorage.getItem('qb_pharma_token');
       const savedAuth = localStorage.getItem('qb_pharma_auth');
-      
-      if (savedUser && savedAuth === 'true') {
+
+      if (savedToken && savedAuth === 'true') {
         try {
-          const user: User = JSON.parse(savedUser);
-          setAuthState({
-            isAuthenticated: true,
-            user: { ...user, lastLogin: new Date() },
-            isLoading: false
-          });
+          // Validate token with backend
+          const { default: apiClient } = await import('../utils/apiClient');
+          const response = await apiClient.get('/api/auth/profile');
+
+          if (response.success && response.data?.user) {
+            const user = response.data.user;
+
+            // Update localStorage with fresh user data
+            localStorage.setItem('qb_pharma_user', JSON.stringify(user));
+
+            setAuthState({
+              isAuthenticated: true,
+              user: { ...user, lastLogin: new Date() },
+              isLoading: false
+            });
+          } else {
+            // Token is invalid - clear everything and logout
+            console.log('Token validation failed:', response.error);
+            localStorage.removeItem('qb_pharma_user');
+            localStorage.removeItem('qb_pharma_auth');
+            localStorage.removeItem('qb_pharma_token');
+            setAuthState({ isAuthenticated: false, user: null, isLoading: false });
+          }
         } catch (error) {
-          // Clear corrupted data
+          // Network error or invalid token - logout
+          console.error('Session validation error:', error);
           localStorage.removeItem('qb_pharma_user');
           localStorage.removeItem('qb_pharma_auth');
+          localStorage.removeItem('qb_pharma_token');
           setAuthState({ isAuthenticated: false, user: null, isLoading: false });
         }
       } else {
@@ -86,6 +108,61 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     checkExistingSession();
   }, []);
+
+  // Inactivity timeout tracker
+  useEffect(() => {
+    if (!authState.isAuthenticated) return;
+
+    let inactivityTimer: NodeJS.Timeout;
+
+    const resetInactivityTimer = () => {
+      // Clear existing timer
+      if (inactivityTimer) {
+        clearTimeout(inactivityTimer);
+      }
+
+      // Set new timer
+      inactivityTimer = setTimeout(() => {
+        console.log('User inactive for 24 hours - logging out');
+        logout();
+      }, INACTIVITY_TIMEOUT);
+
+      // Update last activity timestamp in localStorage
+      localStorage.setItem('qb_pharma_last_activity', Date.now().toString());
+    };
+
+    // Check if user was inactive before page load
+    const lastActivity = localStorage.getItem('qb_pharma_last_activity');
+    if (lastActivity) {
+      const timeSinceLastActivity = Date.now() - parseInt(lastActivity);
+      if (timeSinceLastActivity >= INACTIVITY_TIMEOUT) {
+        console.log('Session expired due to inactivity');
+        logout();
+        return;
+      }
+    }
+
+    // Activity event listeners
+    const activityEvents = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
+
+    // Add event listeners
+    activityEvents.forEach(event => {
+      window.addEventListener(event, resetInactivityTimer);
+    });
+
+    // Initialize timer
+    resetInactivityTimer();
+
+    // Cleanup
+    return () => {
+      if (inactivityTimer) {
+        clearTimeout(inactivityTimer);
+      }
+      activityEvents.forEach(event => {
+        window.removeEventListener(event, resetInactivityTimer);
+      });
+    };
+  }, [authState.isAuthenticated]);
 
   const login = async (username: string, password: string): Promise<LoginResult> => {
     // Don't change auth state when starting login - this prevents component remounting
@@ -138,12 +215,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     localStorage.removeItem('qb_pharma_user');
     localStorage.removeItem('qb_pharma_auth');
     localStorage.removeItem('qb_pharma_token');
-    
+    localStorage.removeItem('qb_pharma_last_activity');
+
     // Clear API client token
     import('../utils/apiClient').then(({ default: apiClient }) => {
       apiClient.clearToken();
     });
-    
+
     setAuthState({
       isAuthenticated: false,
       user: null,

@@ -67,6 +67,21 @@ class ApiClient {
     return headers;
   }
 
+  // Handle authentication errors
+  private handleAuthError() {
+    // Clear all authentication data
+    localStorage.removeItem('qb_pharma_user');
+    localStorage.removeItem('qb_pharma_auth');
+    localStorage.removeItem('qb_pharma_token');
+    this.token = null;
+
+    // Reload page to show login screen
+    // Use a small delay to allow any error messages to be displayed first
+    setTimeout(() => {
+      window.location.href = '/';
+    }, 100);
+  }
+
   // Generic request method
   private async request<T>(
     url: string,
@@ -90,6 +105,17 @@ class ApiClient {
 
       // Handle HTTP errors
       if (!response.ok) {
+        // Handle authentication errors (401/403)
+        if (response.status === 401 || response.status === 403) {
+          const errorMessage = data.error || data.message || 'Session expired';
+
+          // Only auto-logout if this is not the login endpoint itself
+          if (!url.includes('/api/auth/login') && !url.includes('/api/auth/profile')) {
+            console.log('Authentication error detected:', errorMessage);
+            this.handleAuthError();
+          }
+        }
+
         return {
           success: false,
           error: data.message || data.error || `HTTP ${response.status}: ${response.statusText}`,
@@ -104,14 +130,14 @@ class ApiClient {
       };
     } catch (error) {
       console.error('API Request failed:', error);
-      
+
       if (error instanceof Error) {
         return {
           success: false,
           error: error.message
         };
       }
-      
+
       return {
         success: false,
         error: 'Unknown network error occurred'

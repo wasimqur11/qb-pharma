@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  PlusIcon, 
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  PlusIcon,
   XMarkIcon,
   CurrencyDollarIcon,
   UserGroupIcon,
@@ -17,6 +17,7 @@ import { useStakeholders } from '../contexts/StakeholderContext';
 import { useTransactions } from '../contexts/TransactionContext';
 // import { useToast } from '../contexts/ToastContext';
 import { TRANSACTION_TYPES } from '../constants/transactionTypes';
+import SearchableSelect, { SearchableSelectOption } from './SearchableSelect';
 import clsx from 'clsx';
 
 interface TransactionFormData {
@@ -37,7 +38,7 @@ interface TransactionFormProps {
 
 const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSubmit }) => {
   const { doctors, businessPartners, employees, distributors, patients } = useStakeholders();
-  const { transactions, getCashPosition } = useTransactions();
+  const { transactions, getCashPosition, getPharmacyCashPosition } = useTransactions();
   // const { showError } = useToast();
   const [formData, setFormData] = useState<TransactionFormData>({
     category: 'pharmacy_sale',
@@ -76,6 +77,15 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
 
   const selectedType = transactionTypes.find(t => t.id === formData.category);
   const stakeholders = selectedType?.stakeholderType ? getStakeholders(selectedType.stakeholderType as StakeholderType) : [];
+
+  // Convert stakeholders to SearchableSelectOption format
+  const stakeholderOptions: SearchableSelectOption[] = useMemo(() => {
+    return stakeholders.map(stakeholder => ({
+      value: stakeholder.id,
+      label: stakeholder.name,
+      sublabel: 'phone' in stakeholder && stakeholder.phone ? stakeholder.phone : undefined
+    }));
+  }, [stakeholders]);
 
   // Check if daily entry already exists for specific transaction types
   const checkDailyEntryLimit = (category: TransactionCategory, date: string): boolean => {
@@ -141,24 +151,50 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
 
   // Extract validation logic for reuse
   const performBasicValidations = (data: TransactionFormData): boolean => {
-    // Special validation for Settlement Point
+    // Validate that date is not in the future
+    const transactionDate = new Date(data.date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Reset time to start of day for accurate comparison
+    transactionDate.setHours(0, 0, 0, 0);
+
+    if (transactionDate > today) {
+      alert('Invalid Date: Future-dated transactions are not allowed. Please select today or an earlier date.');
+      return false;
+    }
+
+    // Special validation for Settlement Point (Pharmacy only)
     if (data.category === 'settlement_point') {
-      const currentCash = getCashPosition();
-      
+      // Calculate pharmacy cash position UP TO the selected date (not current total)
+      const selectedDate = new Date(data.date);
+      const transactionsUpToDate = transactions.filter(t => t.date <= selectedDate);
+
+      const pharmacyRevenue = transactionsUpToDate
+        .filter(t => t.category === 'pharmacy_sale' || t.category === 'patient_payment')
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      const pharmacyExpenses = transactionsUpToDate
+        .filter(t => ['distributor_payment', 'sales_profit_distribution', 'employee_payment', 'clinic_expense', 'patient_credit_sale'].includes(t.category))
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      const pharmacyCash = pharmacyRevenue - pharmacyExpenses;
+
       // Debug info
-      console.log('Settlement Point Validation:', {
-        currentCash,
-        absoluteCash: Math.abs(currentCash),
+      console.log('Pharmacy Settlement Point Validation:', {
+        selectedDate: data.date,
+        pharmacyRevenue,
+        pharmacyExpenses,
+        pharmacyCash,
+        absoluteCash: Math.abs(pharmacyCash),
         amount: data.amount,
         parsedAmount: parseFloat(data.amount)
       });
-      
-      // Allow Settlement Point only if cash is within ₹50 of zero (more tolerant for testing)
-      if (Math.abs(currentCash) > 50) {
-        alert(`Settlement Point can only be created when cash position is close to zero.\n\nCurrent cash: ₹${currentCash.toLocaleString()}\nTolerance: ±₹50`);
+
+      // Allow Settlement Point only if pharmacy cash is within ±₹50 of zero
+      if (Math.abs(pharmacyCash) > 50) {
+        alert(`Pharmacy Settlement Point can only be created when pharmacy cash position is close to zero.\n\nPharmacy Cash as of ${selectedDate.toLocaleDateString()}: ₹${pharmacyCash.toLocaleString()}\nTolerance: ±₹50\n\nNote: Doctor transactions are tracked separately.`);
         return false;
       }
-      
+
       // Force amount to be 0 for Settlement Point
       if (parseFloat(data.amount) !== 0) {
         alert('Settlement Point amount must be ₹0');
@@ -222,8 +258,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
       // Auto-fill amount to 0 for Settlement Point
       amount: category === 'settlement_point' ? '0' : prev.amount,
       // Auto-fill description for Settlement Point
-      description: category === 'settlement_point' 
-        ? `Settlement Point - ${new Date().toLocaleDateString()}` 
+      description: category === 'settlement_point'
+        ? `Pharmacy Settlement Point - ${new Date().toLocaleDateString()}`
         : prev.description
     }));
   };
@@ -346,24 +382,14 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
 
               {/* Inline Stakeholder Selection */}
               {selectedType?.requiresStakeholder && (
-                <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-1">
-                    {selectedType.stakeholderType?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                  </label>
-                  <select
-                    value={formData.stakeholderId || ''}
-                    onChange={(e) => setFormData(prev => ({ ...prev, stakeholderId: e.target.value }))}
-                    className="w-full px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
-                    required
-                  >
-                    <option value="">Select {selectedType.stakeholderType?.replace('_', ' ')}</option>
-                    {stakeholders.map(stakeholder => (
-                      <option key={stakeholder.id} value={stakeholder.id}>
-                        {stakeholder.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <SearchableSelect
+                  options={stakeholderOptions}
+                  value={formData.stakeholderId || ''}
+                  onChange={(value) => setFormData(prev => ({ ...prev, stakeholderId: value }))}
+                  placeholder={`Select ${selectedType.stakeholderType?.replace('_', ' ')}`}
+                  label={selectedType.stakeholderType?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                  required
+                />
               )}
             </div>
 

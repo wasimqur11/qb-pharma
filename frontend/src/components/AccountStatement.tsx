@@ -295,7 +295,12 @@ const AccountStatement: React.FC = () => {
                     filteredEntries.map((entry) => (
                       <tr key={entry.id} className="hover:bg-gray-750 transition-colors">
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-300">
-                          {entry.date.toLocaleDateString()}
+                          <div className="flex flex-col">
+                            <span>{entry.date.toLocaleDateString()}</span>
+                            <span className="text-xs text-gray-500">
+                              {entry.date.toLocaleDateString('en-IN', { weekday: 'long' })}
+                            </span>
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-300">
                           {entry.description}

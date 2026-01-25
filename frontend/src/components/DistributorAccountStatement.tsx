@@ -67,58 +67,65 @@ const DistributorAccountStatement: React.FC = () => {
     const distributorTransactions = getStakeholderTransactions(distributorId);
     const startDate = new Date(dateRange.from);
     const endDate = new Date(dateRange.to);
-    
+
     // Filter transactions by date range
     const filteredTransactions = distributorTransactions.filter(transaction => {
       const transactionDate = new Date(transaction.date);
       return transactionDate >= startDate && transactionDate <= endDate;
     });
-    
+
     // Sort by date
-    const sortedTransactions = filteredTransactions.sort((a, b) => 
+    const sortedTransactions = filteredTransactions.sort((a, b) =>
       new Date(a.date).getTime() - new Date(b.date).getTime()
     );
-    
+
     // Convert to statement entries with running balance and credit tracking
     const statements: DistributorStatementEntry[] = [];
     let runningBalance = 0;
-    
-    // Use the centralized balance calculation which is already correct
-    const finalCreditBalance = calculateDistributorCurrentBalance(distributorId);
-    
-    // Calculate starting balance by working backwards from final balance
-    let startingCreditBalance = finalCreditBalance;
-    sortedTransactions.forEach(transaction => {
+
+    // Calculate opening balance: Start with initial creditBalance, then add all transactions before the date range
+    let startingCreditBalance = distributor.creditBalance; // Initial balance from offline ledger
+
+    // Get all transactions before the selected date range
+    const transactionsBeforePeriod = distributorTransactions.filter(transaction => {
+      const transactionDate = new Date(transaction.date);
+      return transactionDate < startDate;
+    });
+
+    // Apply all transactions before the period to get the opening balance
+    transactionsBeforePeriod.forEach(transaction => {
       if (transaction.category === 'distributor_credit_purchase') {
-        startingCreditBalance -= transaction.amount; // Reverse the addition
+        startingCreditBalance += transaction.amount; // Credit purchase increases what we owe
       } else if (transaction.category === 'distributor_credit_note') {
-        startingCreditBalance += transaction.amount; // Reverse the subtraction
+        startingCreditBalance -= transaction.amount; // Credit note decreases what we owe
       } else if (transaction.category === 'distributor_payment') {
-        startingCreditBalance += transaction.amount; // Reverse the subtraction
+        startingCreditBalance -= transaction.amount; // Payment decreases what we owe
       }
     });
     
     let currentCreditBalance = startingCreditBalance;
-    
-    // Add opening balance entry to show the starting position
-    if (startingCreditBalance > 0) {
-      // Use the distributor's initialBalanceDate if available, otherwise use the filter start date
-      const openingBalanceDate = distributor.initialBalanceDate
-        ? new Date(distributor.initialBalanceDate)
-        : startDate;
 
-      statements.push({
-        id: 'opening-balance',
-        date: openingBalanceDate,
-        description: 'Opening Balance',
-        category: 'distributor_credit_purchase', // Neutral category for display
-        debit: 0,
-        credit: 0,
-        balance: 0,
-        creditBalanceChange: 0,
-        newCreditBalance: startingCreditBalance
-      });
-    }
+    // Always add opening balance entry to show the starting position
+    // Use the distributor's initialBalanceDate if available, otherwise day before start date
+    const openingBalanceDate = distributor.initialBalanceDate
+      ? new Date(distributor.initialBalanceDate)
+      : (() => {
+          const date = new Date(startDate);
+          date.setDate(date.getDate() - 1);
+          return date;
+        })();
+
+    statements.push({
+      id: 'opening-balance',
+      date: openingBalanceDate,
+      description: 'Initial Balance (From Offline Ledger)',
+      category: 'distributor_credit_purchase',
+      debit: 0,
+      credit: 0,
+      balance: 0,
+      creditBalanceChange: distributor.creditBalance, // Show initial balance as credit purchase
+      newCreditBalance: startingCreditBalance
+    });
     
     sortedTransactions.forEach((transaction) => {
       let debit = 0;
@@ -173,26 +180,31 @@ const DistributorAccountStatement: React.FC = () => {
   }, [selectedDistributor, dateRange, transactions, distributors]);
 
   const filteredEntries = useMemo(() => {
-    let entries = statementEntries.filter(entry =>
-      entry.description.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    // Always keep the opening balance entry, filter the rest
+    const openingBalanceEntry = statementEntries.find(entry => entry.id === 'opening-balance');
+
+    let entries = statementEntries.filter(entry => {
+      // Always keep opening balance
+      if (entry.id === 'opening-balance') return true;
+
+      // Apply search filter to other entries
+      return entry.description.toLowerCase().includes(searchTerm.toLowerCase());
+    });
 
     // Apply transaction type filters
     if (!showCreditTransactions) {
-      // Filter out credit purchases but keep initial balance and opening balance entries
-      entries = entries.filter(entry => 
-        !entry.creditBalanceChange || 
-        entry.creditBalanceChange <= 0 || 
-        entry.id === 'initial-balance' || 
-        entry.id === 'opening-balance'
+      // Filter out credit purchases but keep opening balance
+      entries = entries.filter(entry =>
+        entry.id === 'opening-balance' ||
+        !entry.creditBalanceChange ||
+        entry.creditBalanceChange <= 0
       );
     }
     if (!showPayments) {
-      // Filter out payment entries but keep initial balance and opening balance entries
-      entries = entries.filter(entry => 
-        entry.debit === 0 || 
-        entry.id === 'initial-balance' || 
-        entry.id === 'opening-balance'
+      // Filter out payment entries but keep opening balance
+      entries = entries.filter(entry =>
+        entry.id === 'opening-balance' ||
+        entry.debit === 0
       );
     }
 
@@ -200,18 +212,41 @@ const DistributorAccountStatement: React.FC = () => {
   }, [statementEntries, searchTerm, showCreditTransactions, showPayments]);
 
   const summaryStats = useMemo(() => {
-    const totalPayments = filteredEntries.reduce((sum, entry) => sum + entry.debit, 0);
-    const totalCreditPurchases = filteredEntries.reduce((sum, entry) => 
+    if (!selectedDistributorData) {
+      return {
+        initialBalance: 0,
+        totalPayments: 0,
+        totalCreditPurchases: 0,
+        currentBalance: 0,
+        transactionCount: 0
+      };
+    }
+
+    // Initial balance from offline ledger (treat as credit purchase)
+    const initialBalance = selectedDistributorData.creditBalance;
+
+    // Calculate totals excluding the opening balance entry
+    const transactionsOnly = filteredEntries.filter(entry => entry.id !== 'opening-balance');
+    const totalPayments = transactionsOnly.reduce((sum, entry) => sum + entry.debit, 0);
+
+    // Credit purchases from transactions only (not including initial balance)
+    const creditPurchasesFromTransactions = transactionsOnly.reduce((sum, entry) =>
       sum + (entry.creditBalanceChange && entry.creditBalanceChange > 0 ? entry.creditBalanceChange : 0), 0);
-    const currentBalance = selectedDistributorData ? calculateDistributorCurrentBalance(selectedDistributorData.id) : 0;
-    
+
+    // Total credit purchases = Initial balance + Credit purchase transactions
+    const totalCreditPurchases = initialBalance + creditPurchasesFromTransactions;
+
+    const currentBalance = calculateDistributorCurrentBalance(selectedDistributorData.id);
+
     return {
+      initialBalance,
       totalPayments,
       totalCreditPurchases,
+      creditPurchasesFromTransactions,
       currentBalance,
-      transactionCount: filteredEntries.length
+      transactionCount: transactionsOnly.length
     };
-  }, [filteredEntries, selectedDistributorData, calculateDistributorCurrentBalance]);
+  }, [statementEntries, filteredEntries, selectedDistributorData, calculateDistributorCurrentBalance]);
 
   const exportStatement = () => {
     if (!selectedDistributorData || filteredEntries.length === 0) return;
@@ -374,17 +409,37 @@ const DistributorAccountStatement: React.FC = () => {
             <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
               <h3 className="text-lg font-semibold text-white mb-3">Statement Summary</h3>
               <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 bg-indigo-900/30 border border-indigo-600/50 rounded-lg">
+                  <div className="flex flex-col">
+                    <span className="text-gray-300 font-medium">Initial Balance</span>
+                    <span className="text-xs text-gray-500">From offline ledger</span>
+                  </div>
+                  <span className="text-indigo-400 font-bold">{formatCurrency(summaryStats.initialBalance)}</span>
+                </div>
                 <div className="flex items-center justify-between p-3 bg-gray-750 rounded-lg">
-                  <span className="text-gray-400">Total Credit Purchases</span>
-                  <span className="text-orange-400 font-bold">{formatCurrency(summaryStats.totalCreditPurchases)}</span>
+                  <div className="flex flex-col">
+                    <span className="text-gray-400">Credit Purchases</span>
+                    <span className="text-xs text-gray-500">Transactions only</span>
+                  </div>
+                  <span className="text-orange-400 font-bold">{formatCurrency(summaryStats.creditPurchasesFromTransactions)}</span>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-orange-900/30 border border-orange-600/50 rounded-lg">
+                  <div className="flex flex-col">
+                    <span className="text-gray-300 font-medium">Total Credit Purchases</span>
+                    <span className="text-xs text-gray-500">Initial + Transactions</span>
+                  </div>
+                  <span className="text-orange-400 font-bold text-lg">{formatCurrency(summaryStats.totalCreditPurchases)}</span>
                 </div>
                 <div className="flex items-center justify-between p-3 bg-gray-750 rounded-lg">
                   <span className="text-gray-400">Total Payments Made</span>
                   <span className="text-green-400 font-bold">{formatCurrency(summaryStats.totalPayments)}</span>
                 </div>
-                <div className="flex items-center justify-between p-3 bg-gray-750 rounded-lg">
-                  <span className="text-gray-400">Current Balance</span>
-                  <span className="text-white font-bold">{formatCurrency(summaryStats.currentBalance)}</span>
+                <div className="flex items-center justify-between p-3 bg-yellow-900/30 border border-yellow-600/50 rounded-lg">
+                  <div className="flex flex-col">
+                    <span className="text-gray-300 font-medium">Current Balance</span>
+                    <span className="text-xs text-gray-500">Total Purchases - Payments</span>
+                  </div>
+                  <span className="text-yellow-400 font-bold text-lg">{formatCurrency(summaryStats.currentBalance)}</span>
                 </div>
                 <div className="flex items-center justify-between p-3 bg-gray-750 rounded-lg">
                   <span className="text-gray-400">Total Transactions</span>
@@ -443,37 +498,53 @@ const DistributorAccountStatement: React.FC = () => {
                       </td>
                     </tr>
                   ) : (
-                    filteredEntries.map((entry, index) => (
-                      <tr key={entry.id} className="hover:bg-gray-750 transition-colors">
-                        <td className="px-4 py-3 text-sm text-gray-300">
+                    filteredEntries.map((entry, index) => {
+                      const isOpeningBalance = entry.id === 'opening-balance';
+                      return (
+                      <tr key={entry.id} className={clsx(
+                        "transition-colors",
+                        isOpeningBalance
+                          ? "bg-indigo-900/20 border-t-2 border-b-2 border-indigo-600/50 font-semibold"
+                          : "hover:bg-gray-750"
+                      )}>
+                        <td className={clsx("px-4 py-3 text-sm", isOpeningBalance ? "text-indigo-300 font-bold" : "text-gray-300")}>
                           {entry.date.toLocaleDateString()}
                         </td>
-                        <td className="px-4 py-3 text-sm text-white">
+                        <td className={clsx("px-4 py-3 text-sm", isOpeningBalance ? "text-indigo-200 font-bold" : "text-white")}>
                           {entry.description}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-300">
                           {entry.billNo || '-'}
                         </td>
-                        <td className="px-4 py-3 text-sm text-white font-medium">
-                          {getTransactionTypeLabel(entry.category)}
+                        <td className={clsx("px-4 py-3 text-sm font-medium", isOpeningBalance ? "text-indigo-200" : "text-white")}>
+                          {isOpeningBalance ? 'Initial Balance' : getTransactionTypeLabel(entry.category)}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-center">
-                          {(() => {
-                            const impact = getCashFlowImpact(entry.category);
-                            return (
-                              <span className={clsx('text-xs font-semibold px-2 py-1 rounded-full', 
-                                impact.type === 'Expense' ? 'bg-red-900/50 text-red-400' :
-                                impact.type === 'Credit Received' ? 'bg-blue-900/50 text-blue-400' :
-                                impact.type === 'Credit Reduction' ? 'bg-indigo-900/50 text-indigo-400' :
-                                'bg-gray-900/50 text-gray-400'
-                              )}>
-                                {impact.type}
-                              </span>
-                            );
-                          })()}
+                          {isOpeningBalance ? (
+                            <span className="text-xs font-semibold px-2 py-1 rounded-full bg-indigo-900/50 text-indigo-400">
+                              Initial Balance
+                            </span>
+                          ) : (
+                            (() => {
+                              const impact = getCashFlowImpact(entry.category);
+                              return (
+                                <span className={clsx('text-xs font-semibold px-2 py-1 rounded-full',
+                                  impact.type === 'Expense' ? 'bg-red-900/50 text-red-400' :
+                                  impact.type === 'Credit Received' ? 'bg-blue-900/50 text-blue-400' :
+                                  impact.type === 'Credit Reduction' ? 'bg-indigo-900/50 text-indigo-400' :
+                                  'bg-gray-900/50 text-gray-400'
+                                )}>
+                                  {impact.type}
+                                </span>
+                              );
+                            })()
+                          )}
                         </td>
-                        <td className="px-4 py-3 text-sm text-right text-orange-400 font-medium">
-                          {entry.creditBalanceChange && entry.creditBalanceChange > 0 
+                        <td className={clsx(
+                          "px-4 py-3 text-sm text-right font-medium",
+                          isOpeningBalance ? "text-indigo-400 font-bold" : "text-orange-400"
+                        )}>
+                          {entry.creditBalanceChange && entry.creditBalanceChange > 0
                             ? formatCurrency(entry.creditBalanceChange)
                             : '-'
                           }
@@ -481,14 +552,18 @@ const DistributorAccountStatement: React.FC = () => {
                         <td className="px-4 py-3 text-sm text-right text-green-400 font-medium">
                           {entry.debit > 0 ? formatCurrency(entry.debit) : '-'}
                         </td>
-                        <td className="px-4 py-3 text-sm text-right text-white font-medium">
-                          {entry.newCreditBalance !== undefined 
+                        <td className={clsx(
+                          "px-4 py-3 text-sm text-right font-bold",
+                          isOpeningBalance ? "text-indigo-400 text-base" : "text-white font-medium"
+                        )}>
+                          {entry.newCreditBalance !== undefined
                             ? formatCurrency(entry.newCreditBalance)
                             : '-'
                           }
                         </td>
                       </tr>
-                    ))
+                      );
+                    })
                   )}
                 </tbody>
               </table>

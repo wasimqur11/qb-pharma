@@ -133,6 +133,7 @@ export interface DistributorPaymentEstimate {
   maxPayment: number; // 10% of credit balance
   estimatedPayment: number;
   paymentPercentage: number; // percentage of total distributor allocation
+  actualPayment: number; // actual payment made to distributor in the current week
 }
 
 export interface PaymentEstimationResult {
@@ -144,12 +145,16 @@ export interface PaymentEstimationResult {
 }
 
 /**
- * Get the start of the week (Monday) for a given date
+ * Get the start of the week (Friday) for a given date
+ * Week runs from Friday to Thursday
  */
 export function getWeekStart(date: Date): Date {
   const d = new Date(date);
   const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
+  // Calculate days back to most recent Friday
+  // Friday=5: (5+2)%7=0, Saturday=6: (6+2)%7=1, Sunday=0: (0+2)%7=2, etc.
+  const daysBack = (day + 2) % 7;
+  const diff = d.getDate() - daysBack;
   const weekStart = new Date(d.setDate(diff));
   // Set to start of day
   weekStart.setHours(0, 0, 0, 0);
@@ -157,7 +162,8 @@ export function getWeekStart(date: Date): Date {
 }
 
 /**
- * Get the end of the week (Sunday) for a given date
+ * Get the end of the week (Thursday) for a given date
+ * Week runs from Friday to Thursday
  */
 export function getWeekEnd(date: Date): Date {
   const weekStart = getWeekStart(date);
@@ -218,7 +224,7 @@ export function calculateWeeklySales(
 }
 
 /**
- * Calculate payment estimates for distributors based on previous week sales
+ * Calculate payment estimates for distributors based on selected week sales
  */
 export async function calculateDistributorPaymentEstimates(
   transactions: Transaction[],
@@ -228,9 +234,14 @@ export async function calculateDistributorPaymentEstimates(
     distributorPercentage?: number;
     maxPaymentPercentage?: number;
   },
-  calculateBalance?: (distributorId: string) => number
+  calculateBalance?: (distributorId: string) => number,
+  selectedWeekStart?: Date // Optional: custom week start date
 ): Promise<PaymentEstimationResult> {
-  const { start: weekStart, end: weekEnd } = getPreviousWeekRange();
+  // Use provided week or default to current week
+  const { start: weekStart, end: weekEnd } = selectedWeekStart
+    ? { start: selectedWeekStart, end: getWeekEnd(selectedWeekStart) }
+    : getCurrentWeekRange();
+
   const { start: currentWeekStart, end: currentWeekEnd } = getCurrentWeekRange();
   const totalSales = calculateWeeklySales(transactions, weekStart, weekEnd);
   
@@ -316,6 +327,20 @@ export async function calculateDistributorPaymentEstimates(
     0
   );
 
+  // Calculate actual payments made in current week for each distributor
+  const calculateActualPayment = (distributorId: string): number => {
+    return transactions
+      .filter(transaction => {
+        const transactionDate = new Date(transaction.date);
+        const isDistributorPayment = transaction.category === 'distributor_payment' &&
+                                     transaction.stakeholderId === distributorId;
+        const isInCurrentWeek = transactionDate >= currentWeekStart && transactionDate <= currentWeekEnd;
+
+        return isDistributorPayment && isInCurrentWeek;
+      })
+      .reduce((sum, transaction) => sum + transaction.amount, 0);
+  };
+
   // Calculate initial estimates and caps
   const distributorEstimates: DistributorPaymentEstimate[] = eligibleDistributors.map(distributor => {
     const currentBalance = distributor.currentBalance;
@@ -331,13 +356,16 @@ export async function calculateDistributorPaymentEstimates(
     // This keeps amounts clean (multiples of 100) while respecting limits
     const estimatedPayment = roundedUp <= maxPayment ? roundedUp : roundedDown;
 
+    const actualPayment = calculateActualPayment(distributor.id);
+
     return {
       distributorId: distributor.id,
       distributorName: distributor.name,
       creditBalance: currentBalance,
       maxPayment,
       estimatedPayment,
-      paymentPercentage: (estimatedPayment / distributorAllocation) * 100
+      paymentPercentage: (estimatedPayment / distributorAllocation) * 100,
+      actualPayment
     };
   });
   
@@ -361,12 +389,37 @@ export async function calculateDistributorPaymentEstimates(
  * Format date range for display
  */
 export function formatDateRange(start: Date, end: Date): string {
-  const options: Intl.DateTimeFormatOptions = { 
-    month: 'short', 
+  const options: Intl.DateTimeFormatOptions = {
+    month: 'short',
     day: 'numeric',
     year: 'numeric'
   };
   return `${start.toLocaleDateString('en-US', options)} - ${end.toLocaleDateString('en-US', options)}`;
+}
+
+/**
+ * Format date range with day names for display
+ */
+export function formatDateRangeWithDays(start: Date, end: Date): {
+  dateRange: string;
+  startDay: string;
+  endDay: string
+} {
+  const options: Intl.DateTimeFormatOptions = {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  };
+  const startDate = start.toLocaleDateString('en-US', options);
+  const endDate = end.toLocaleDateString('en-US', options);
+  const startDay = start.toLocaleDateString('en-IN', { weekday: 'long' });
+  const endDay = end.toLocaleDateString('en-IN', { weekday: 'long' });
+
+  return {
+    dateRange: `${startDate} - ${endDate}`,
+    startDay,
+    endDay
+  };
 }
 
 /**

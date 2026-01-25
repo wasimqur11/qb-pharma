@@ -119,11 +119,11 @@ export const TRANSACTION_TYPES: TransactionTypeConfig[] = [
   },
   {
     id: 'settlement_point',
-    label: 'Settlement Point',
+    label: 'Pharmacy Settlement Point',
     icon: CheckBadgeIcon,
     color: 'text-emerald-400',
     requiresStakeholder: false,
-    description: 'Marks a point where cash was zero and all dues cleared - fresh business cycle start'
+    description: 'Marks when pharmacy cash reached zero and all pharmacy dues cleared (Doctor transactions tracked separately)'
   }
 ];
 

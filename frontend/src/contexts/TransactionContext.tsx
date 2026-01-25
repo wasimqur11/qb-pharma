@@ -401,7 +401,7 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
 
   const getPharmacyCashPosition = () => {
     // Formula: Total Sale - Distributor Payment - Sales Profit Distribution - Employee Payment - Clinic Expense + Patient Payment
-    const pharmacyRevenue = getPharmacyRevenue(); // Includes: pharmacy_sale + patient_payment + distributor_credit_note
+    const pharmacyRevenue = getPharmacyRevenue(); // Includes: pharmacy_sale + patient_payment
     
     // Calculate all pharmacy-related expenses according to the specified formula
     const distributorPayments = transactions
@@ -635,29 +635,34 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
   };
 
   const getDashboardStats = (): DashboardStats => {
+    // Get date range from last settlement point for payables calculation
+    const defaultRange = getDefaultDateRange();
+    const settlementFromDate = new Date(defaultRange.from);
+    const settlementToDate = new Date(defaultRange.to);
+
     return {
       // Combined metrics (all businesses)
       todayRevenue: getTodayRevenue(),
       totalExpenses: getTotalExpenses(),
       cashPosition: getCashPosition(),
       monthlyProfit: getMonthlyProfit(),
-      
+
       // Pharmacy-specific metrics (pharmacy business only)
       pharmacyRevenue: getPharmacyRevenue(),
       todayPharmacyRevenue: getTodayPharmacyRevenue(),
       pharmacyExpenses: getPharmacyExpenses(),
       pharmacyCashPosition: getPharmacyCashPosition(),
       pharmacyMonthlyProfit: getPharmacyMonthlyProfit(),
-      
+
       // Doctor-specific metrics (doctor accounts only)
       doctorRevenue: getDoctorRevenue(),
       todayDoctorRevenue: getTodayDoctorRevenue(),
       doctorExpenses: getDoctorExpenses(),
       doctorCashPosition: getDoctorCashPosition(),
-      
-      // Payables
+
+      // Payables - calculated from last settlement point (or start if no settlement)
       doctorPayables: getDoctorPayables(),
-      businessPartnerPayables: getBusinessPartnerPayables(),
+      businessPartnerPayables: getBusinessPartnerPayables(settlementFromDate, settlementToDate),
       employeeSalaryDue: getEmployeeSalaryDue(),
       distributorCredits: getDistributorCredits()
     };

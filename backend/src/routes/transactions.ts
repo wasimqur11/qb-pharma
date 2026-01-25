@@ -18,13 +18,23 @@ const CreateTransactionSchema = z.object({
   ]),
   stakeholderId: z.string().optional(),
   stakeholderType: z.enum(['doctor', 'business_partner', 'employee', 'distributor', 'patient']).optional(),
-  amount: z.number().positive('Amount must be positive'),
+  amount: z.number().min(0, 'Amount must be non-negative'),
   description: z.string().min(1, 'Description is required'),
   billNo: z.string().optional(),
   date: z.union([
     z.string().datetime('Invalid date format'),
     z.date().transform(date => date.toISOString())
   ])
+}).refine((data) => {
+  // Settlement Point must be exactly 0
+  if (data.category === 'settlement_point') {
+    return data.amount === 0;
+  }
+  // All other transactions must be positive
+  return data.amount > 0;
+}, {
+  message: 'Settlement Point amount must be ₹0, other transactions must be positive',
+  path: ['amount']
 });
 
 const UpdateTransactionSchema = z.object({
@@ -35,10 +45,24 @@ const UpdateTransactionSchema = z.object({
   ]).optional(),
   stakeholderId: z.string().optional(),
   stakeholderType: z.enum(['doctor', 'business_partner', 'employee', 'distributor', 'patient']).optional(),
-  amount: z.number().positive('Amount must be positive').optional(),
+  amount: z.number().min(0, 'Amount must be non-negative').optional(),
   description: z.string().min(1, 'Description is required').optional(),
   billNo: z.string().optional(),
   date: z.string().datetime('Invalid date format').optional()
+}).refine((data) => {
+  // If amount is provided, validate based on category
+  if (data.amount !== undefined && data.category) {
+    // Settlement Point must be exactly 0
+    if (data.category === 'settlement_point') {
+      return data.amount === 0;
+    }
+    // All other transactions must be positive
+    return data.amount > 0;
+  }
+  return true;
+}, {
+  message: 'Settlement Point amount must be ₹0, other transactions must be positive',
+  path: ['amount']
 });
 
 // Get all transactions (with role-based filtering)

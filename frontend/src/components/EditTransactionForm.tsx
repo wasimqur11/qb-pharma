@@ -103,8 +103,19 @@ const EditTransactionForm: React.FC<EditTransactionFormProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!transaction) return;
+
+    // Validate that date is not in the future
+    const transactionDate = new Date(formData.date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Reset time to start of day for accurate comparison
+    transactionDate.setHours(0, 0, 0, 0);
+
+    if (transactionDate > today) {
+      alert('Invalid Date: Future-dated transactions are not allowed. Please select today or an earlier date.');
+      return;
+    }
 
     if (selectedType?.requiresStakeholder && !formData.stakeholderId) {
       alert('Missing Stakeholder: Please select a stakeholder for this transaction type.');

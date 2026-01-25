@@ -5,9 +5,23 @@ import {
   ArrowUpIcon,
   ArrowDownIcon,
   BanknotesIcon,
-  ChartBarIcon
+  TruckIcon,
+  ChartBarIcon,
+  EyeIcon,
+  EyeSlashIcon
 } from '@heroicons/react/24/outline';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer
+} from 'recharts';
 import { useTransactions } from '../contexts/TransactionContext';
+import { useStakeholders } from '../contexts/StakeholderContext';
 import { SYSTEM_CONFIG } from '../constants/systemConfig';
 import clsx from 'clsx';
 
@@ -21,8 +35,28 @@ interface DailyBalance {
   debitTransactions: number;
 }
 
-const DailyCreditDebitReport: React.FC = () => {
+// Helper functions defined outside component to avoid scoping issues
+const formatCurrencyHelper = (amount: number, currencySymbol: string) => {
+  const sign = amount < 0 ? '-' : '';
+  return `${sign}${currencySymbol}${Math.abs(amount).toLocaleString()}`;
+};
+
+const formatDateHelper = (dateStr: string) => {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+
+const formatDateWithDayHelper = (dateStr: string) => {
+  const date = new Date(dateStr);
+  return {
+    dateText: date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+    dayName: date.toLocaleDateString('en-IN', { weekday: 'long' })
+  };
+};
+
+const DistributorCreditDebitReport: React.FC = () => {
   const { transactions } = useTransactions();
+  const { distributors } = useStakeholders();
 
   // Date range state
   const [dateFrom, setDateFrom] = useState(() => {
@@ -31,24 +65,23 @@ const DailyCreditDebitReport: React.FC = () => {
     return date.toISOString().split('T')[0];
   });
   const [dateTo, setDateTo] = useState(() => new Date().toISOString().split('T')[0]);
+  const [showChart, setShowChart] = useState(true);
 
-  // Credit categories (Money IN to pharmacy)
-  const creditCategories = ['pharmacy_sale', 'patient_payment'];
+  // Credit categories for distributors (Increases what we owe to distributors)
+  const creditCategories = ['distributor_credit_purchase'];
 
-  // Debit categories (Money OUT from pharmacy)
-  const debitCategories = ['distributor_payment', 'employee_payment', 'clinic_expense', 'patient_credit_sale', 'sales_profit_distribution'];
-
-  // Note: distributor_credit_note is excluded - it's not a cash transaction, just reduces distributor debt
+  // Debit categories for distributors (Decreases what we owe to distributors)
+  const debitCategories = ['distributor_payment', 'distributor_credit_note'];
 
   // Calculate daily balances
   const dailyBalances = useMemo(() => {
-    // Filter pharmacy transactions only (exclude doctor transactions)
-    const pharmacyTransactions = transactions.filter(t =>
+    // Filter distributor transactions only
+    const distributorTransactions = transactions.filter(t =>
       [...creditCategories, ...debitCategories].includes(t.category)
     );
 
     // Filter by date range
-    const filteredTransactions = pharmacyTransactions.filter(t => {
+    const filteredTransactions = distributorTransactions.filter(t => {
       const transactionDate = new Date(t.date);
       const fromDate = new Date(dateFrom);
       const toDate = new Date(dateTo);
@@ -78,8 +111,13 @@ const DailyCreditDebitReport: React.FC = () => {
       currentDate.setDate(currentDate.getDate() + 1);
     }
 
-    // Calculate opening balance (all transactions before dateFrom)
-    const openingBalance = pharmacyTransactions
+    // Calculate initial credit balance from all distributors (from offline ledgers)
+    const totalInitialCreditBalance = distributors.reduce((sum, distributor) => {
+      return sum + (distributor.creditBalance || 0);
+    }, 0);
+
+    // Calculate opening balance = initial balance + all transactions before dateFrom
+    const transactionsBeforePeriod = distributorTransactions
       .filter(t => new Date(t.date) < new Date(dateFrom))
       .reduce((balance, t) => {
         if (creditCategories.includes(t.category)) {
@@ -89,6 +127,8 @@ const DailyCreditDebitReport: React.FC = () => {
         }
         return balance;
       }, 0);
+
+    const openingBalance = totalInitialCreditBalance + transactionsBeforePeriod;
 
     // Calculate daily balances
     let runningBalance = openingBalance;
@@ -123,7 +163,7 @@ const DailyCreditDebitReport: React.FC = () => {
       });
     });
 
-    // Calculate summary before reversing the array (finalBalance is the last day's closing balance)
+    // Calculate summary before reversing the array
     const finalBalance = dailyData[dailyData.length - 1]?.closingBalance || openingBalance;
 
     return {
@@ -135,31 +175,45 @@ const DailyCreditDebitReport: React.FC = () => {
         finalBalance: finalBalance
       }
     };
-  }, [transactions, dateFrom, dateTo]);
+  }, [transactions, distributors, dateFrom, dateTo]);
 
-  const formatCurrency = (amount: number) => {
-    const sign = amount < 0 ? '-' : '';
-    return `${sign}${SYSTEM_CONFIG.CURRENCY_SYMBOL}${Math.abs(amount).toLocaleString()}`;
-  };
+  // Local wrappers for consistency
+  const formatCurrency = (amount: number) => formatCurrencyHelper(amount, SYSTEM_CONFIG.CURRENCY_SYMBOL);
+  const formatDate = (dateStr: string) => formatDateHelper(dateStr);
+  const formatDateWithDay = (dateStr: string) => formatDateWithDayHelper(dateStr);
 
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-  };
+  // Prepare chart data (chronological order for charts)
+  const chartData = useMemo(() => {
+    return [...dailyBalances.dailyBalances].reverse().map(day => ({
+      date: formatDateHelper(day.date),
+      creditPurchases: day.credits,
+      paymentsReturns: day.debits,
+      closingBalance: day.closingBalance
+    }));
+  }, [dailyBalances.dailyBalances]);
 
-  const formatDateWithDay = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return {
-      dateText: date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
-      dayName: date.toLocaleDateString('en-IN', { weekday: 'long' })
-    };
+  // Custom tooltip for chart
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-gray-900 border border-gray-700 rounded-lg p-3 shadow-xl">
+          <p className="text-white font-semibold mb-2">{label}</p>
+          {payload.map((entry: any, index: number) => (
+            <p key={index} className="text-sm" style={{ color: entry.color }}>
+              {entry.name}: {formatCurrencyHelper(entry.value, SYSTEM_CONFIG.CURRENCY_SYMBOL)}
+            </p>
+          ))}
+        </div>
+      );
+    }
+    return null;
   };
 
   const exportToExcel = async () => {
     const { exportDailyCreditDebitToExcel } = await import('../utils/exportUtils');
     await exportDailyCreditDebitToExcel(
       dailyBalances.dailyBalances,
-      'Pharmacy Daily Credit-Debit Report',
+      'Distributor Daily Credit-Debit Report',
       { from: dateFrom, to: dateTo },
       {
         openingBalance: dailyBalances.openingBalance,
@@ -174,7 +228,7 @@ const DailyCreditDebitReport: React.FC = () => {
     const { exportDailyCreditDebitToPDF } = await import('../utils/exportUtils');
     await exportDailyCreditDebitToPDF(
       dailyBalances.dailyBalances,
-      'Pharmacy Daily Credit-Debit Report',
+      'Distributor Daily Credit-Debit Report',
       { from: dateFrom, to: dateTo },
       {
         openingBalance: dailyBalances.openingBalance,
@@ -190,8 +244,8 @@ const DailyCreditDebitReport: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">Pharmacy Daily Credit-Debit Report</h2>
-          <p className="text-gray-400 text-sm mt-1">Track daily cash flow and closing balances</p>
+          <h2 className="text-2xl font-bold text-white">Distributor Daily Credit-Debit Report</h2>
+          <p className="text-gray-400 text-sm mt-1">Track all distributor credit purchases and payments (combined)</p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -246,47 +300,47 @@ const DailyCreditDebitReport: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
-            <BanknotesIcon className="h-4 w-4 text-blue-400" />
+            <TruckIcon className="h-4 w-4 text-blue-400" />
             <p className="text-xs font-medium text-gray-400 uppercase">Opening Balance</p>
           </div>
           <p className={clsx(
             "text-2xl font-bold",
-            dailyBalances.openingBalance >= 0 ? "text-blue-400" : "text-red-400"
+            dailyBalances.openingBalance >= 0 ? "text-blue-400" : "text-green-400"
           )}>
             {formatCurrency(dailyBalances.openingBalance)}
           </p>
           <p className="text-xs text-gray-500 mt-1">
-            As on {formatDateWithDay(dateFrom).dateText}
-            <span className="block text-gray-600">{formatDateWithDay(dateFrom).dayName}</span>
+            Initial balance + past credit
+            <span className="block text-gray-600">As on {formatDateWithDay(dateFrom).dateText}</span>
           </p>
         </div>
 
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
             <ArrowUpIcon className="h-4 w-4 text-green-400" />
-            <p className="text-xs font-medium text-gray-400 uppercase">Total Credits</p>
+            <p className="text-xs font-medium text-gray-400 uppercase">Total Credit Purchases</p>
           </div>
           <p className="text-2xl font-bold text-green-400">{formatCurrency(dailyBalances.summary.totalCredits)}</p>
-          <p className="text-xs text-gray-500 mt-1">Money received</p>
+          <p className="text-xs text-gray-500 mt-1">During selected period</p>
         </div>
 
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
             <ArrowDownIcon className="h-4 w-4 text-red-400" />
-            <p className="text-xs font-medium text-gray-400 uppercase">Total Debits</p>
+            <p className="text-xs font-medium text-gray-400 uppercase">Total Paid/Returns</p>
           </div>
           <p className="text-2xl font-bold text-red-400">{formatCurrency(dailyBalances.summary.totalDebits)}</p>
-          <p className="text-xs text-gray-500 mt-1">Money paid out</p>
+          <p className="text-xs text-gray-500 mt-1">Payments + Credit notes</p>
         </div>
 
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
             <BanknotesIcon className="h-4 w-4 text-yellow-400" />
-            <p className="text-xs font-medium text-gray-400 uppercase">Closing Balance</p>
+            <p className="text-xs font-medium text-gray-400 uppercase">Current Balance</p>
           </div>
           <p className={clsx(
             "text-2xl font-bold",
-            dailyBalances.summary.finalBalance >= 0 ? "text-yellow-400" : "text-red-400"
+            dailyBalances.summary.finalBalance >= 0 ? "text-yellow-400" : "text-green-400"
           )}>
             {formatCurrency(dailyBalances.summary.finalBalance)}
           </p>
@@ -295,6 +349,102 @@ const DailyCreditDebitReport: React.FC = () => {
             <span className="block text-gray-600">{formatDateWithDay(dateTo).dayName}</span>
           </p>
         </div>
+      </div>
+
+      {/* Trend Analysis Chart */}
+      <div className="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
+        <div className="px-5 py-3 border-b border-gray-700 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ChartBarIcon className="h-5 w-5 text-blue-400" />
+            <h3 className="text-lg font-semibold text-white">Trend Analysis</h3>
+          </div>
+          <button
+            onClick={() => setShowChart(!showChart)}
+            className="flex items-center gap-2 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors text-sm"
+          >
+            {showChart ? (
+              <>
+                <EyeSlashIcon className="h-4 w-4" />
+                Hide Chart
+              </>
+            ) : (
+              <>
+                <EyeIcon className="h-4 w-4" />
+                Show Chart
+              </>
+            )}
+          </button>
+        </div>
+
+        {showChart && (
+          <div className="p-6">
+            <ResponsiveContainer width="100%" height={400}>
+              <LineChart data={chartData} margin={{ top: 5, right: 80, left: 20, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                <XAxis
+                  dataKey="date"
+                  stroke="#9ca3af"
+                  tick={{ fill: '#9ca3af', fontSize: 12 }}
+                  angle={-45}
+                  textAnchor="end"
+                  height={80}
+                />
+                {/* Left Y-Axis for daily transactions */}
+                <YAxis
+                  yAxisId="left"
+                  stroke="#9ca3af"
+                  tick={{ fill: '#9ca3af', fontSize: 12 }}
+                  tickFormatter={(value) => `${SYSTEM_CONFIG.CURRENCY_SYMBOL}${(value / 1000).toFixed(0)}k`}
+                  label={{ value: 'Daily Transactions', angle: -90, position: 'insideLeft', style: { fill: '#9ca3af', fontSize: 12 } }}
+                />
+                {/* Right Y-Axis for closing balance */}
+                <YAxis
+                  yAxisId="right"
+                  orientation="right"
+                  stroke="#facc15"
+                  tick={{ fill: '#facc15', fontSize: 12 }}
+                  tickFormatter={(value) => `${SYSTEM_CONFIG.CURRENCY_SYMBOL}${(value / 1000).toFixed(0)}k`}
+                  label={{ value: 'Closing Balance', angle: 90, position: 'insideRight', style: { fill: '#facc15', fontSize: 12 } }}
+                />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend
+                  wrapperStyle={{ paddingTop: '20px' }}
+                  iconType="line"
+                />
+                <Line
+                  yAxisId="left"
+                  type="monotone"
+                  dataKey="creditPurchases"
+                  name="Credit Purchases"
+                  stroke="#f87171"
+                  strokeWidth={2}
+                  dot={{ fill: '#f87171', r: 3 }}
+                  activeDot={{ r: 5 }}
+                />
+                <Line
+                  yAxisId="left"
+                  type="monotone"
+                  dataKey="paymentsReturns"
+                  name="Payments/Returns"
+                  stroke="#4ade80"
+                  strokeWidth={2}
+                  dot={{ fill: '#4ade80', r: 3 }}
+                  activeDot={{ r: 5 }}
+                />
+                <Line
+                  yAxisId="right"
+                  type="monotone"
+                  dataKey="closingBalance"
+                  name="Closing Balance"
+                  stroke="#facc15"
+                  strokeWidth={3}
+                  dot={{ fill: '#facc15', r: 4 }}
+                  activeDot={{ r: 6 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </div>
 
       {/* Daily Balances Table */}
@@ -309,9 +459,9 @@ const DailyCreditDebitReport: React.FC = () => {
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Date</th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Opening Balance</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Credits</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Credit Purchases</th>
                 <th className="px-4 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider"># Txns</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Debits</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Paid/Returns</th>
                 <th className="px-4 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider"># Txns</th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Closing Balance</th>
               </tr>
@@ -330,7 +480,7 @@ const DailyCreditDebitReport: React.FC = () => {
                     </td>
                     <td className={clsx(
                       "px-4 py-3 whitespace-nowrap text-right text-sm font-semibold",
-                      day.openingBalance >= 0 ? "text-blue-400" : "text-red-400"
+                      day.openingBalance >= 0 ? "text-blue-400" : "text-green-400"
                     )}>
                       {formatCurrency(day.openingBalance)}
                     </td>
@@ -348,7 +498,7 @@ const DailyCreditDebitReport: React.FC = () => {
                     </td>
                     <td className={clsx(
                       "px-4 py-3 whitespace-nowrap text-right text-sm font-bold",
-                      day.closingBalance >= 0 ? "text-yellow-400" : "text-red-400"
+                      day.closingBalance >= 0 ? "text-yellow-400" : "text-green-400"
                     )}>
                       {formatCurrency(day.closingBalance)}
                     </td>
@@ -382,7 +532,7 @@ const DailyCreditDebitReport: React.FC = () => {
                   </td>
                   <td className={clsx(
                     "px-4 py-3 text-right text-sm",
-                    dailyBalances.summary.finalBalance >= 0 ? "text-yellow-400" : "text-red-400"
+                    dailyBalances.summary.finalBalance >= 0 ? "text-yellow-400" : "text-green-400"
                   )}>
                     {formatCurrency(dailyBalances.summary.finalBalance)}
                   </td>
@@ -396,4 +546,4 @@ const DailyCreditDebitReport: React.FC = () => {
   );
 };
 
-export default DailyCreditDebitReport;
+export default DistributorCreditDebitReport;

@@ -381,7 +381,12 @@ const DoctorAccountStatement: React.FC = () => {
                 filteredTransactions.map((transaction) => (
                   <tr key={transaction.id} className="hover:bg-gray-750 transition-colors">
                     <td className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-300">
-                      {transaction.date.toLocaleDateString()}
+                      <div className="flex flex-col">
+                        <span>{transaction.date.toLocaleDateString()}</span>
+                        <span className="text-xs text-gray-500">
+                          {transaction.date.toLocaleDateString('en-IN', { weekday: 'long' })}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-400">
                       {transaction.reference}
