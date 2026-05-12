@@ -36,6 +36,7 @@ import ProfileSettings from './ProfileSettings';
 import UserManual from './UserManual';
 import AdminPortal from './AdminPortal';
 import NotificationSettings from './NotificationSettings';
+import DatabaseManagement from './DatabaseManagement';
 import {
   CurrencyDollarIcon, BanknotesIcon, ChartBarIcon, UserGroupIcon,
   BuildingOfficeIcon, UsersIcon, TruckIcon, PlusIcon, CreditCardIcon,
@@ -44,14 +45,14 @@ import {
   DocumentTextIcon, UserIcon, ArrowTrendingUpIcon, EyeIcon,
   Squares2X2Icon, ChevronDownIcon, MagnifyingGlassIcon, FunnelIcon,
   ArrowRightOnRectangleIcon, Bars3Icon, XMarkIcon, BookOpenIcon,
-  ShieldCheckIcon, PresentationChartLineIcon
+  ShieldCheckIcon, PresentationChartLineIcon, CircleStackIcon as DatabaseIcon
 } from '@heroicons/react/24/outline';
 import { SYSTEM_CONFIG, getDefaultDateRange } from '../constants/systemConfig';
 import { PHARMACY_REVENUE_CATEGORIES, PHARMACY_EXPENSE_CATEGORIES } from '../constants/transactionTypes';
 import clsx from 'clsx';
 
 const DarkCorporateDashboard: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'reports' | 'credit_debit_report' | 'doctor_credit_debit_report' | 'distributor_credit_debit_report' | 'weekly_insights' | 'stakeholders' | 'patients' | 'statements' | 'business_statement' | 'doctor_statement' | 'distributor_statement' | 'payment_estimation' | 'data_import' | 'configuration' | 'user_manual' | 'admin_portal' | 'notifications'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'reports' | 'credit_debit_report' | 'doctor_credit_debit_report' | 'distributor_credit_debit_report' | 'weekly_insights' | 'stakeholders' | 'patients' | 'statements' | 'business_statement' | 'doctor_statement' | 'distributor_statement' | 'payment_estimation' | 'data_import' | 'configuration' | 'user_manual' | 'admin_portal' | 'notifications' | 'database_management'>('dashboard');
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   
   const [selectedPeriod, setSelectedPeriod] = useState('30days');
@@ -182,6 +183,7 @@ const DarkCorporateDashboard: React.FC = () => {
         { id: 'configuration', label: 'System Settings', icon: Cog6ToothIcon, category: 'system', tooltip: 'Configure system settings and preferences' },
         { id: 'admin_portal', label: 'Admin Portal', icon: ShieldCheckIcon, category: 'system', tooltip: 'User management and administration' },
         ...(user?.role === 'super_admin' ? [
+          { id: 'database_management', label: 'Database Backup', icon: DatabaseIcon, category: 'system', tooltip: 'Backup and restore database' },
           { id: 'notifications', label: 'Notifications', icon: BellIcon, category: 'system', tooltip: 'Configure email, SMS, and WhatsApp notifications' },
           { id: 'user_manual', label: 'User Manual', icon: BookOpenIcon, category: 'system', tooltip: 'Comprehensive user guide and help documentation' }
         ] : []),
@@ -2382,6 +2384,7 @@ const DarkCorporateDashboard: React.FC = () => {
         {activeTab === 'data_import' && <DataImport />}
         {activeTab === 'configuration' && <ConfigurationManagement />}
         {activeTab === 'admin_portal' && <AdminPortal />}
+        {activeTab === 'database_management' && <DatabaseManagement />}
         {activeTab === 'notifications' && <NotificationSettings />}
         {activeTab === 'user_manual' && <UserManual />}
       </main>
