@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { useTransactions } from './TransactionContext';
 import { useStakeholders } from './StakeholderContext';
@@ -213,7 +213,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
-  const contextValue: NotificationContextType = {
+  const contextValue = useMemo((): NotificationContextType => ({
     notifications,
     unreadCount,
     addNotification,
@@ -221,7 +221,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     markAllAsRead,
     removeNotification,
     clearAllNotifications,
-  };
+  }), [notifications, unreadCount, addNotification, markAsRead, markAllAsRead, removeNotification, clearAllNotifications]);
 
   return (
     <NotificationContext.Provider value={contextValue}>

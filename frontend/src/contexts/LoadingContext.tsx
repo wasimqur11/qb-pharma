@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
 import { useAuth } from './AuthContext';
 import { useTransactions } from './TransactionContext';
 import { useStakeholders } from './StakeholderContext';
@@ -48,11 +48,11 @@ export const LoadingProvider: React.FC<LoadingProviderProps> = ({ children }) =>
     setCustomMessage(message);
   };
 
-  const contextValue: LoadingContextType = {
+  const contextValue = useMemo((): LoadingContextType => ({
     isLoading,
     loadingMessage: getLoadingMessage(),
     setCustomLoading: setCustomLoadingState
-  };
+  }), [isLoading, customLoading, customMessage, authLoading, transactionsLoading, stakeholdersLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <LoadingContext.Provider value={contextValue}>

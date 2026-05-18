@@ -1,5 +1,13 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import type { ReactNode } from 'react';
+
+// Server-side aggregates returned by GET /api/transactions/aggregates
+export interface TransactionAggregates {
+  categories: Record<string, { total: number; count: number }>;
+  today: Record<string, number>;
+  distributorTransactionTotals: Record<string, { purchases: number; payments: number; creditNotes: number }>;
+  lastSettlementPoint: { id: string; date: string; description: string | null } | null;
+}
 import type { Transaction, DashboardStats, PayableBalance, StakeholderType } from '../types';
 import { 
   PHARMACY_REVENUE_CATEGORIES, 
@@ -19,9 +27,12 @@ interface TransactionContextType {
   // Data
   transactions: Transaction[];
   isLoading: boolean;
-  
+  aggregates: TransactionAggregates | null;
+  aggregatesLoading: boolean;
+
   // Data loading
   loadTransactions: () => Promise<void>;
+  loadAggregates: (startDate?: string, endDate?: string) => Promise<void>;
   
   // Operations
   addTransaction: (transaction: Omit<Transaction, 'id' | 'createdAt'>) => Promise<void>;
@@ -102,6 +113,8 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
   // State management
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [aggregates, setAggregates] = useState<TransactionAggregates | null>(null);
+  const [aggregatesLoading, setAggregatesLoading] = useState(false);
   const { doctors, businessPartners, employees, distributors, patients, updateEmployeeSalaryDueDate, updateDistributor, updatePatient } = useStakeholders();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
 
@@ -140,9 +153,33 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     }
   };
 
+  // Load server-side aggregates (lightweight — computes KPIs in one DB query)
+  const loadAggregates = async (startDate?: string, endDate?: string) => {
+    if (!isAuthenticated || authLoading) return;
+
+    setAggregatesLoading(true);
+    try {
+      const response = await apiClient.getTransactionAggregates(
+        startDate || endDate ? { startDate, endDate } : undefined
+      );
+      if (response.success && response.data) {
+        setAggregates(response.data as TransactionAggregates);
+      } else {
+        console.error('Failed to load transaction aggregates:', response.error);
+      }
+    } catch (error) {
+      console.error('Error loading transaction aggregates:', error);
+    } finally {
+      setAggregatesLoading(false);
+    }
+  };
+
   // Load transactions when user is authenticated
   useEffect(() => {
     if (isAuthenticated && !authLoading) {
+      // Load aggregates first (fast) so KPIs render immediately,
+      // then load full transaction list for list views
+      loadAggregates();
       loadTransactions();
     }
   }, [isAuthenticated, authLoading]);
@@ -153,8 +190,8 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     pollInterval: 10000, // Poll every 10 seconds
     onDataChange: (changedTypes) => {
       console.log('[TransactionContext] Auto-sync detected changes:', changedTypes);
-      // Reload transactions if transaction data changed
       if (changedTypes.includes('transactions')) {
+        loadAggregates();
         loadTransactions();
       }
     }
@@ -177,9 +214,12 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
         
         // Add to local state for immediate UI update
         setTransactions(prev => [newTransaction, ...prev]);
-        
+
+        // Refresh aggregates so KPIs reflect the new transaction
+        loadAggregates();
+
         console.log('Transaction created successfully:', newTransaction.id);
-        
+
         // Continue with existing business logic for stakeholder updates
         await handleStakeholderUpdates(newTransaction);
       } else {
@@ -279,8 +319,8 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
       const response = await apiClient.deleteTransaction(id);
       
       if (response.success) {
-        // Remove from local state
         setTransactions(prev => prev.filter(transaction => transaction.id !== id));
+        loadAggregates();
         console.log('Transaction deleted successfully:', id);
       } else {
         console.error('Failed to delete transaction:', response.error);
@@ -292,75 +332,74 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     }
   };
 
-  // Analytics - Separated by Business Type
-  const getPharmacyRevenue = () => {
-    return transactions
-      .filter(t => PHARMACY_REVENUE_CATEGORIES.includes(t.category))
-      .reduce((sum, t) => sum + t.amount, 0);
+  // ─── Analytics helpers ────────────────────────────────────────────────────
+  // Read from server-side aggregates when available; fall back to iterating the
+  // transactions array (e.g. before the aggregates response arrives).
+
+  const catTotal = (cat: string): number =>
+    aggregates?.categories[cat]?.total ?? 0;
+
+  const todayCatTotal = (cat: string): number =>
+    aggregates?.today[cat] ?? 0;
+
+  // Fallback: sum a set of categories from the local transactions array
+  const clientSum = (cats: string[]): number =>
+    transactions
+      .filter(t => cats.includes(t.category))
+      .reduce((s, t) => s + t.amount, 0);
+
+  // ─── Analytics - Separated by Business Type ───────────────────────────────
+
+  const getPharmacyRevenue = (): number => {
+    if (aggregates) return PHARMACY_REVENUE_CATEGORIES.reduce((s, c) => s + catTotal(c), 0);
+    return clientSum(PHARMACY_REVENUE_CATEGORIES);
   };
 
-  const getDoctorRevenue = () => {
-    return transactions
-      .filter(t => DOCTOR_REVENUE_CATEGORIES.includes(t.category))
-      .reduce((sum, t) => sum + t.amount, 0);
+  const getDoctorRevenue = (): number => {
+    if (aggregates) return DOCTOR_REVENUE_CATEGORIES.reduce((s, c) => s + catTotal(c), 0);
+    return clientSum(DOCTOR_REVENUE_CATEGORIES);
   };
 
-  const getDoctorExpenses = () => {
-    return transactions
-      .filter(t => DOCTOR_EXPENSE_CATEGORIES.includes(t.category))
-      .reduce((sum, t) => sum + t.amount, 0);
+  const getDoctorExpenses = (): number => {
+    if (aggregates) return DOCTOR_EXPENSE_CATEGORIES.reduce((s, c) => s + catTotal(c), 0);
+    return clientSum(DOCTOR_EXPENSE_CATEGORIES);
   };
 
-  const getTotalRevenue = () => {
-    return getPharmacyRevenue() + getDoctorRevenue();
-  };
+  const getTotalRevenue = (): number => getPharmacyRevenue() + getDoctorRevenue();
 
-  const getTodayPharmacyRevenue = () => {
+  const getTodayPharmacyRevenue = (): number => {
+    if (aggregates) return PHARMACY_REVENUE_CATEGORIES.reduce((s, c) => s + todayCatTotal(c), 0);
     const today = new Date().toDateString();
     return transactions
-      .filter(t => 
-        PHARMACY_REVENUE_CATEGORIES.includes(t.category) &&
-        t.date.toDateString() === today
-      )
-      .reduce((sum, t) => sum + t.amount, 0);
+      .filter(t => PHARMACY_REVENUE_CATEGORIES.includes(t.category) && t.date.toDateString() === today)
+      .reduce((s, t) => s + t.amount, 0);
   };
 
-  const getTodayDoctorRevenue = () => {
+  const getTodayDoctorRevenue = (): number => {
+    if (aggregates) return DOCTOR_REVENUE_CATEGORIES.reduce((s, c) => s + todayCatTotal(c), 0);
     const today = new Date().toDateString();
     return transactions
-      .filter(t => 
-        DOCTOR_REVENUE_CATEGORIES.includes(t.category) &&
-        t.date.toDateString() === today
-      )
-      .reduce((sum, t) => sum + t.amount, 0);
+      .filter(t => DOCTOR_REVENUE_CATEGORIES.includes(t.category) && t.date.toDateString() === today)
+      .reduce((s, t) => s + t.amount, 0);
   };
 
-  const getTodayRevenue = () => {
-    return getTodayPharmacyRevenue() + getTodayDoctorRevenue();
+  const getTodayRevenue = (): number => getTodayPharmacyRevenue() + getTodayDoctorRevenue();
+
+  const getPharmacyExpenses = (): number => {
+    if (aggregates) return PHARMACY_OPERATIONAL_EXPENSE_CATEGORIES.reduce((s, c) => s + catTotal(c), 0);
+    return clientSum(PHARMACY_OPERATIONAL_EXPENSE_CATEGORIES);
   };
 
-  const getPharmacyExpenses = () => {
-    return transactions
-      .filter(t => PHARMACY_OPERATIONAL_EXPENSE_CATEGORIES.includes(t.category))
-      .reduce((sum, t) => sum + t.amount, 0);
+  const getPharmacyOperationalExpenses = (): number => getPharmacyExpenses();
+
+  const getPartnerDistributions = (): number => {
+    if (aggregates) return PARTNER_DISTRIBUTION_CATEGORIES.reduce((s, c) => s + catTotal(c), 0);
+    return clientSum(PARTNER_DISTRIBUTION_CATEGORIES);
   };
 
-  const getPharmacyOperationalExpenses = () => {
-    return transactions
-      .filter(t => PHARMACY_OPERATIONAL_EXPENSE_CATEGORIES.includes(t.category))
-      .reduce((sum, t) => sum + t.amount, 0);
-  };
-
-  const getPartnerDistributions = () => {
-    return transactions
-      .filter(t => PARTNER_DISTRIBUTION_CATEGORIES.includes(t.category))
-      .reduce((sum, t) => sum + t.amount, 0);
-  };
-
-  const getTotalExpenses = () => {
-    return transactions
-      .filter(t => EXPENSE_CATEGORIES.includes(t.category))
-      .reduce((sum, t) => sum + t.amount, 0);
+  const getTotalExpenses = (): number => {
+    if (aggregates) return EXPENSE_CATEGORIES.reduce((s, c) => s + catTotal(c), 0);
+    return clientSum(EXPENSE_CATEGORIES);
   };
 
   const getPharmacyMonthlyProfit = () => {
@@ -399,41 +438,22 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     return monthlyRevenue - monthlyExpenses;
   };
 
-  const getPharmacyCashPosition = () => {
-    // Formula: Total Sale - Distributor Payment - Sales Profit Distribution - Employee Payment - Clinic Expense + Patient Payment
-    const pharmacyRevenue = getPharmacyRevenue(); // Includes: pharmacy_sale + patient_payment
-    
-    // Calculate all pharmacy-related expenses according to the specified formula
-    const distributorPayments = transactions
-      .filter(t => t.category === 'distributor_payment')
-      .reduce((sum, t) => sum + t.amount, 0);
-    
-    const salesProfitDistributions = transactions
-      .filter(t => t.category === 'sales_profit_distribution')
-      .reduce((sum, t) => sum + t.amount, 0);
-    
-    const employeePayments = transactions
-      .filter(t => t.category === 'employee_payment')
-      .reduce((sum, t) => sum + t.amount, 0);
-    
-    const clinicExpenses = transactions
-      .filter(t => t.category === 'clinic_expense')
-      .reduce((sum, t) => sum + t.amount, 0);
-    
-    const patientCreditSales = transactions
-      .filter(t => t.category === 'patient_credit_sale')
-      .reduce((sum, t) => sum + t.amount, 0);
-    
-    // Cash in Hand = Total Sale + Patient Payment - Distributor Payment - Sales Profit Distribution - Employee Payment - Clinic Expense - Patient Credit Sale
+  const getPharmacyCashPosition = (): number => {
+    // Cash in Hand = (pharmacy_sale + patient_payment)
+    //   - distributor_payment - sales_profit_distribution
+    //   - employee_payment - clinic_expense - patient_credit_sale
+    const pharmacyRevenue = getPharmacyRevenue();
+    const distributorPayments      = aggregates ? catTotal('distributor_payment')       : transactions.filter(t => t.category === 'distributor_payment').reduce((s, t) => s + t.amount, 0);
+    const salesProfitDistributions = aggregates ? catTotal('sales_profit_distribution') : transactions.filter(t => t.category === 'sales_profit_distribution').reduce((s, t) => s + t.amount, 0);
+    const employeePayments         = aggregates ? catTotal('employee_payment')          : transactions.filter(t => t.category === 'employee_payment').reduce((s, t) => s + t.amount, 0);
+    const clinicExpenses           = aggregates ? catTotal('clinic_expense')            : transactions.filter(t => t.category === 'clinic_expense').reduce((s, t) => s + t.amount, 0);
+    const patientCreditSales       = aggregates ? catTotal('patient_credit_sale')       : transactions.filter(t => t.category === 'patient_credit_sale').reduce((s, t) => s + t.amount, 0);
     return pharmacyRevenue - distributorPayments - salesProfitDistributions - employeePayments - clinicExpenses - patientCreditSales;
   };
 
-  const getDoctorCashPosition = () => {
-    return getDoctorRevenue() - getDoctorExpenses();
-  };
+  const getDoctorCashPosition = (): number => getDoctorRevenue() - getDoctorExpenses();
 
-  const getCashPosition = () => {
-    // Use consistent calculation: (Pharmacy + Doctor Revenue) - Total Expenses
+  const getCashPosition = (): number => {
     const totalRevenue = getPharmacyRevenue() + getDoctorRevenue();
     const totalExpenses = getTotalExpenses();
     return totalRevenue - totalExpenses;
@@ -585,34 +605,35 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     }).filter(payable => payable.netPayable > 0);
   };
 
-  // Calculate current distributor credit balance from transactions
+  // Calculate current distributor credit balance.
+  // Uses server-side aggregates when available (covers ALL historical transactions,
+  // not just what is currently loaded in the client state).
   const calculateDistributorCurrentBalance = (distributorId: string): number => {
     const distributor = distributors.find(d => d.id === distributorId);
     if (!distributor) return 0;
 
-    // Start with opening balance (imported from offline ledger)
-    // The creditBalance field stores the opening balance and is never updated by transactions
+    // Opening balance (imported from offline ledger; never mutated by individual transactions)
     let balance = distributor.creditBalance;
 
-    // Get all transactions for this distributor
-    const distributorTransactions = transactions.filter(
-      t => t.stakeholderId === distributorId &&
-      ['distributor_credit_purchase', 'distributor_payment', 'distributor_credit_note'].includes(t.category)
-    );
-
-    // Calculate current balance by adding/subtracting ALL transactions
-    // This allows transactions to be added in any chronological order
-    distributorTransactions.forEach(transaction => {
-      if (transaction.category === 'distributor_credit_purchase') {
-        balance += transaction.amount; // Credit increases what we owe
-      } else if (transaction.category === 'distributor_payment') {
-        balance -= transaction.amount; // Payment decreases what we owe
-      } else if (transaction.category === 'distributor_credit_note') {
-        balance -= transaction.amount; // Return decreases what we owe
+    if (aggregates?.distributorTransactionTotals) {
+      const totals = aggregates.distributorTransactionTotals[distributorId];
+      if (totals) {
+        balance += totals.purchases - totals.payments - totals.creditNotes;
       }
-    });
+    } else {
+      // Fallback while aggregates are loading
+      const distTx = transactions.filter(
+        t => t.stakeholderId === distributorId &&
+          ['distributor_credit_purchase', 'distributor_payment', 'distributor_credit_note'].includes(t.category)
+      );
+      distTx.forEach(t => {
+        if (t.category === 'distributor_credit_purchase') balance += t.amount;
+        else if (t.category === 'distributor_payment')    balance -= t.amount;
+        else if (t.category === 'distributor_credit_note') balance -= t.amount;
+      });
+    }
 
-    return Math.max(0, balance); // Never negative
+    return Math.max(0, balance);
   };
 
   const getDistributorCredits = () => {
@@ -817,10 +838,23 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
 
   // Settlement Point functions
   const getLastSettlementPoint = (): Transaction | null => {
+    // Prefer server-side aggregates: covers all historical records, not just what's loaded
+    if (aggregates?.lastSettlementPoint) {
+      const sp = aggregates.lastSettlementPoint;
+      return {
+        id: sp.id,
+        category: 'settlement_point',
+        amount: 0,
+        date: new Date(sp.date),
+        description: sp.description ?? '',
+        createdBy: '',
+        createdAt: new Date(sp.date)
+      } as Transaction;
+    }
+    // Fallback while aggregates are loading
     const settlementPoints = transactions
       .filter(t => t.category === 'settlement_point')
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    
     return settlementPoints.length > 0 ? settlementPoints[0] : null;
   };
   
@@ -849,19 +883,22 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     }
   };
 
-  const contextValue: TransactionContextType = {
+  const contextValue = useMemo((): TransactionContextType => ({
     // Data
     transactions,
     isLoading,
-    
+    aggregates,
+    aggregatesLoading,
+
     // Data loading
     loadTransactions,
-    
+    loadAggregates,
+
     // Operations
     addTransaction,
     updateTransaction,
     deleteTransaction,
-    
+
     // Analytics
     getDashboardStats,
     getTransactionsByDateRange,
@@ -871,7 +908,7 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     getTotalExpenses,
     getMonthlyProfit,
     getCashPosition,
-    
+
     // Business-specific analytics
     getPharmacyRevenue,
     getDoctorRevenue,
@@ -884,28 +921,28 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     getPharmacyCashPosition,
     getDoctorCashPosition,
     getPharmacyMonthlyProfit,
-    
+
     // Payables
     getDoctorPayables,
     getBusinessPartnerPayables,
     getEmployeeSalaryDue,
     getDistributorCredits,
     getPatientCredits,
-    
+
     // Utilities
     getTransactionById,
     getStakeholderTransactions,
     getPeriodFilteredStats,
-    
+
     // Distributor-specific functions
     getDistributorPaymentsDue,
     addDistributorCreditPurchase,
     calculateDistributorCurrentBalance,
-    
+
     // Settlement Point functions
     getLastSettlementPoint,
     getDefaultDateRange
-  };
+  }), [transactions, isLoading, aggregates, aggregatesLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <TransactionContext.Provider value={contextValue}>

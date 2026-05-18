@@ -1,5 +1,7 @@
 import nodemailer from 'nodemailer';
 import handlebars from 'handlebars';
+import https from 'https';
+import querystring from 'querystring';
 import { prisma } from '../index';
 
 export interface NotificationConfig {
@@ -209,22 +211,22 @@ class NotificationService {
     }
 
     try {
-      // TODO: Implement SMS sending based on provider
       switch (this.config.sms.provider) {
         case 'twilio':
-          // TODO: Implement Twilio SMS
-          console.log('SMS would be sent via Twilio:', data);
-          break;
+          return await this.sendViaTwilio(
+            this.config.sms.apiKey,
+            this.config.sms.apiSecret,
+            this.config.sms.fromNumber,
+            data.recipient,
+            data.message
+          );
         case 'aws-sns':
-          // TODO: Implement AWS SNS SMS
-          console.log('SMS would be sent via AWS SNS:', data);
-          break;
+          // AWS SNS requires the AWS SDK — log clearly that it needs additional setup
+          console.error('AWS SNS SMS requires the aws-sdk package. Install it and implement sendViaAwsSns().');
+          return false;
         default:
           throw new Error(`Unsupported SMS provider: ${this.config.sms.provider}`);
       }
-
-      // For now, return true to simulate successful sending
-      return true;
     } catch (error) {
       console.error('SMS sending failed:', error);
       return false;
@@ -238,26 +240,126 @@ class NotificationService {
     }
 
     try {
-      // TODO: Implement WhatsApp sending based on provider
       switch (this.config.whatsapp.provider) {
         case 'twilio':
-          // TODO: Implement Twilio WhatsApp
-          console.log('WhatsApp would be sent via Twilio:', data);
-          break;
+          // Twilio WhatsApp uses the same Messages API with "whatsapp:" prefix on To/From
+          return await this.sendViaTwilio(
+            this.config.whatsapp.apiKey,
+            this.config.whatsapp.apiSecret,
+            `whatsapp:${this.config.whatsapp.fromNumber}`,
+            `whatsapp:${data.recipient}`,
+            data.message
+          );
         case 'meta':
-          // TODO: Implement Meta WhatsApp Business API
-          console.log('WhatsApp would be sent via Meta:', data);
-          break;
+          return await this.sendViaMetaWhatsApp(
+            this.config.whatsapp.apiKey,    // apiKey = phone_number_id
+            this.config.whatsapp.apiSecret, // apiSecret = access_token
+            data.recipient,
+            data.message
+          );
         default:
           throw new Error(`Unsupported WhatsApp provider: ${this.config.whatsapp.provider}`);
       }
-
-      // For now, return true to simulate successful sending
-      return true;
     } catch (error) {
       console.error('WhatsApp sending failed:', error);
       return false;
     }
+  }
+
+  private sendViaTwilio(
+    accountSid: string,
+    authToken: string,
+    from: string,
+    to: string,
+    body: string
+  ): Promise<boolean> {
+    return new Promise((resolve) => {
+      const postData = querystring.stringify({ To: to, From: from, Body: body });
+      const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+
+      const options: https.RequestOptions = {
+        hostname: 'api.twilio.com',
+        path: `/2010-04-01/Accounts/${accountSid}/Messages.json`,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Length': Buffer.byteLength(postData),
+          'Authorization': `Basic ${auth}`
+        }
+      };
+
+      const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+            const parsed = JSON.parse(data);
+            console.log('Twilio message sent:', parsed.sid);
+            resolve(true);
+          } else {
+            console.error('Twilio API error:', res.statusCode, data);
+            resolve(false);
+          }
+        });
+      });
+
+      req.on('error', (err) => {
+        console.error('Twilio request error:', err);
+        resolve(false);
+      });
+
+      req.write(postData);
+      req.end();
+    });
+  }
+
+  private sendViaMetaWhatsApp(
+    phoneNumberId: string,
+    accessToken: string,
+    to: string,
+    body: string
+  ): Promise<boolean> {
+    return new Promise((resolve) => {
+      const postData = JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: to.replace(/\D/g, ''), // digits only
+        type: 'text',
+        text: { body }
+      });
+
+      const options: https.RequestOptions = {
+        hostname: 'graph.facebook.com',
+        path: `/v18.0/${phoneNumberId}/messages`,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData),
+          'Authorization': `Bearer ${accessToken}`
+        }
+      };
+
+      const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+            console.log('Meta WhatsApp message sent:', JSON.parse(data)?.messages?.[0]?.id);
+            resolve(true);
+          } else {
+            console.error('Meta WhatsApp API error:', res.statusCode, data);
+            resolve(false);
+          }
+        });
+      });
+
+      req.on('error', (err) => {
+        console.error('Meta WhatsApp request error:', err);
+        resolve(false);
+      });
+
+      req.write(postData);
+      req.end();
+    });
   }
 
   async sendTransactionNotification(
@@ -271,8 +373,8 @@ class NotificationService {
       await this.loadConfiguration();
 
       // Get transaction details
-      const transaction = await prisma.transaction.findUnique({
-        where: { id: transactionId },
+      const transaction = await prisma.transaction.findFirst({
+        where: { id: transactionId, deletedAt: null },
         include: {
           pharmaUnit: true,
           creator: {
@@ -326,7 +428,7 @@ class NotificationService {
       // Business partners for profit-related transactions
       if (['pharmacy_sale', 'sales_profit_distribution', 'distributor_payment', 'distributor_credit_purchase', 'distributor_credit_note'].includes(category)) {
         const businessPartners = await prisma.businessPartner.findMany({
-          where: { pharmaUnitId },
+          where: { pharmaUnitId, deletedAt: null },
           select: { id: true, email: true, name: true }
         });
 
@@ -341,50 +443,38 @@ class NotificationService {
       // Specific stakeholder notifications
       if (stakeholderId && stakeholderType) {
         switch (stakeholderType) {
-          case 'doctor':
-            const doctor = await prisma.doctor.findUnique({
-              where: { id: stakeholderId },
+          case 'doctor': {
+            const doctor = await prisma.doctor.findFirst({
+              where: { id: stakeholderId, deletedAt: null },
               select: { id: true, email: true, name: true }
             });
             if (doctor) {
-              recipients.push({
-                id: doctor.id,
-                email: doctor.email,
-                name: doctor.name,
-                type: 'doctor'
-              });
+              recipients.push({ id: doctor.id, email: doctor.email, name: doctor.name, type: 'doctor' });
             }
             break;
+          }
 
-          case 'distributor':
-            const distributor = await prisma.distributor.findUnique({
-              where: { id: stakeholderId },
+          case 'distributor': {
+            const distributor = await prisma.distributor.findFirst({
+              where: { id: stakeholderId, deletedAt: null },
               select: { id: true, email: true, name: true }
             });
             if (distributor) {
-              recipients.push({
-                id: distributor.id,
-                email: distributor.email,
-                name: distributor.name,
-                type: 'distributor'
-              });
+              recipients.push({ id: distributor.id, email: distributor.email, name: distributor.name, type: 'distributor' });
             }
             break;
+          }
 
-          case 'employee':
-            const employee = await prisma.employee.findUnique({
-              where: { id: stakeholderId },
+          case 'employee': {
+            const employee = await prisma.employee.findFirst({
+              where: { id: stakeholderId, deletedAt: null },
               select: { id: true, email: true, name: true }
             });
             if (employee) {
-              recipients.push({
-                id: employee.id,
-                email: employee.email,
-                name: employee.name,
-                type: 'employee'
-              });
+              recipients.push({ id: employee.id, email: employee.email, name: employee.name, type: 'employee' });
             }
             break;
+          }
         }
       }
 

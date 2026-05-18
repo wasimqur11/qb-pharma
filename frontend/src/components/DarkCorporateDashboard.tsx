@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import ErrorBoundary from './ErrorBoundary';
+import {
   LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, ComposedChart,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer 
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 // No mock data imports - clean slate for real pharmacy
 import type { DashboardStats, PayableBalance, Transaction } from '../types';
@@ -10,8 +11,10 @@ import { useStakeholders } from '../contexts/StakeholderContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useRoleBasedData } from '../hooks/useRoleBasedData';
+import { useSidebar } from '../contexts/SidebarContext';
+import { useConfiguration } from '../contexts/ConfigurationContext';
+import type { TransactionCategory } from '../types';
 // import { useToast } from '../contexts/ToastContext';
-import qbLogo from '../assets/qblogo.png';
 import TransactionForm from './TransactionForm';
 import EditTransactionForm from './EditTransactionForm';
 import StakeholderManagement from './StakeholderManagement';
@@ -37,14 +40,24 @@ import UserManual from './UserManual';
 import AdminPortal from './AdminPortal';
 import NotificationSettings from './NotificationSettings';
 import DatabaseManagement from './DatabaseManagement';
+import { Sidebar, TopBar } from './layout';
+import NotificationPanel from './NotificationPanel';
+import MetricCard from './dashboard/MetricCard';
+import DataTable from './dashboard/DataTable';
+import ChartCard from './dashboard/ChartCard';
+import DateFilter from './dashboard/DateFilter';
+import DistributorPaymentsDue from './dashboard/DistributorPaymentsDue';
+import SettlementAlert from './dashboard/SettlementAlert';
+import { darkTooltipStyle } from './dashboard/chartStyles';
+import { formatCurrency, formatNumber } from '../utils/formatters';
 import {
   CurrencyDollarIcon, BanknotesIcon, ChartBarIcon, UserGroupIcon,
-  BuildingOfficeIcon, UsersIcon, TruckIcon, PlusIcon, CreditCardIcon,
+  BuildingOfficeIcon, UsersIcon, TruckIcon, CreditCardIcon,
   DocumentArrowUpIcon, ChartPieIcon, ArrowUpIcon, ArrowDownIcon,
   ClockIcon, CalendarIcon, BellIcon, Cog6ToothIcon, HomeIcon,
   DocumentTextIcon, UserIcon, ArrowTrendingUpIcon, EyeIcon,
-  Squares2X2Icon, ChevronDownIcon, MagnifyingGlassIcon, FunnelIcon,
-  ArrowRightOnRectangleIcon, Bars3Icon, XMarkIcon, BookOpenIcon,
+  Squares2X2Icon, MagnifyingGlassIcon, FunnelIcon,
+  Bars3Icon, XMarkIcon, BookOpenIcon,
   ShieldCheckIcon, PresentationChartLineIcon, CircleStackIcon as DatabaseIcon
 } from '@heroicons/react/24/outline';
 import { SYSTEM_CONFIG, getDefaultDateRange } from '../constants/systemConfig';
@@ -54,55 +67,73 @@ import clsx from 'clsx';
 const DarkCorporateDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'reports' | 'credit_debit_report' | 'doctor_credit_debit_report' | 'distributor_credit_debit_report' | 'weekly_insights' | 'stakeholders' | 'patients' | 'statements' | 'business_statement' | 'doctor_statement' | 'distributor_statement' | 'payment_estimation' | 'data_import' | 'configuration' | 'user_manual' | 'admin_portal' | 'notifications' | 'database_management'>('dashboard');
   const [showTransactionForm, setShowTransactionForm] = useState(false);
-  
+
   const [selectedPeriod, setSelectedPeriod] = useState('30days');
   const [showEditTransactionForm, setShowEditTransactionForm] = useState(false);
   const [selectedTransactionForEdit, setSelectedTransactionForEdit] = useState<Transaction | null>(null);
   const [showPaymentProcessor, setShowPaymentProcessor] = useState(false);
   const [showSimpleSettlementWizard, setShowSimpleSettlementWizard] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [showUserMenu, setShowUserMenu] = useState(false);
   const [showProfileSettings, setShowProfileSettings] = useState(false);
+  const [defaultTransactionCategory, setDefaultTransactionCategory] = useState<TransactionCategory | undefined>(undefined);
 
-  // Navigation dropdown states
-  const [openDropdowns, setOpenDropdowns] = useState<{[key: string]: boolean}>({
-    management: false,
-    statements: false,
-    system: false
-  });
+  // Sidebar context
+  const { isCollapsed, openMobile } = useSidebar();
 
-  // Dropdown utility functions
-  const toggleDropdown = (dropdown: string) => {
-    setOpenDropdowns(prev => {
-      // If the clicked dropdown is already open, close it
-      if (prev[dropdown]) {
-        return {
-          management: false,
-          statements: false,
-          system: false
-        };
-      }
-      // Otherwise, close all others and open the clicked one
-      return {
-        management: dropdown === 'management',
-        statements: dropdown === 'statements',
-        system: dropdown === 'system'
-      };
-    });
-  };
-
-  const closeAllDropdowns = () => {
-    setOpenDropdowns({
-      management: false,
-      statements: false,
-      system: false
-    });
-  };
+  // Configuration context for shortcuts
+  const { transactionShortcuts, getShortcutByKeys } = useConfiguration();
 
   const handleTabClick = (tabId: string) => {
     setActiveTab(tabId as any);
-    closeAllDropdowns();
+  };
+
+  // Global keyboard shortcut handler for quick transactions
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Don't trigger shortcuts when typing in input fields
+      const target = event.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return;
+      }
+
+      // Build shortcut string from event
+      const parts: string[] = [];
+      if (event.ctrlKey || event.metaKey) parts.push('Ctrl');
+      if (event.shiftKey) parts.push('Shift');
+      if (event.altKey) parts.push('Alt');
+
+      // Add the key (ignore modifier keys themselves)
+      if (!['Control', 'Shift', 'Alt', 'Meta'].includes(event.key)) {
+        parts.push(event.key.toUpperCase());
+      }
+
+      const shortcutString = parts.join('+');
+
+      // Check if this matches any configured shortcut
+      const matchedShortcut = getShortcutByKeys(shortcutString);
+
+      if (matchedShortcut) {
+        event.preventDefault();
+        setDefaultTransactionCategory(matchedShortcut.category);
+        setShowTransactionForm(true);
+      }
+
+      // Also handle Ctrl+Enter for generic transaction form (backwards compatibility)
+      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter' && !matchedShortcut) {
+        event.preventDefault();
+        setDefaultTransactionCategory(undefined);
+        setShowTransactionForm(true);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [transactionShortcuts, getShortcutByKeys]);
+
+  // Reset default category when form closes
+  const handleTransactionFormClose = () => {
+    setShowTransactionForm(false);
+    setDefaultTransactionCategory(undefined);
   };
 
   const {
@@ -120,7 +151,7 @@ const DarkCorporateDashboard: React.FC = () => {
   const { doctors, businessPartners, employees, distributors, patients } = useStakeholders();
   
   const { user, logout } = useAuth();
-  const { notifications, unreadCount, markAsRead, markAllAsRead, removeNotification } = useNotifications();
+  const { unreadCount } = useNotifications();
   
   // Use role-based filtered data
   const { 
@@ -131,29 +162,6 @@ const DarkCorporateDashboard: React.FC = () => {
     isStakeholderUser 
   } = useRoleBasedData();
 
-  // Close user menu and navigation dropdowns when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-
-      if (showUserMenu) {
-        if (!target.closest('.user-menu-container')) {
-          setShowUserMenu(false);
-        }
-      }
-
-      // Close navigation dropdowns when clicking outside
-      const hasOpenDropdown = Object.values(openDropdowns).some(isOpen => isOpen);
-      if (hasOpenDropdown) {
-        if (!target.closest('.nav-dropdown-container')) {
-          closeAllDropdowns();
-        }
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showUserMenu, openDropdowns.management, openDropdowns.statements, openDropdowns.system]);
   // const { showSuccess } = useToast();
   
   // Define navigation items based on user role
@@ -240,69 +248,6 @@ const DarkCorporateDashboard: React.FC = () => {
 
   const navigationItems = getNavigationItems();
   const [dateRange, setDateRange] = useState(getDefaultDateRange());
-
-  // Helper function to render navigation dropdown
-  const renderNavigationDropdown = (
-    title: string,
-    items: any[],
-    dropdownKey: string,
-    colorScheme: {
-      border: string,
-      text: string,
-      bg: string,
-      hover: string
-    }
-  ) => {
-    if (!items || items.length === 0) return null;
-
-    const isOpen = openDropdowns[dropdownKey] || false;
-    const hasActiveItem = items.some(item => activeTab === item.id);
-
-    return (
-      <div className="relative nav-dropdown-container">
-        <button
-          onClick={() => toggleDropdown(dropdownKey)}
-          className={clsx(
-            'flex items-center gap-2 px-3 py-2.5 text-sm font-medium border-b-2 transition-all duration-200 whitespace-nowrap',
-            hasActiveItem
-              ? `${colorScheme.border.replace('border-l-', 'border-')} ${colorScheme.text} ${colorScheme.bg}`
-              : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600 hover:bg-gray-800/50'
-          )}
-        >
-          <span>{title}</span>
-          <ChevronDownIcon
-            className={clsx(
-              'h-4 w-4 transition-transform duration-200',
-              isOpen ? 'rotate-180' : ''
-            )}
-          />
-        </button>
-
-        {isOpen && (
-          <div className="absolute top-full left-0 mt-1 min-w-48 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-[9999] max-h-96 overflow-y-auto">
-            <div className="py-2">
-              {items.map(item => (
-                <button
-                  key={item.id}
-                  onClick={() => handleTabClick(item.id)}
-                  title={item.tooltip}
-                  className={clsx(
-                    'w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium transition-colors text-left',
-                    activeTab === item.id
-                      ? `${colorScheme.bg} ${colorScheme.text} border-l-4 ${colorScheme.border}`
-                      : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                  )}
-                >
-                  <item.icon className="h-4 w-4" />
-                  <span>{item.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
 
   // Report filter state - initialize with Settlement Point date range or fallback
   const [reportFilters, setReportFilters] = useState(() => {
@@ -405,16 +350,6 @@ const DarkCorporateDashboard: React.FC = () => {
     todayDoctorRevenue: periodStats.doctorRevenue,
     doctorExpenses: periodStats.doctorExpenses,
     doctorCashPosition: periodStats.doctorCashPosition
-  };
-
-  const formatCurrency = (amount: number) => {
-    return `${SYSTEM_CONFIG.CURRENCY_SYMBOL}${amount.toLocaleString()}`;
-  };
-
-  const formatNumber = (num: number) => {
-    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
-    return num.toString();
   };
 
   // Generate chart data from real transactions
@@ -617,22 +552,24 @@ const DarkCorporateDashboard: React.FC = () => {
     return data;
   };
 
-  const handleTransactionSubmit = (data: any) => {
-    addTransaction({
-      category: data.category,
-      stakeholderId: data.stakeholderId,
-      stakeholderType: data.stakeholderType,
-      amount: parseFloat(data.amount),
-      description: data.description,
-      billNo: data.billNo,
-      date: new Date(data.date),
-      createdBy: 'Admin User'
-    });
-
-    setShowTransactionForm(false);
-    
-    // Show success message
-    alert(`Transaction Added: ${formatCurrency(parseFloat(data.amount))} transaction for ${data.description} has been recorded successfully.`);
+  const handleTransactionSubmit = async (data: any) => {
+    try {
+      await addTransaction({
+        category: data.category,
+        stakeholderId: data.stakeholderId,
+        stakeholderType: data.stakeholderType,
+        amount: parseFloat(data.amount),
+        description: data.description,
+        billNo: data.billNo,
+        date: new Date(data.date),
+        createdBy: 'Admin User'
+      });
+      setShowTransactionForm(false);
+      alert(`Transaction Added: ${formatCurrency(parseFloat(data.amount))} transaction for ${data.description} has been recorded successfully.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create transaction';
+      alert(`Transaction Failed\n\n${message}`);
+    }
   };
 
   const handleEditTransaction = (transaction: Transaction) => {
@@ -734,521 +671,10 @@ const DarkCorporateDashboard: React.FC = () => {
     }));
   };
 
-  const Header: React.FC = () => (
-    <div className="bg-gray-900 border-b border-gray-700">
-      {/* Main Header */}
-      <div className="px-4 py-3">
-        <div className="flex items-center justify-between">
-          {/* Left Section - Brand */}
-          <div className="flex items-center gap-4">
-            {/* Mobile Hamburger Menu */}
-            <button 
-              onClick={() => setMobileMenuOpen(true)}
-              className="lg:hidden p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-md transition-colors"
-              title="Open Navigation Menu"
-            >
-              <Bars3Icon className="h-6 w-6" />
-            </button>
-            
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 flex items-center justify-center">
-                <img src={qbLogo} alt="QB Pharmacy Management" className="h-10 w-10 object-contain" />
-              </div>
-              <div className="hidden sm:block">
-                <h1 className="text-base font-semibold text-white">QB Pharmacy Management</h1>
-                <p className="text-xs text-gray-400">Where Healthcare Meets Analytics</p>
-              </div>
-              <div className="block sm:hidden">
-                <h1 className="text-base font-semibold text-white">QB Pharmacy Management</h1>
-              </div>
-            </div>
-          </div>
-
-          {/* Right Section - Actions & User */}
-          <div className="flex items-center gap-3">
-            {/* Quick Actions */}
-            <div className="hidden lg:flex items-center gap-2">
-              <button
-                onClick={() => setShowTransactionForm(true)}
-                className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium"
-                title="Add new financial transaction (Ctrl+Enter)"
-              >
-                <PlusIcon className="h-4 w-4" />
-                <span className="hidden xl:inline">Add Transaction</span>
-                <span className="xl:hidden">Add</span>
-                <span className="hidden 2xl:inline text-xs text-blue-200 ml-1">(Ctrl+Enter)</span>
-              </button>
-              
-              {user?.role !== 'operator' && (
-                <button
-                  onClick={() => setShowPaymentProcessor(true)}
-                  className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm font-medium"
-                  title="Process stakeholder payments"
-                >
-                  <CreditCardIcon className="h-4 w-4" />
-                  <span className="hidden xl:inline">Process Payments</span>
-                  <span className="xl:hidden">Pay</span>
-                </button>
-              )}
-            </div>
 
 
-            {/* Search - Hidden on small screens */}
-            <div className="hidden md:block relative">
-              <MagnifyingGlassIcon className="h-4 w-4 absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400" />
-              <input 
-                type="text" 
-                placeholder="Search..." 
-                title="Search transactions, stakeholders, and records"
-                className="pl-9 pr-3 py-2 bg-gray-800 border border-gray-600 rounded-md text-sm text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-40 lg:w-48 xl:w-56"
-              />
-            </div>
-            
-            {/* Notifications */}
-            <button 
-              onClick={() => setShowNotifications(true)}
-              className="relative p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-md transition-colors"
-              title={`View notifications and alerts${unreadCount > 0 ? ` (${unreadCount} new)` : ''}`}
-            >
-              <BellIcon className="h-4 w-4" />
-              {unreadCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 h-4 w-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-medium">
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </span>
-              )}
-            </button>
-            
-            {/* User Menu */}
-            <div className="relative pl-2 border-l border-gray-600 user-menu-container">
-              <button
-                onClick={() => setShowUserMenu(!showUserMenu)}
-                className="flex items-center gap-2 p-1 hover:bg-gray-700 rounded-md transition-colors"
-              >
-                <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center">
-                  <UserIcon className="h-4 w-4 text-white" />
-                </div>
-                <div className="hidden sm:block text-left">
-                  <p className="text-sm font-medium text-white">{user?.name}</p>
-                  <p className="text-xs text-gray-400">{user?.email}</p>
-                </div>
-                <ChevronDownIcon className="h-4 w-4 text-gray-400" />
-              </button>
-
-              {/* User Dropdown Menu */}
-              {showUserMenu && (
-                <div className="absolute right-0 top-full mt-2 w-48 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50">
-                  <div className="p-3 border-b border-gray-700">
-                    <p className="text-sm font-medium text-white">{user?.name}</p>
-                    <p className="text-xs text-gray-400">{user?.email}</p>
-                    <p className="text-xs text-blue-400 mt-1">{user?.role}</p>
-                  </div>
-                  <div className="py-2">
-                    <button
-                      onClick={() => {
-                        setShowUserMenu(false);
-                        setShowProfileSettings(true);
-                      }}
-                      className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors flex items-center gap-2"
-                    >
-                      <Cog6ToothIcon className="h-4 w-4" />
-                      Profile Settings
-                    </button>
-                    <hr className="border-gray-700 my-1" />
-                    <button
-                      onClick={() => {
-                        setShowUserMenu(false);
-                        logout();
-                      }}
-                      className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-gray-700 hover:text-red-300 transition-colors flex items-center gap-2"
-                    >
-                      <ArrowRightOnRectangleIcon className="h-4 w-4" />
-                      Logout
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Desktop Navigation Dropdowns - Hidden on mobile */}
-      <div className="hidden lg:block px-4 pb-0 border-b border-gray-800 relative">
-        <nav className="flex items-center gap-4 -mb-px overflow-visible">
-          {/* Primary Navigation - Always visible as direct buttons */}
-          {navigationItems.primary.map(item => (
-            <button
-              key={item.id}
-              onClick={() => handleTabClick(item.id)}
-              title={item.tooltip}
-              className={clsx(
-                'flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-all duration-200 whitespace-nowrap',
-                activeTab === item.id
-                  ? 'border-blue-500 text-blue-400 bg-blue-500/10'
-                  : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600 hover:bg-gray-800/50'
-              )}
-            >
-              <item.icon className="h-4 w-4" />
-              <span className="hidden sm:inline">{item.label}</span>
-            </button>
-          ))}
-
-          {/* Separators and Dropdowns */}
-          {navigationItems.primary.length > 0 && (navigationItems.management.length > 0 || navigationItems.statements.length > 0 || navigationItems.system.length > 0) && (
-            <div className="h-6 w-px bg-gray-700"></div>
-          )}
-
-          {/* Management Dropdown */}
-          {renderNavigationDropdown(
-            'Management',
-            navigationItems.management,
-            'management',
-            {
-              border: 'border-l-green-500',
-              text: 'text-green-400',
-              bg: 'bg-green-500/10',
-              hover: 'hover:bg-green-500/20'
-            }
-          )}
-
-          {/* Statements Dropdown */}
-          {renderNavigationDropdown(
-            'Reports & Statements',
-            navigationItems.statements,
-            'statements',
-            {
-              border: 'border-l-purple-500',
-              text: 'text-purple-400',
-              bg: 'bg-purple-500/10',
-              hover: 'hover:bg-purple-500/20'
-            }
-          )}
-
-          {/* System Dropdown */}
-          {renderNavigationDropdown(
-            'System',
-            navigationItems.system,
-            'system',
-            {
-              border: 'border-l-orange-500',
-              text: 'text-orange-400',
-              bg: 'bg-orange-500/10',
-              hover: 'hover:bg-orange-500/20'
-            }
-          )}
-        </nav>
-      </div>
-    </div>
-  );
-
-  const MetricCard: React.FC<{
-    title: string;
-    value: string;
-    change: string;
-    changeType: 'increase' | 'decrease' | 'neutral';
-    subtitle?: string;
-    icon: React.ElementType;
-  }> = ({ title, value, change, changeType, subtitle, icon: Icon }) => (
-    <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 hover:bg-gray-750 transition-colors">
-      <div className="flex items-start justify-between">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-2">
-            <Icon className="h-4 w-4 text-gray-400" />
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">{title}</p>
-          </div>
-          <p className="text-2xl font-bold text-white mb-1">{value}</p>
-          {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
-        </div>
-        <div className={clsx(
-          'flex items-center gap-1 px-2 py-1 rounded text-xs font-medium',
-          changeType === 'increase' && 'bg-green-900 text-green-300',
-          changeType === 'decrease' && 'bg-red-900 text-red-300',
-          changeType === 'neutral' && 'bg-gray-700 text-gray-300'
-        )}>
-          {changeType === 'increase' && <ArrowUpIcon className="h-3 w-3" />}
-          {changeType === 'decrease' && <ArrowDownIcon className="h-3 w-3" />}
-          {change}
-        </div>
-      </div>
-    </div>
-  );
-
-  const DataTable: React.FC<{
-    title: string;
-    data: any[];
-    columns: { key: string; label: string; render?: (value: any) => React.ReactNode }[];
-    maxRows?: number;
-    expandable?: boolean;
-  }> = ({ title, data, columns, maxRows = 5, expandable = true }) => {
-    const [isExpanded, setIsExpanded] = useState(false);
-    const displayData = isExpanded ? data : data.slice(0, maxRows);
-    
-    
-    return (
-      <div className="bg-gray-800 border border-gray-700 rounded-lg h-fit">
-        <div className="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-white">{title}</h3>
-          {expandable && data.length > maxRows && (
-            <button
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="text-xs text-blue-400 hover:text-blue-300 underline transition-colors"
-            >
-              {isExpanded ? 'Show Less' : `Show All (${data.length})`}
-            </button>
-          )}
-        </div>
-        <div className="p-4">
-          <div className="space-y-2">
-            {displayData.map((row, idx) => (
-              <div key={idx} className="flex items-center justify-between py-2 border-b border-gray-700 last:border-b-0">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white truncate">
-                    {columns[0]?.render ? columns[0].render(row[columns[0].key]) : row[columns[0].key]}
-                  </p>
-                </div>
-                <div className="ml-3 text-right">
-                  <p className="text-sm font-semibold text-gray-300">
-                    {columns[1]?.render ? columns[1].render(row[columns[1].key]) : row[columns[1].key]}
-                  </p>
-                </div>
-              </div>
-            ))}
-            {expandable && !isExpanded && data.length > maxRows && (
-              <div className="pt-2 text-center">
-                <button
-                  onClick={() => setIsExpanded(true)}
-                  className="text-xs text-blue-400 hover:text-blue-300 underline transition-colors hover:bg-gray-700 px-2 py-1 rounded"
-                >
-                  +{data.length - maxRows} more items - Click to view all
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const ChartCard: React.FC<{
-    title: string;
-    subtitle?: string;
-    children: React.ReactNode;
-    actions?: React.ReactNode;
-    height?: string;
-  }> = ({ title, subtitle, children, actions, height = "320px" }) => (
-    <div className="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden" style={{ height }}>
-      <div className="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
-        <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-semibold text-white truncate">{title}</h3>
-          {subtitle && <p className="text-xs text-gray-400 mt-1 truncate">{subtitle}</p>}
-        </div>
-        {actions && <div className="ml-3 flex-shrink-0">{actions}</div>}
-      </div>
-      <div className="p-4 h-full" style={{ height: `calc(${height} - 60px)` }}>
-        {children}
-      </div>
-    </div>
-  );
 
 
-  const DistributorPaymentsDue: React.FC = () => {
-    const paymentsDue = getDistributorPaymentsDue();
-    
-    return (
-      <div className="bg-gray-800 border border-gray-700 rounded-lg h-fit">
-        <div className="px-4 py-3 border-b border-gray-700 flex items-center gap-2">
-          <BellIcon className="h-4 w-4 text-orange-400" />
-          <h3 className="text-sm font-semibold text-white">Distributor Payments Due</h3>
-          {paymentsDue.length > 0 && (
-            <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full">
-              {paymentsDue.length}
-            </span>
-          )}
-        </div>
-        <div className="p-4">
-          <div className="space-y-3">
-            {paymentsDue.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-2">No payments due today</p>
-            ) : (
-              paymentsDue.slice(0, 4).map((payment, idx) => {
-                const isOverdue = new Date(payment.dueDate) < new Date();
-                return (
-                  <div key={idx} className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-medium text-white truncate">{payment.name}</p>
-                      <span className={`text-sm font-bold ${isOverdue ? 'text-red-400' : 'text-orange-400'}`}>
-                        {formatCurrency(payment.amountDue)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs text-gray-400">
-                      <span>Due: {new Date(payment.dueDate).toLocaleDateString()}</span>
-                      {isOverdue && <span className="text-red-400 font-medium">OVERDUE</span>}
-                    </div>
-                  </div>
-                );
-              })
-            )}
-            {paymentsDue.length > 4 && (
-              <div className="pt-2 text-center border-t border-gray-700">
-                <p className="text-xs text-gray-400">+{paymentsDue.length - 4} more payments due</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const darkTooltipStyle = {
-    backgroundColor: '#1f2937',
-    border: '1px solid #374151',
-    borderRadius: '8px',
-    color: '#ffffff'
-  };
-
-  const SettlementAlert: React.FC = () => {
-    // Use all-time stats instead of filtered period data for settlement decisions
-    const allTimeStats = filteredDashboardStats;
-    const pharmacyCash = allTimeStats.pharmacyCashPosition;
-    const hasBusinessPartners = businessPartners.length > 0;
-    
-    // Check if there are actual partner dues to pay
-    const partnerPayables = allTimeStats.businessPartnerPayables;
-    const totalPartnerDues = partnerPayables.reduce((sum, p) => sum + p.netPayable, 0);
-    
-    // Show alert only when:
-    // 1. There's pharmacy cash available, AND
-    // 2. There are business partners, AND  
-    // 3. There are actual partner dues to pay
-    if (pharmacyCash <= 0 || !hasBusinessPartners || totalPartnerDues <= 0) return null;
-    
-    return (
-      <div className="bg-gradient-to-r from-emerald-900/30 to-green-900/30 border border-emerald-600/50 rounded-lg p-6 mb-6 shadow-lg">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="text-4xl animate-pulse">💰</div>
-            <div>
-              <h3 className="font-semibold text-emerald-400 text-xl">Settlement Opportunity Available</h3>
-              <p className="text-gray-300 mb-2">
-                Partner dues: <span className="font-mono text-emerald-400">{formatCurrency(totalPartnerDues)}</span> | Available cash: <span className="font-mono text-emerald-400">{formatCurrency(pharmacyCash)}</span>
-              </p>
-              <p className="text-sm text-emerald-300">
-                Pay partner dues, track equity adjustments, and create a Settlement Point
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-col gap-3">
-            <button 
-              onClick={() => setShowSimpleSettlementWizard(true)}
-              className="px-8 py-4 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium shadow-md hover:shadow-lg transform hover:scale-105 transition-transform text-lg"
-            >
-              🎯 Start Settlement
-            </button>
-            <p className="text-xs text-gray-400 text-center">
-              {businessPartners.length} partner{businessPartners.length !== 1 ? 's' : ''} ready
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-
-  const DateFilter: React.FC = () => (
-    <div className="bg-gray-800/50 border border-gray-700/50 rounded-lg px-3 py-2 mb-4">
-      {/* Desktop Layout */}
-      <div className="hidden md:flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <FunnelIcon className="h-4 w-4 text-gray-400" />
-            <span className="text-sm text-gray-300">Period:</span>
-          </div>
-          
-          <select
-            value={selectedPeriod}
-            onChange={(e) => handlePeriodChange(e.target.value)}
-            className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
-          >
-            <option value="7days">7 Days</option>
-            <option value="30days">30 Days</option>
-            <option value="90days">90 Days</option>
-            <option value="6months">6 Months</option>
-            <option value="1year">1 Year</option>
-          </select>
-          
-          <div className="flex items-center gap-2">
-            <input
-              type="date"
-              value={dateRange.from}
-              max={new Date().toISOString().split('T')[0]}
-              onChange={(e) => setDateRange(prev => ({ ...prev, from: e.target.value }))}
-              className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
-            />
-            <span className="text-gray-400">to</span>
-            <input
-              type="date"
-              value={dateRange.to}
-              min={dateRange.from}
-              max={new Date().toISOString().split('T')[0]}
-              onChange={(e) => setDateRange(prev => ({ ...prev, to: e.target.value }))}
-              className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
-            />
-          </div>
-        </div>
-        
-        <div className="text-xs text-gray-400">
-          {new Date(dateRange.from).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - 
-          {new Date(dateRange.to).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-        </div>
-      </div>
-      
-      {/* Mobile Layout */}
-      <div className="md:hidden space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <FunnelIcon className="h-4 w-4 text-gray-400" />
-            <span className="text-sm text-gray-300">Filter Period</span>
-          </div>
-          <div className="text-xs text-gray-400">
-            {new Date(dateRange.from).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - 
-            {new Date(dateRange.to).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-          </div>
-        </div>
-        
-        <div className="flex flex-col sm:flex-row gap-2">
-          <select
-            value={selectedPeriod}
-            onChange={(e) => handlePeriodChange(e.target.value)}
-            className="flex-1 px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
-          >
-            <option value="7days">Last 7 Days</option>
-            <option value="30days">Last 30 Days</option>
-            <option value="90days">Last 90 Days</option>
-            <option value="6months">Last 6 Months</option>
-            <option value="1year">Last 1 Year</option>
-          </select>
-          
-          <div className="flex gap-2">
-            <input
-              type="date"
-              value={dateRange.from}
-              max={new Date().toISOString().split('T')[0]}
-              onChange={(e) => setDateRange(prev => ({ ...prev, from: e.target.value }))}
-              className="flex-1 px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
-            />
-            <input
-              type="date"
-              value={dateRange.to}
-              min={dateRange.from}
-              max={new Date().toISOString().split('T')[0]}
-              onChange={(e) => setDateRange(prev => ({ ...prev, to: e.target.value }))}
-              className="flex-1 px-2 py-1.5 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 
   // Unified Dashboard combining Pharmacy and Doctor metrics
   const renderUnifiedDashboard = () => {
@@ -1290,7 +716,7 @@ const DarkCorporateDashboard: React.FC = () => {
 
     return (
       <div className="space-y-6">
-        <DateFilter />
+        <DateFilter selectedPeriod={selectedPeriod} dateRange={dateRange} onPeriodChange={handlePeriodChange} onDateRangeChange={setDateRange} />
         
 
         {/* Key Metrics */}
@@ -1450,7 +876,7 @@ const DarkCorporateDashboard: React.FC = () => {
 
   const renderPharmacyDashboard = () => (
     <div className="space-y-5">
-      <DateFilter />
+      <DateFilter selectedPeriod={selectedPeriod} dateRange={dateRange} onPeriodChange={handlePeriodChange} onDateRangeChange={setDateRange} />
       
       {/* Pharmacy Business Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1565,7 +991,7 @@ const DarkCorporateDashboard: React.FC = () => {
 
   const renderDoctorDashboard = () => (
     <div className="space-y-5">
-      <DateFilter />
+      <DateFilter selectedPeriod={selectedPeriod} dateRange={dateRange} onPeriodChange={handlePeriodChange} onDateRangeChange={setDateRange} />
       
       {/* Doctor Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1663,7 +1089,7 @@ const DarkCorporateDashboard: React.FC = () => {
 
   const renderCombinedAnalytics = () => (
     <div className="space-y-5">
-      <DateFilter />
+      <DateFilter selectedPeriod={selectedPeriod} dateRange={dateRange} onPeriodChange={handlePeriodChange} onDateRangeChange={setDateRange} />
       
       <ChartCard title="Monthly Performance Comparison" subtitle="Combined Pharmacy + Doctor Revenue vs Expenses vs Profit" height="350px">
         <ResponsiveContainer width="100%" height="100%">
@@ -1836,7 +1262,7 @@ const DarkCorporateDashboard: React.FC = () => {
     return (
       <div className="space-y-6">
         {/* Settlement Alert */}
-        <SettlementAlert />
+        <SettlementAlert onStartSettlement={() => setShowSimpleSettlementWizard(true)} />
         
         {/* Header with Export Button */}
         <div className="flex items-center justify-between">
@@ -2157,199 +1583,27 @@ const DarkCorporateDashboard: React.FC = () => {
     }
   };
 
-  // Mobile Menu Drawer Component
-  const MobileMenuDrawer: React.FC = () => (
-    <>
-      {mobileMenuOpen && (
-        <div className="lg:hidden fixed inset-0 z-50">
-          {/* Backdrop */}
-          <div 
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm" 
-            onClick={() => setMobileMenuOpen(false)} 
-          />
-          
-          {/* Drawer */}
-          <div className="fixed left-0 top-0 h-full w-80 bg-gray-900 shadow-xl border-r border-gray-700 flex flex-col">
-            {/* Header */}
-            <div className="p-4 border-b border-gray-700">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 flex items-center justify-center">
-                    <img src={qbLogo} alt="QB Pharmacy" className="h-8 w-8 object-contain" />
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-semibold text-white">QB Pharmacy</h2>
-                    <p className="text-xs text-gray-400">Navigation Menu</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-md transition-colors"
-                >
-                  <XMarkIcon className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-
-            {/* User Info */}
-            <div className="p-4 border-b border-gray-700 bg-gray-850">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
-                  <span className="text-white font-medium text-sm">
-                    {user?.name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'}
-                  </span>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-white">{user?.name}</p>
-                  <p className="text-xs text-gray-400">{user?.role?.replace('_', ' ').toUpperCase()}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Navigation Items */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-6">
-              {/* Primary */}
-              {navigationItems.primary.length > 0 && (
-                <div>
-                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                    Dashboard
-                  </h3>
-                  <div className="space-y-1">
-                    {navigationItems.primary.map(item => (
-                      <button
-                        key={item.id}
-                        onClick={() => {
-                          setActiveTab(item.id as any);
-                          setMobileMenuOpen(false);
-                        }}
-                        className={clsx(
-                          'w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors',
-                          activeTab === item.id
-                            ? 'bg-blue-600 text-white'
-                            : 'text-gray-300 hover:text-white hover:bg-gray-800'
-                        )}
-                      >
-                        <item.icon className="h-5 w-5" />
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Management */}
-              {navigationItems.management.length > 0 && (
-                <div>
-                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                    Management
-                  </h3>
-                  <div className="space-y-1">
-                    {navigationItems.management.map(item => (
-                      <button
-                        key={item.id}
-                        onClick={() => {
-                          setActiveTab(item.id as any);
-                          setMobileMenuOpen(false);
-                        }}
-                        className={clsx(
-                          'w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors',
-                          activeTab === item.id
-                            ? 'bg-blue-600 text-white'
-                            : 'text-gray-300 hover:text-white hover:bg-gray-800'
-                        )}
-                      >
-                        <item.icon className="h-5 w-5" />
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Statements */}
-              {navigationItems.statements.length > 0 && (
-                <div>
-                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                    Statements & Reports
-                  </h3>
-                  <div className="space-y-1">
-                    {navigationItems.statements.map(item => (
-                      <button
-                        key={item.id}
-                        onClick={() => {
-                          setActiveTab(item.id as any);
-                          setMobileMenuOpen(false);
-                        }}
-                        className={clsx(
-                          'w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors',
-                          activeTab === item.id
-                            ? 'bg-blue-600 text-white'
-                            : 'text-gray-300 hover:text-white hover:bg-gray-800'
-                        )}
-                      >
-                        <item.icon className="h-5 w-5" />
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* System */}
-              {navigationItems.system.length > 0 && (
-                <div>
-                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                    System Settings
-                  </h3>
-                  <div className="space-y-1">
-                    {navigationItems.system.map(item => (
-                      <button
-                        key={item.id}
-                        onClick={() => {
-                          setActiveTab(item.id as any);
-                          setMobileMenuOpen(false);
-                        }}
-                        className={clsx(
-                          'w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors',
-                          activeTab === item.id
-                            ? 'bg-blue-600 text-white'
-                            : 'text-gray-300 hover:text-white hover:bg-gray-800'
-                        )}
-                      >
-                        <item.icon className="h-5 w-5" />
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="p-4 border-t border-gray-700 bg-gray-900">
-              <button
-                onClick={() => {
-                  logout();
-                  setMobileMenuOpen(false);
-                }}
-                className="w-full flex items-center gap-3 px-3 py-2.5 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded-md transition-colors text-sm font-medium"
-              >
-                <ArrowRightOnRectangleIcon className="h-5 w-5" />
-                Sign Out
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  );
-
   return (
-    <div className="min-h-screen bg-gray-900">
-      <Header />
-      <MobileMenuDrawer />
-      
-      <main className="p-5 max-w-7xl mx-auto pb-20 lg:pb-5">
+    <div className="min-h-screen bg-gray-900 flex">
+      {/* Sidebar Navigation */}
+      <Sidebar
+        navigationItems={navigationItems}
+        activeTab={activeTab}
+        onTabClick={handleTabClick}
+      />
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-h-screen">
+        {/* Top Bar */}
+        <TopBar
+          unreadCount={unreadCount}
+          onNotificationsClick={() => setShowNotifications(true)}
+          onAddTransaction={() => setShowTransactionForm(true)}
+          onProcessPayments={() => setShowPaymentProcessor(true)}
+          onProfileSettings={() => setShowProfileSettings(true)}
+        />
+
+        <main className="flex-1 p-5 pb-20 lg:pb-5 overflow-auto">
         {/* User Profile Banner */}
         <UserProfileBanner />
         <div className="mb-5">
@@ -2368,31 +1622,34 @@ const DarkCorporateDashboard: React.FC = () => {
           </div>
         </div>
 
-        {activeTab === 'dashboard' && renderUnifiedDashboard()}
-        {activeTab === 'reports' && renderReports()}
-        {activeTab === 'credit_debit_report' && <DailyCreditDebitReport />}
-        {activeTab === 'doctor_credit_debit_report' && <DoctorCreditDebitReport />}
-        {activeTab === 'distributor_credit_debit_report' && <DistributorCreditDebitReport />}
-        {activeTab === 'weekly_insights' && <WeeklyBusinessInsights />}
-        {activeTab === 'stakeholders' && <StakeholderManagement />}
-        {activeTab === 'patients' && <PatientManagement />}
-        {activeTab === 'statements' && <AccountStatement />}
-        {activeTab === 'business_statement' && <BusinessAccountStatement />}
-        {activeTab === 'doctor_statement' && <DoctorAccountStatement />}
-        {activeTab === 'distributor_statement' && <DistributorAccountStatement />}
-        {activeTab === 'payment_estimation' && <DistributorPaymentEstimation />}
-        {activeTab === 'data_import' && <DataImport />}
-        {activeTab === 'configuration' && <ConfigurationManagement />}
-        {activeTab === 'admin_portal' && <AdminPortal />}
-        {activeTab === 'database_management' && <DatabaseManagement />}
-        {activeTab === 'notifications' && <NotificationSettings />}
-        {activeTab === 'user_manual' && <UserManual />}
+        <ErrorBoundary key={activeTab} level="section">
+          {activeTab === 'dashboard' && renderUnifiedDashboard()}
+          {activeTab === 'reports' && renderReports()}
+          {activeTab === 'credit_debit_report' && <DailyCreditDebitReport />}
+          {activeTab === 'doctor_credit_debit_report' && <DoctorCreditDebitReport />}
+          {activeTab === 'distributor_credit_debit_report' && <DistributorCreditDebitReport />}
+          {activeTab === 'weekly_insights' && <WeeklyBusinessInsights />}
+          {activeTab === 'stakeholders' && <StakeholderManagement />}
+          {activeTab === 'patients' && <PatientManagement />}
+          {activeTab === 'statements' && <AccountStatement />}
+          {activeTab === 'business_statement' && <BusinessAccountStatement />}
+          {activeTab === 'doctor_statement' && <DoctorAccountStatement />}
+          {activeTab === 'distributor_statement' && <DistributorAccountStatement />}
+          {activeTab === 'payment_estimation' && <DistributorPaymentEstimation />}
+          {activeTab === 'data_import' && <DataImport />}
+          {activeTab === 'configuration' && <ConfigurationManagement />}
+          {activeTab === 'admin_portal' && <AdminPortal />}
+          {activeTab === 'database_management' && <DatabaseManagement />}
+          {activeTab === 'notifications' && <NotificationSettings />}
+          {activeTab === 'user_manual' && <UserManual />}
+        </ErrorBoundary>
       </main>
 
       <TransactionForm
         isOpen={showTransactionForm}
-        onClose={() => setShowTransactionForm(false)}
+        onClose={handleTransactionFormClose}
         onSubmit={handleTransactionSubmit}
+        defaultCategory={defaultTransactionCategory}
       />
 
       <EditTransactionForm
@@ -2418,162 +1675,45 @@ const DarkCorporateDashboard: React.FC = () => {
         availableCash={allTimeStats.pharmacyCashPosition}
       />
 
-      {/* Mobile Bottom Tab Bar */}
+      {/* Mobile Bottom Tab Bar — derived from sidebar navigation */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-700 px-2 py-1 z-40">
         <div className="flex justify-around items-center">
-          {/* Dashboard */}
-          <button
-            onClick={() => setActiveTab('dashboard')}
-            className={clsx(
-              'flex flex-col items-center py-2 px-3 min-w-0 transition-colors rounded-md',
-              activeTab === 'dashboard'
-                ? 'text-blue-400 bg-blue-900/30'
-                : 'text-gray-400 hover:text-white hover:bg-gray-800'
-            )}
-          >
-            <Squares2X2Icon className="h-5 w-5 mb-1" />
-            <span className="text-xs font-medium truncate">Dashboard</span>
-          </button>
+          {[
+            ...navigationItems.primary,
+            ...navigationItems.management,
+            ...navigationItems.statements,
+            ...navigationItems.system,
+          ].slice(0, 4).map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={clsx(
+                  'flex flex-col items-center py-2 px-3 min-w-0 transition-colors rounded-md flex-1',
+                  activeTab === item.id
+                    ? 'text-blue-400 bg-blue-900/30'
+                    : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                )}
+              >
+                <Icon className="h-5 w-5 mb-1 flex-shrink-0" />
+                <span className="text-xs font-medium truncate w-full text-center">{item.label}</span>
+              </button>
+            );
+          })}
 
-          {/* Add Transaction */}
+          {/* More (opens full sidebar menu) */}
           <button
-            onClick={() => setShowTransactionForm(true)}
-            className="flex flex-col items-center py-2 px-3 min-w-0 text-gray-400 hover:text-white hover:bg-gray-800 transition-colors rounded-md"
+            onClick={openMobile}
+            className="flex flex-col items-center py-2 px-3 min-w-0 text-gray-400 hover:text-white hover:bg-gray-800 transition-colors rounded-md flex-1"
           >
-            <PlusIcon className="h-5 w-5 mb-1" />
-            <span className="text-xs font-medium truncate">Add</span>
-          </button>
-
-          {/* Reports */}
-          <button
-            onClick={() => setActiveTab('reports')}
-            className={clsx(
-              'flex flex-col items-center py-2 px-3 min-w-0 transition-colors rounded-md',
-              activeTab === 'reports'
-                ? 'text-blue-400 bg-blue-900/30'
-                : 'text-gray-400 hover:text-white hover:bg-gray-800'
-            )}
-          >
-            <DocumentTextIcon className="h-5 w-5 mb-1" />
-            <span className="text-xs font-medium truncate">Reports</span>
-          </button>
-
-          {/* Process Payments */}
-          {user?.role !== 'operator' && (
-            <button
-              onClick={() => setShowPaymentProcessor(true)}
-              className="flex flex-col items-center py-2 px-3 min-w-0 text-gray-400 hover:text-white hover:bg-gray-800 transition-colors rounded-md"
-            >
-              <CreditCardIcon className="h-5 w-5 mb-1" />
-              <span className="text-xs font-medium truncate">Pay</span>
-            </button>
-          )}
-
-          {/* More (opens hamburger menu) */}
-          <button
-            onClick={() => setMobileMenuOpen(true)}
-            className="flex flex-col items-center py-2 px-3 min-w-0 text-gray-400 hover:text-white hover:bg-gray-800 transition-colors rounded-md"
-          >
-            <Bars3Icon className="h-5 w-5 mb-1" />
-            <span className="text-xs font-medium truncate">More</span>
+            <Bars3Icon className="h-5 w-5 mb-1 flex-shrink-0" />
+            <span className="text-xs font-medium truncate w-full text-center">More</span>
           </button>
         </div>
       </div>
 
-      {/* Add bottom padding to main content on mobile */}
-      <div className="lg:hidden h-16"></div>
-
-      {/* Notification Panel */}
-      {showNotifications && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center z-50 pt-20 px-4">
-          <div className="bg-gray-800 border border-gray-700 rounded-xl w-full max-w-md shadow-2xl max-h-[80vh] overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700">
-              <div className="flex items-center gap-3">
-                <BellIcon className="h-5 w-5 text-blue-400" />
-                <h2 className="text-lg font-semibold text-white">Notifications</h2>
-                {unreadCount > 0 && (
-                  <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full">
-                    {unreadCount}
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                {notifications.length > 0 && (
-                  <button
-                    onClick={() => markAllAsRead()}
-                    className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
-                  >
-                    Mark all read
-                  </button>
-                )}
-                <button
-                  onClick={() => setShowNotifications(false)}
-                  className="p-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
-                >
-                  <XMarkIcon className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Notification List */}
-            <div className="overflow-y-auto max-h-96">
-              {notifications.length === 0 ? (
-                <div className="p-8 text-center">
-                  <BellIcon className="h-12 w-12 text-gray-500 mx-auto mb-3" />
-                  <p className="text-gray-400">No notifications</p>
-                  <p className="text-sm text-gray-500 mt-1">You're all caught up!</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-gray-700">
-                  {notifications.map((notification) => (
-                    <div
-                      key={notification.id}
-                      className={`p-4 hover:bg-gray-750 transition-colors ${
-                        !notification.isRead ? 'bg-blue-900/20 border-l-2 border-l-blue-500' : ''
-                      }`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-sm font-medium ${
-                            !notification.isRead ? 'text-white' : 'text-gray-300'
-                          }`}>
-                            {notification.title}
-                          </p>
-                          <p className="text-sm text-gray-400 mt-1">
-                            {notification.message}
-                          </p>
-                          <p className="text-xs text-gray-500 mt-2">
-                            {new Date(notification.timestamp).toLocaleString()}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 ml-3">
-                          {!notification.isRead && (
-                            <button
-                              onClick={() => markAsRead(notification.id)}
-                              className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
-                              title="Mark as read"
-                            >
-                              ✓
-                            </button>
-                          )}
-                          <button
-                            onClick={() => removeNotification(notification.id)}
-                            className="text-xs text-gray-400 hover:text-red-400 transition-colors"
-                            title="Remove notification"
-                          >
-                            ×
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <NotificationPanel isOpen={showNotifications} onClose={() => setShowNotifications(false)} />
 
       {/* Profile Settings Modal */}
       {showProfileSettings && (
@@ -2582,6 +1722,7 @@ const DarkCorporateDashboard: React.FC = () => {
           onClose={() => setShowProfileSettings(false)}
         />
       )}
+      </div>
     </div>
   );
 };

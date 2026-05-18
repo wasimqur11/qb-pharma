@@ -168,7 +168,40 @@ const DoctorAccountStatement: React.FC = () => {
   };
 
   const exportStatement = () => {
-    alert(`Exporting doctor account statement (${filteredTransactions.length} transactions) - Demo functionality`);
+    const escape = (v: any) => {
+      const s = String(v ?? '');
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const row = (cells: any[]) => cells.map(escape).join(',');
+
+    const lines = [
+      row(['Doctor Account Statement']),
+      row(['Period', `${dateRange.from} to ${dateRange.to}`]),
+      row(['Consultation Revenue (₹)', doctorSummary.totalRevenue]),
+      row(['Doctor Expenses (₹)', doctorSummary.totalExpenses]),
+      row(['Net Income (₹)', doctorSummary.netIncome]),
+      row(['Total Transactions', doctorSummary.transactionCount]),
+      '',
+      row(['Date', 'Reference', 'Category', 'Doctor', 'Description', 'Debit (₹)', 'Credit (₹)', 'Balance (₹)']),
+      ...filteredTransactions.map(t => row([
+        new Date(t.date).toLocaleDateString('en-IN'),
+        t.reference || '-',
+        getCategoryLabel(t.category),
+        t.doctorName,
+        t.description,
+        t.debit || '',
+        t.credit || '',
+        t.balance
+      ]))
+    ];
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `doctor_statement_${dateRange.from}_to_${dateRange.to}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (

@@ -124,9 +124,40 @@ const AccountStatement: React.FC = () => {
     return { totalDebits, totalCredits, netBalance };
   }, [filteredEntries]);
 
-  const exportToPDF = () => {
-    // Mock export functionality
-    alert('Statement exported to PDF (demo functionality)');
+  const exportToCSV = () => {
+    if (!selectedStakeholderData || filteredEntries.length === 0) return;
+
+    const escape = (v: any) => {
+      const s = String(v ?? '');
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const row = (cells: any[]) => cells.map(escape).join(',');
+
+    const lines = [
+      row(['Account Statement', selectedStakeholderData.name]),
+      row(['Period', `${dateRange.from} to ${dateRange.to}`]),
+      row(['Total Debits', summaryStats.totalDebits]),
+      row(['Total Credits', summaryStats.totalCredits]),
+      row(['Net Balance', summaryStats.netBalance]),
+      '',
+      row(['Date', 'Description', 'Category', 'Debit (₹)', 'Credit (₹)', 'Balance (₹)']),
+      ...filteredEntries.map(e => row([
+        new Date(e.date).toLocaleDateString('en-IN'),
+        e.description,
+        e.category.replace(/_/g, ' '),
+        e.debit || '',
+        e.credit || '',
+        e.balance
+      ]))
+    ];
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `account_statement_${selectedStakeholderData.name.replace(/\s+/g, '_')}_${dateRange.from}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -139,11 +170,11 @@ const AccountStatement: React.FC = () => {
         </div>
         {selectedStakeholder && (
           <button
-            onClick={exportToPDF}
+            onClick={exportToCSV}
             className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm"
           >
             <ArrowDownTrayIcon className="h-4 w-4" />
-            Export PDF
+            Export CSV
           </button>
         )}
       </div>

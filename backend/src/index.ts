@@ -16,6 +16,7 @@ import notificationRoutes from './routes/notifications';
 import syncRoutes from './routes/sync';
 import reportRoutes from './routes/reports';
 import databaseRoutes from './routes/database';
+import departmentRoutes from './routes/departments';
 
 // Load environment variables
 dotenv.config();
@@ -86,6 +87,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/sync', syncRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/database', databaseRoutes);
+app.use('/api/departments', departmentRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {

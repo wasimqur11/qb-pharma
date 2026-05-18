@@ -189,8 +189,32 @@ const BulkUpload: React.FC<BulkUploadProps> = ({ isOpen, onClose, onUpload, uplo
   };
 
   const downloadTemplate = () => {
-    // Mock template download
-    alert(`${config.title} template downloaded (demo functionality)`);
+    const sampleValues: Record<string, string> = {
+      'Company Name': 'Example Pharma Ltd',
+      'Contact Person': 'John Smith',
+      'Email': 'john@example.com',
+      'Phone': '9876543210',
+      'Address': '123 Main Street, City',
+      'Credit Balance': '0',
+      'Product Name': 'Paracetamol 500mg',
+      'Category': 'Analgesics',
+      'Unit Price': '10.00',
+      'Quantity': '100',
+      'Distributor': 'Example Pharma Ltd',
+      'Expiry Date': '2026-12-31'
+    };
+
+    const headers = config.sampleColumns;
+    const exampleRow = headers.map(h => sampleValues[h] ?? '');
+    const csv = [headers.join(','), exampleRow.join(',')].join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${uploadType}_template.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const resetUpload = () => {

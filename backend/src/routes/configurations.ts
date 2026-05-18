@@ -1,9 +1,8 @@
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
 import { authenticateToken, requirePermission } from '../middleware/auth';
+import { prisma } from '../index';
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 // Configuration type definitions
 interface ConfigurationValue {

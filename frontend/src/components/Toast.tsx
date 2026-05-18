@@ -77,6 +77,8 @@ const Toast: React.FC<ToastProps> = ({ toast, onClose }) => {
 
   return (
     <div
+      role={toast.type === 'error' ? 'alert' : 'status'}
+      aria-live={toast.type === 'error' ? 'assertive' : 'polite'}
       className={clsx(
         'flex items-start gap-3 p-4 rounded-lg border backdrop-blur-sm shadow-xl transition-all duration-300 ease-out max-w-sm w-full',
         getColorClasses(),

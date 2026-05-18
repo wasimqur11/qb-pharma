@@ -1,10 +1,9 @@
 import React, { useState, useRef } from 'react';
-import { useTransactions } from '../contexts/TransactionContext';
 import { parseCSVData, convertToTransactions, validateImportData, type ImportResult } from '../utils/dataImportUtils';
 import { DocumentArrowUpIcon, CheckCircleIcon, ExclamationTriangleIcon, XCircleIcon } from '@heroicons/react/24/outline';
+import apiClient from '../utils/apiClient';
 
 const DataImport: React.FC = () => {
-  const { addTransaction } = useTransactions();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
@@ -56,31 +55,23 @@ const DataImport: React.FC = () => {
 
     setIsProcessing(true);
     try {
-      console.log('Starting import of', importResult.transactions.length, 'transactions');
-      
-      // Add all transactions to the context with error handling for each
-      let successCount = 0;
-      let errorCount = 0;
-      
-      for (const [index, transaction] of importResult.transactions.entries()) {
-        try {
-          await addTransaction(transaction);
-          successCount++;
-          console.log(`Imported transaction ${index + 1}/${importResult.transactions.length}`);
-        } catch (err) {
-          console.error(`Error importing transaction ${index + 1}:`, err);
-          errorCount++;
-        }
+      console.log('Starting batch import of', importResult.transactions.length, 'transactions');
+
+      const response = await apiClient.batchCreateTransactions(importResult.transactions);
+
+      if (!response.success) {
+        throw new Error(response.error || 'Batch import failed');
       }
 
-      console.log(`Import completed: ${successCount} successful, ${errorCount} failed`);
-      
+      const { created, errors: errorCount } = response.data!;
+      console.log(`Import completed: ${created} successful, ${errorCount} failed`);
+
       setIsImported(true);
-      
+
       if (errorCount > 0) {
-        alert(`Imported ${successCount} transactions successfully, ${errorCount} failed. Check console for details.`);
+        alert(`Imported ${created} transactions successfully, ${errorCount} failed.`);
       } else {
-        alert(`Successfully imported ${successCount} transactions!`);
+        alert(`Successfully imported ${created} transactions!`);
       }
     } catch (error) {
       console.error('Import error:', error);

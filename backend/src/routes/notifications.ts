@@ -2,6 +2,7 @@ import express from 'express';
 import { z } from 'zod';
 import { authenticateToken, requireRole, AuthenticatedRequest } from '../middleware/auth';
 import { prisma } from '../index';
+import NotificationService from '../services/notificationService';
 
 const router = express.Router();
 
@@ -316,19 +317,25 @@ router.post('/config/test/:type', requireRole(['super_admin']), async (req: Auth
       });
     }
 
-    // Log test notification
-    await prisma.notificationLog.create({
-      data: {
-        type,
-        recipient,
-        subject: `Test ${type.toUpperCase()} Notification`,
-        message: `This is a test ${type} notification from QB Pharma system.`,
-        status: 'pending'
-      }
+    // Actually send the test notification via the service
+    const notificationService = NotificationService.getInstance();
+    await notificationService.loadConfiguration();
+
+    const success = await notificationService.sendNotification({
+      type: type as 'email' | 'sms' | 'whatsapp',
+      recipient,
+      subject: `Test ${type.toUpperCase()} Notification from QB Pharma`,
+      message: `This is a test ${type} notification from QB Pharma system. If you received this, your ${type} configuration is working correctly.`
     });
 
+    if (!success) {
+      return res.status(500).json({
+        error: `Failed to send test ${type} notification. Check server logs and verify your configuration.`
+      });
+    }
+
     res.json({
-      message: `Test ${type} notification queued successfully`,
+      message: `Test ${type} notification sent successfully`,
       recipient,
       type
     });

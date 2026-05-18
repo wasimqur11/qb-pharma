@@ -1,4 +1,4 @@
-import React, { createContext, useContext } from 'react';
+import React, { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { AlertSystem, useAlerts, type AlertMessage } from '../components/AlertSystem';
 
@@ -41,7 +41,7 @@ export const AlertProvider: React.FC<AlertProviderProps> = ({
 }) => {
   const alertManager = useAlerts();
 
-  const contextValue: AlertContextType = {
+  const contextValue = useMemo((): AlertContextType => ({
     addAlert: alertManager.addAlert,
     removeAlert: alertManager.removeAlert,
     clearAlerts: alertManager.clearAlerts,
@@ -50,7 +50,7 @@ export const AlertProvider: React.FC<AlertProviderProps> = ({
     showWarning: alertManager.showWarning,
     showInfo: alertManager.showInfo,
     handleApiError: alertManager.handleApiError
-  };
+  }), [alertManager]);
 
   return (
     <AlertContext.Provider value={contextValue}>

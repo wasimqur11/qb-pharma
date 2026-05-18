@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import apiClient from '../utils/apiClient';
 import { useAlert } from './AlertContext';
@@ -170,13 +170,13 @@ export const ConnectivityProvider: React.FC<ConnectivityProviderProps> = ({
     return isConnected;
   }, [checkConnectivity, scheduleNextCheck]);
 
-  const contextValue: ConnectivityContextType = {
+  const contextValue = useMemo((): ConnectivityContextType => ({
     status,
     isConnected: status === 'connected',
     lastChecked,
     checkConnectivity: manualCheck,
     retryCount
-  };
+  }), [status, lastChecked, retryCount, manualCheck]);
 
   return (
     <ConnectivityContext.Provider value={contextValue}>

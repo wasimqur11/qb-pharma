@@ -63,6 +63,7 @@ export const ConnectivityIndicator: React.FC<ConnectivityIndicatorProps> = ({
         return {
           color: 'text-green-400',
           bgColor: 'bg-green-400',
+          hoverColor: 'hover:text-green-300',
           label: 'Connected',
           icon: WifiIcon,
           pulse: false
@@ -71,6 +72,7 @@ export const ConnectivityIndicator: React.FC<ConnectivityIndicatorProps> = ({
         return {
           color: 'text-yellow-400',
           bgColor: 'bg-yellow-400',
+          hoverColor: 'hover:text-yellow-300',
           label: 'Checking...',
           icon: ArrowPathIcon,
           pulse: true
@@ -79,6 +81,7 @@ export const ConnectivityIndicator: React.FC<ConnectivityIndicatorProps> = ({
         return {
           color: 'text-orange-400',
           bgColor: 'bg-orange-400',
+          hoverColor: 'hover:text-orange-300',
           label: `Reconnecting... (${retryCount > 0 ? `Attempt ${retryCount}` : 'Retrying'})`,
           icon: ArrowPathIcon,
           pulse: true
@@ -87,6 +90,7 @@ export const ConnectivityIndicator: React.FC<ConnectivityIndicatorProps> = ({
         return {
           color: 'text-red-400',
           bgColor: 'bg-red-400',
+          hoverColor: 'hover:text-red-300',
           label: 'Disconnected',
           icon: ExclamationTriangleIcon,
           pulse: false
@@ -95,6 +99,7 @@ export const ConnectivityIndicator: React.FC<ConnectivityIndicatorProps> = ({
         return {
           color: 'text-gray-400',
           bgColor: 'bg-gray-400',
+          hoverColor: 'hover:text-gray-300',
           label: 'Unknown',
           icon: ExclamationTriangleIcon,
           pulse: false
@@ -153,7 +158,8 @@ export const ConnectivityIndicator: React.FC<ConnectivityIndicatorProps> = ({
           <button
             onClick={handleManualCheck}
             disabled={isManualChecking || status === 'checking'}
-            className={`${statusInfo.color} hover:${statusInfo.color}/80 transition-colors disabled:opacity-50`}
+            className={`${statusInfo.color} ${statusInfo.hoverColor} transition-colors disabled:opacity-50`}
+            aria-label={`${statusInfo.label} — click to recheck connection`}
             title={`${statusInfo.label} - Click to retry connection`}
           >
             <IconComponent 

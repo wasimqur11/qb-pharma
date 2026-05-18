@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import type { User, AuthState, UserRole } from '../types';
 
@@ -69,9 +69,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const savedAuth = localStorage.getItem('qb_pharma_auth');
 
       if (savedToken && savedAuth === 'true') {
+        const { default: apiClient } = await import('../utils/apiClient');
+
+        const clearSession = () => {
+          localStorage.removeItem('qb_pharma_user');
+          localStorage.removeItem('qb_pharma_auth');
+          localStorage.removeItem('qb_pharma_token');
+          apiClient.clearToken();
+          setAuthState({ isAuthenticated: false, user: null, isLoading: false });
+        };
+
         try {
-          // Validate token with backend
-          const { default: apiClient } = await import('../utils/apiClient');
           const response = await apiClient.get('/api/auth/profile');
 
           if (response.success && response.data?.user) {
@@ -86,20 +94,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               isLoading: false
             });
           } else {
-            // Token is invalid - clear everything and logout
-            console.log('Token validation failed:', response.error);
-            localStorage.removeItem('qb_pharma_user');
-            localStorage.removeItem('qb_pharma_auth');
-            localStorage.removeItem('qb_pharma_token');
-            setAuthState({ isAuthenticated: false, user: null, isLoading: false });
+            // Token expired or invalid - silently clear and show login form
+            clearSession();
           }
-        } catch (error) {
-          // Network error or invalid token - logout
-          console.error('Session validation error:', error);
-          localStorage.removeItem('qb_pharma_user');
-          localStorage.removeItem('qb_pharma_auth');
-          localStorage.removeItem('qb_pharma_token');
-          setAuthState({ isAuthenticated: false, user: null, isLoading: false });
+        } catch {
+          // Network error - clear session
+          clearSession();
         }
       } else {
         setAuthState({ isAuthenticated: false, user: null, isLoading: false });
@@ -276,29 +276,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
 
-  const contextValue: AuthContextType = {
+  const contextValue = useMemo((): AuthContextType => ({
     // Auth state
     isAuthenticated: authState.isAuthenticated,
     user: authState.user,
     isLoading: authState.isLoading,
-    
+
     // Auth operations
     login,
     logout,
-    
+
     // User management
     createUser,
     updateUser,
     deleteUser,
     getAllUsers,
-    
+
     // Permissions
     hasPermission,
-    
+
     // Stakeholder linking
     getCurrentUserStakeholder,
     isStakeholderUser
-  };
+  }), [authState, users]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <AuthContext.Provider value={contextValue}>

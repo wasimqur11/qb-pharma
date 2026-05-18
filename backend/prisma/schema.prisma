@@ -73,6 +73,7 @@ model Doctor {
   phone           String
   pharmaUnitId    String
   createdAt       DateTime   @default(now())
+  deletedAt       DateTime?
   pharmaUnit      PharmaUnit @relation(fields: [pharmaUnitId], references: [id])
 
   @@map("doctors")
@@ -86,6 +87,7 @@ model BusinessPartner {
   phone               String
   pharmaUnitId        String
   createdAt           DateTime           @default(now())
+  deletedAt           DateTime?
   pharmaUnit          PharmaUnit         @relation(fields: [pharmaUnitId], references: [id])
   settlementRecords   SettlementRecord[]
 
@@ -104,6 +106,7 @@ model Employee {
   salaryFrequency String     @default("monthly")
   pharmaUnitId    String
   createdAt       DateTime   @default(now())
+  deletedAt       DateTime?
   pharmaUnit      PharmaUnit @relation(fields: [pharmaUnitId], references: [id])
 
   @@map("employees")
@@ -124,6 +127,7 @@ model Distributor {
   lastPaymentDate    String?
   pharmaUnitId       String
   createdAt          DateTime   @default(now())
+  deletedAt          DateTime?
   pharmaUnit         PharmaUnit @relation(fields: [pharmaUnitId], references: [id])
 
   @@map("distributors")
@@ -146,6 +150,7 @@ model Patient {
   pharmaUnitId     String
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
+  deletedAt        DateTime?
   pharmaUnit       PharmaUnit @relation(fields: [pharmaUnitId], references: [id])
 
   @@map("patients")
@@ -163,6 +168,7 @@ model Transaction {
   createdBy       String
   pharmaUnitId    String
   createdAt       DateTime   @default(now())
+  deletedAt       DateTime?
   creator         User       @relation("TransactionCreatedBy", fields: [createdBy], references: [id])
   pharmaUnit      PharmaUnit @relation(fields: [pharmaUnitId], references: [id])
 

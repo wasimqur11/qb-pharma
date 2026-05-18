@@ -13,6 +13,7 @@ import clsx from 'clsx';
 import * as XLSX from 'xlsx';
 import { useStakeholders } from '../contexts/StakeholderContext';
 import type { Distributor } from '../types';
+import apiClient from '../utils/apiClient';
 
 interface DistributorBulkUploadProps {
   isOpen: boolean;
@@ -284,96 +285,57 @@ const DistributorBulkUpload: React.FC<DistributorBulkUploadProps> = ({ isOpen, o
         const totalRecords = result.data.length;
         setUploadProgress({ current: 0, total: totalRecords });
 
+        const uploadErrors: ValidationError[] = [...result.errors];
+
+        // Build payload for bulk endpoint
+        const stakeholdersPayload = result.data.map((distributorData) => {
+          const nextPaymentDue = new Date();
+          nextPaymentDue.setDate(nextPaymentDue.getDate() +
+            (distributorData.paymentSchedule === 'weekly' ? 7 :
+             distributorData.paymentSchedule === 'bi-weekly' ? 14 : 30));
+
+          return {
+            name: distributorData.name,
+            contactPerson: distributorData.contactPerson,
+            email: distributorData.email,
+            phone: distributorData.phone,
+            address: distributorData.address,
+            creditBalance: distributorData.creditBalance,
+            paymentSchedule: distributorData.paymentSchedule,
+            paymentPercentage: distributorData.paymentPercentage,
+            nextPaymentDue: nextPaymentDue.toISOString().split('T')[0]
+          };
+        });
+
+        const bulkResponse = await apiClient.post('/api/stakeholders/distributors/bulk', {
+          stakeholders: stakeholdersPayload
+        });
+
+        setUploadProgress({ current: totalRecords, total: totalRecords });
+
         let successCount = 0;
         let failedCount = 0;
         let duplicateCount = 0;
-        const uploadErrors: ValidationError[] = [...result.errors];
 
-        // Process distributors in small batches to avoid UI freezing
-        const BATCH_SIZE = 3;
-        for (let i = 0; i < result.data.length; i += BATCH_SIZE) {
-          const batch = result.data.slice(i, Math.min(i + BATCH_SIZE, result.data.length));
+        if (bulkResponse.success) {
+          const { results: bulkResults } = bulkResponse.data as any;
+          successCount = bulkResults.successful.length;
+          failedCount = bulkResults.failed.length;
 
-          // Process batch concurrently with proper error handling
-          const batchPromises = batch.map(async (distributorData, batchIndex) => {
-            const rowNumber = i + batchIndex + 2; // +2 for header row and 0-based index
-            try {
-              const nextPaymentDue = new Date();
-              nextPaymentDue.setDate(nextPaymentDue.getDate() +
-                (distributorData.paymentSchedule === 'weekly' ? 7 :
-                 distributorData.paymentSchedule === 'bi-weekly' ? 14 : 30));
-
-              // Call API directly without updating local state to prevent overwhelming React
-              const response = await fetch(`/api/stakeholders/distributors`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${localStorage.getItem('qb_pharma_token')}`
-                },
-                body: JSON.stringify({
-                  name: distributorData.name,
-                  contactPerson: distributorData.contactPerson,
-                  email: distributorData.email,
-                  phone: distributorData.phone,
-                  address: distributorData.address,
-                  creditBalance: distributorData.creditBalance,
-                  paymentSchedule: distributorData.paymentSchedule,
-                  paymentPercentage: distributorData.paymentPercentage,
-                  nextPaymentDue: nextPaymentDue.toISOString().split('T')[0]
-                })
-              });
-
-              const responseData = await response.json();
-
-              if (!response.ok) {
-                throw new Error(responseData.error || 'Failed to add distributor');
-              }
-
-              return { success: true, rowNumber };
-            } catch (error: any) {
-              // Check if it's a duplicate error
-              const isDuplicate = error?.message?.includes('duplicate') ||
-                                 error?.message?.includes('already exists');
-
-              return {
-                success: false,
-                rowNumber,
-                isDuplicate,
-                error: error?.message || 'Unknown error'
-              };
-            }
+          bulkResults.failed.forEach((failed: any) => {
+            const isDuplicate = failed.error?.includes('already exists');
+            if (isDuplicate) duplicateCount++;
+            uploadErrors.push({
+              row: failed.row,
+              field: isDuplicate ? 'Company Name' : 'Upload',
+              message: isDuplicate
+                ? `Duplicate: ${failed.error}`
+                : failed.error || 'Failed to add distributor'
+            });
           });
-
-          const batchResults = await Promise.all(batchPromises);
-
-          // Update counts
-          batchResults.forEach((res) => {
-            if (res.success) {
-              successCount++;
-            } else {
-              failedCount++;
-              if (res.isDuplicate) {
-                duplicateCount++;
-                uploadErrors.push({
-                  row: res.rowNumber,
-                  field: 'Company Name',
-                  message: 'Duplicate: A distributor with this name already exists'
-                });
-              } else {
-                uploadErrors.push({
-                  row: res.rowNumber,
-                  field: 'Upload',
-                  message: res.error || 'Failed to add distributor'
-                });
-              }
-            }
-          });
-
-          // Update progress - use callback to avoid stale state
-          setUploadProgress(prev => ({ ...prev, current: i + batch.length }));
-
-          // Delay to allow UI to update and prevent overwhelming the browser
-          await new Promise(resolve => setTimeout(resolve, 100));
+        } else {
+          failedCount = totalRecords;
+          uploadErrors.push({ row: 0, field: 'Upload', message: bulkResponse.error || 'Bulk upload failed' });
         }
 
         setUploadResult({

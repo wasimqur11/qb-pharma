@@ -71,7 +71,7 @@ router.get('/', requirePermission('transactions', 'read'), async (req: Authentic
     const { category, stakeholderId, stakeholderType, startDate, endDate, page = '1', limit = '50', all } = req.query;
 
     // Build filter conditions based on role
-    const whereClause: any = {};
+    const whereClause: any = { deletedAt: null };
 
     // Role-based filtering
     if (req.user?.role === 'doctor' && req.user.linkedStakeholderId) {
@@ -199,29 +199,30 @@ router.post('/', requirePermission('transactions', 'create'), async (req: Authen
     if (transactionData.stakeholderId && transactionData.stakeholderType) {
       let stakeholderExists = false;
       
+      const sid = transactionData.stakeholderId!;
       switch (transactionData.stakeholderType) {
         case 'doctor':
-          stakeholderExists = !!(await prisma.doctor.findUnique({ where: { id: transactionData.stakeholderId } }));
+          stakeholderExists = !!(await prisma.doctor.findFirst({ where: { id: sid, deletedAt: null } }));
           break;
         case 'business_partner':
-          stakeholderExists = !!(await prisma.businessPartner.findUnique({ where: { id: transactionData.stakeholderId } }));
+          stakeholderExists = !!(await prisma.businessPartner.findFirst({ where: { id: sid, deletedAt: null } }));
           break;
         case 'employee':
-          stakeholderExists = !!(await prisma.employee.findUnique({ where: { id: transactionData.stakeholderId } }));
+          stakeholderExists = !!(await prisma.employee.findFirst({ where: { id: sid, deletedAt: null } }));
           break;
         case 'distributor':
-          stakeholderExists = !!(await prisma.distributor.findUnique({ where: { id: transactionData.stakeholderId } }));
+          stakeholderExists = !!(await prisma.distributor.findFirst({ where: { id: sid, deletedAt: null } }));
           break;
         case 'patient':
-          stakeholderExists = !!(await prisma.patient.findUnique({ where: { id: transactionData.stakeholderId } }));
+          stakeholderExists = !!(await prisma.patient.findFirst({ where: { id: sid, deletedAt: null } }));
           break;
       }
-      
+
       if (!stakeholderExists) {
         return res.status(400).json({ error: 'Invalid stakeholder ID for the specified type' });
       }
     }
-    
+
     // Determine pharma unit
     let pharmaUnitId = req.user?.pharmaUnitId;
     
@@ -233,7 +234,48 @@ router.post('/', requirePermission('transactions', 'create'), async (req: Authen
     if (!pharmaUnitId) {
       return res.status(400).json({ error: 'Pharma unit is required' });
     }
-    
+
+    // Settlement Point guard: pharmacy cash must be within ±₹50 of zero
+    if (transactionData.category === 'settlement_point') {
+      const SETTLEMENT_TOLERANCE = 50;
+
+      // Compute pharmacy cash position from the database
+      // Formula: (pharmacy_sale + patient_payment) - distributor_payment
+      //          - sales_profit_distribution - employee_payment
+      //          - clinic_expense - patient_credit_sale
+      const REVENUE_CATS   = ['pharmacy_sale', 'patient_payment'];
+      const DEDUCTION_CATS = [
+        'distributor_payment', 'sales_profit_distribution',
+        'employee_payment', 'clinic_expense', 'patient_credit_sale'
+      ];
+
+      const categoryTotals = await prisma.transaction.groupBy({
+        by: ['category'],
+        where: {
+          pharmaUnitId,
+          category: { in: [...REVENUE_CATS, ...DEDUCTION_CATS] }
+        },
+        _sum: { amount: true }
+      });
+
+      const sumByCategory: Record<string, number> = {};
+      for (const row of categoryTotals) {
+        sumByCategory[row.category] = row._sum.amount ?? 0;
+      }
+
+      const pharmacyRevenue   = REVENUE_CATS  .reduce((s, c) => s + (sumByCategory[c] ?? 0), 0);
+      const pharmacyDeductions= DEDUCTION_CATS.reduce((s, c) => s + (sumByCategory[c] ?? 0), 0);
+      const cashPosition      = pharmacyRevenue - pharmacyDeductions;
+
+      if (Math.abs(cashPosition) > SETTLEMENT_TOLERANCE) {
+        return res.status(422).json({
+          error: `Pharmacy cash position is ₹${cashPosition.toFixed(2)}. ` +
+                 `It must be within ±₹${SETTLEMENT_TOLERANCE} of zero before a Settlement Point can be recorded.`,
+          cashPosition
+        });
+      }
+    }
+
     // Create transaction
     const transaction = await prisma.transaction.create({
       data: {
@@ -321,13 +363,127 @@ router.post('/', requirePermission('transactions', 'create'), async (req: Authen
   }
 });
 
+// Get aggregated financial summaries computed server-side (avoids loading all records to the client)
+router.get('/aggregates', requirePermission('transactions', 'read'), async (req: AuthenticatedRequest, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    // Role-based base filter — mirrors the logic in GET /
+    const baseWhere: any = { deletedAt: null };
+    if (req.user?.role === 'doctor' && req.user.linkedStakeholderId) {
+      baseWhere.OR = [
+        { stakeholderId: req.user.linkedStakeholderId, stakeholderType: 'doctor' },
+        { category: 'consultation_fee', stakeholderId: req.user.linkedStakeholderId }
+      ];
+    } else if (req.user?.role === 'partner' && req.user.linkedStakeholderId) {
+      baseWhere.OR = [
+        { stakeholderId: req.user.linkedStakeholderId, stakeholderType: 'business_partner' },
+        { category: 'sales_profit_distribution', stakeholderId: req.user.linkedStakeholderId }
+      ];
+    } else if (req.user?.role === 'distributor' && req.user.linkedStakeholderId) {
+      baseWhere.OR = [
+        { stakeholderId: req.user.linkedStakeholderId, stakeholderType: 'distributor' }
+      ];
+    } else if (['operator', 'admin'].includes(req.user?.role || '') && req.user?.pharmaUnitId) {
+      baseWhere.pharmaUnitId = req.user.pharmaUnitId;
+    }
+    // super_admin: no additional filter
+
+    // Optional date-range applied to category totals
+    const rangeWhere: any = { ...baseWhere };
+    if (startDate && typeof startDate === 'string') {
+      rangeWhere.date = { ...rangeWhere.date, gte: new Date(startDate) };
+    }
+    if (endDate && typeof endDate === 'string') {
+      rangeWhere.date = { ...rangeWhere.date, lte: new Date(endDate) };
+    }
+
+    // Today's boundaries (always uses base filter, ignores startDate/endDate)
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfToday   = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+    const [categoryTotals, todayTotals, lastSettlement, distributorTotals] = await Promise.all([
+      // All-time (or date-range) totals per category
+      prisma.transaction.groupBy({
+        by: ['category'],
+        where: rangeWhere,
+        _sum: { amount: true },
+        _count: true
+      }),
+
+      // Today's totals per category (ignores the date-range filter)
+      prisma.transaction.groupBy({
+        by: ['category'],
+        where: { ...baseWhere, date: { gte: startOfToday, lte: endOfToday } },
+        _sum: { amount: true }
+      }),
+
+      // Most recent settlement point
+      prisma.transaction.findFirst({
+        where: { ...baseWhere, category: 'settlement_point' },
+        orderBy: { date: 'desc' },
+        select: { id: true, date: true, description: true }
+      }),
+
+      // Per-distributor transaction totals (all-time, for balance calculation)
+      prisma.transaction.groupBy({
+        by: ['stakeholderId', 'category'],
+        where: {
+          ...baseWhere,
+          stakeholderType: 'distributor',
+          category: { in: ['distributor_credit_purchase', 'distributor_payment', 'distributor_credit_note'] }
+        },
+        _sum: { amount: true }
+      })
+    ]);
+
+    // Format category totals
+    const categories: Record<string, { total: number; count: number }> = {};
+    for (const item of categoryTotals) {
+      categories[item.category] = { total: item._sum.amount ?? 0, count: item._count };
+    }
+
+    // Format today totals
+    const today: Record<string, number> = {};
+    for (const item of todayTotals) {
+      today[item.category] = item._sum.amount ?? 0;
+    }
+
+    // Format distributor totals grouped by stakeholderId
+    const distributorTransactionTotals: Record<string, { purchases: number; payments: number; creditNotes: number }> = {};
+    for (const item of distributorTotals) {
+      const id = item.stakeholderId!;
+      if (!distributorTransactionTotals[id]) {
+        distributorTransactionTotals[id] = { purchases: 0, payments: 0, creditNotes: 0 };
+      }
+      const amount = item._sum.amount ?? 0;
+      if (item.category === 'distributor_credit_purchase') distributorTransactionTotals[id].purchases += amount;
+      else if (item.category === 'distributor_payment')          distributorTransactionTotals[id].payments  += amount;
+      else if (item.category === 'distributor_credit_note')      distributorTransactionTotals[id].creditNotes += amount;
+    }
+
+    res.json({
+      categories,
+      today,
+      distributorTransactionTotals,
+      lastSettlementPoint: lastSettlement
+        ? { id: lastSettlement.id, date: lastSettlement.date.toISOString(), description: lastSettlement.description }
+        : null
+    });
+  } catch (error) {
+    console.error('Get transaction aggregates error:', error);
+    res.status(500).json({ error: 'Failed to fetch transaction aggregates' });
+  }
+});
+
 // Get transaction by ID
 router.get('/:id', requirePermission('transactions', 'read'), async (req: AuthenticatedRequest, res) => {
   try {
     const { id } = req.params;
     
-    const transaction = await prisma.transaction.findUnique({
-      where: { id },
+    const transaction = await prisma.transaction.findFirst({
+      where: { id, deletedAt: null },
       include: {
         pharmaUnit: true,
         creator: {
@@ -339,11 +495,11 @@ router.get('/:id', requirePermission('transactions', 'read'), async (req: Authen
         }
       }
     });
-    
+
     if (!transaction) {
       return res.status(404).json({ error: 'Transaction not found' });
     }
-    
+
     // Role-based access control
     let hasAccess = false;
     
@@ -401,8 +557,8 @@ router.put('/:id', requirePermission('transactions', 'update'), async (req: Auth
     const updateData = UpdateTransactionSchema.parse(req.body);
     
     // Check if transaction exists
-    const existingTransaction = await prisma.transaction.findUnique({
-      where: { id },
+    const existingTransaction = await prisma.transaction.findFirst({
+      where: { id, deletedAt: null },
       include: {
         pharmaUnit: true
       }
@@ -429,21 +585,22 @@ router.put('/:id', requirePermission('transactions', 'update'), async (req: Auth
     if (updateData.stakeholderId && updateData.stakeholderType) {
       let stakeholderExists = false;
       
+      const uid = updateData.stakeholderId!;
       switch (updateData.stakeholderType) {
         case 'doctor':
-          stakeholderExists = !!(await prisma.doctor.findUnique({ where: { id: updateData.stakeholderId } }));
+          stakeholderExists = !!(await prisma.doctor.findFirst({ where: { id: uid, deletedAt: null } }));
           break;
         case 'business_partner':
-          stakeholderExists = !!(await prisma.businessPartner.findUnique({ where: { id: updateData.stakeholderId } }));
+          stakeholderExists = !!(await prisma.businessPartner.findFirst({ where: { id: uid, deletedAt: null } }));
           break;
         case 'employee':
-          stakeholderExists = !!(await prisma.employee.findUnique({ where: { id: updateData.stakeholderId } }));
+          stakeholderExists = !!(await prisma.employee.findFirst({ where: { id: uid, deletedAt: null } }));
           break;
         case 'distributor':
-          stakeholderExists = !!(await prisma.distributor.findUnique({ where: { id: updateData.stakeholderId } }));
+          stakeholderExists = !!(await prisma.distributor.findFirst({ where: { id: uid, deletedAt: null } }));
           break;
         case 'patient':
-          stakeholderExists = !!(await prisma.patient.findUnique({ where: { id: updateData.stakeholderId } }));
+          stakeholderExists = !!(await prisma.patient.findFirst({ where: { id: uid, deletedAt: null } }));
           break;
       }
       
@@ -519,32 +676,31 @@ router.delete('/:id', requirePermission('transactions', 'delete'), async (req: A
     const { id } = req.params;
     
     // Check if transaction exists
-    const existingTransaction = await prisma.transaction.findUnique({
-      where: { id }
+    const existingTransaction = await prisma.transaction.findFirst({
+      where: { id, deletedAt: null }
     });
-    
+
     if (!existingTransaction) {
       return res.status(404).json({ error: 'Transaction not found' });
     }
-    
+
     // Role-based access control
     let canDelete = false;
-    
+
     if (req.user?.role === 'super_admin') {
       canDelete = true;
     } else if (['admin'].includes(req.user?.role || '')) {
       canDelete = existingTransaction.pharmaUnitId === req.user?.pharmaUnitId;
     }
-    // Note: Operators typically shouldn't delete transactions, only admin+
-    
+
     if (!canDelete) {
       return res.status(403).json({ error: 'Insufficient permissions to delete this transaction' });
     }
-    
-    // Delete transaction
-    await prisma.transaction.delete({ where: { id } });
-    
-    res.json({ 
+
+    // Soft delete
+    await prisma.transaction.update({ where: { id }, data: { deletedAt: new Date() } });
+
+    res.json({
       message: 'Transaction deleted successfully',
       deletedId: id
     });

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { useStakeholders } from './StakeholderContext';
 import { useTransactions } from './TransactionContext';
@@ -267,7 +267,7 @@ export const SimpleSettlementProvider: React.FC<SimpleSettlementProviderProps> =
     localStorage.removeItem('simpleSettlementBalances');
   };
 
-  const contextValue: SimpleSettlementContextType = {
+  const contextValue = useMemo((): SimpleSettlementContextType => ({
     getPartnerBalances,
     calculateAdjustedDistribution,
     processSimpleSettlement,
@@ -275,7 +275,7 @@ export const SimpleSettlementProvider: React.FC<SimpleSettlementProviderProps> =
     createSettlementPoint,
     getTotalOutstanding,
     resetAllBalances
-  };
+  }), [cumulativeBalances]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <SimpleSettlementContext.Provider value={contextValue}>

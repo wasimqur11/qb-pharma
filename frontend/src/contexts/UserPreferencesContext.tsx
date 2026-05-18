@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import type { ReactNode } from 'react';
 
 export interface UserPreferences {
@@ -133,12 +133,12 @@ export const UserPreferencesProvider: React.FC<UserPreferencesProviderProps> = (
     saveToLocalStorage(defaultPreferences);
   }, [saveToLocalStorage]);
 
-  const contextValue: UserPreferencesContextType = {
+  const contextValue = useMemo((): UserPreferencesContextType => ({
     preferences,
     updatePreferences,
     resetToDefaults,
     isLoading,
-  };
+  }), [preferences, isLoading, updatePreferences, resetToDefaults]);
 
   return (
     <UserPreferencesContext.Provider value={contextValue}>

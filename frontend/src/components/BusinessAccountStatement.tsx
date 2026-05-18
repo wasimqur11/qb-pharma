@@ -281,7 +281,41 @@ const BusinessAccountStatement: React.FC = () => {
   };
 
   const exportStatement = () => {
-    alert(`Exporting business account statement (${filteredTransactions.length} transactions) - Demo functionality`);
+    const escape = (v: any) => {
+      const s = String(v ?? '');
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const row = (cells: any[]) => cells.map(escape).join(',');
+
+    const lines = [
+      row(['Pharmacy Business Account Statement']),
+      row(['Period', `${dateRange.from} to ${dateRange.to}`]),
+      row(['Total Revenue (₹)', businessSummary.totalRevenue]),
+      row(['Total Expenses (₹)', businessSummary.totalExpenses]),
+      row(['Net Profit (₹)', businessSummary.netProfit]),
+      row(['Cash Flow (₹)', businessSummary.cashFlow]),
+      row(['Total Transactions', businessSummary.transactionCount]),
+      '',
+      row(['Date', 'Reference', 'Category', 'Description', 'Stakeholder', 'Debit (₹)', 'Credit (₹)', 'Balance (₹)']),
+      ...filteredTransactions.map(t => row([
+        new Date(t.date).toLocaleDateString('en-IN'),
+        t.reference || '-',
+        t.category.replace(/_/g, ' '),
+        t.description,
+        t.stakeholderName || '-',
+        t.debit || '',
+        t.credit || '',
+        t.balance
+      ]))
+    ];
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `business_statement_${dateRange.from}_to_${dateRange.to}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (

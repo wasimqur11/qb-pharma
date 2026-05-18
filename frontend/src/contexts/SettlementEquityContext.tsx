@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import type { 
   PartnerSettlementEquity, 
@@ -401,26 +401,26 @@ export const SettlementEquityProvider: React.FC<SettlementEquityProviderProps> =
     return equity?.settlementHistory || [];
   };
 
-  const contextValue: SettlementEquityContextType = {
+  const contextValue = useMemo((): SettlementEquityContextType => ({
     // Data
     partnerEquities,
     currentSettlementSession,
-    
+
     // Operations
     initializeSettlementSession,
     updateAllocation,
     processSettlement,
     cancelSettlementSession,
-    
+
     // Queries
     getPartnerEquity,
     calculateRecommendedAllocations,
     canProcessSettlement,
-    
+
     // History
     getSettlementHistory,
     getPartnerSettlementHistory
-  };
+  }), [partnerEquities, currentSettlementSession]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <SettlementEquityContext.Provider value={contextValue}>

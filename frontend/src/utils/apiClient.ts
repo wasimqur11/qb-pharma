@@ -226,10 +226,43 @@ class ApiClient {
     return this.get('/api/transactions?all=true');
   }
 
+  // Department methods
+  async getDepartments(): Promise<ApiResponse<any>> {
+    return this.get('/api/departments');
+  }
+
+  async createDepartment(data: { name: string; description?: string; isActive?: boolean }): Promise<ApiResponse<any>> {
+    return this.post('/api/departments', data);
+  }
+
+  async batchCreateDepartments(departments: Array<{ name: string; description?: string; isActive?: boolean }>): Promise<ApiResponse<any>> {
+    return this.post('/api/departments/batch', { departments });
+  }
+
+  async updateDepartment(id: string, data: Partial<{ name: string; description: string; isActive: boolean }>): Promise<ApiResponse<any>> {
+    return this.put(`/api/departments/${id}`, data);
+  }
+
+  async deleteDepartment(id: string): Promise<ApiResponse<any>> {
+    return this.delete(`/api/departments/${id}`);
+  }
+
+  async getTransactionAggregates(params?: { startDate?: string; endDate?: string }): Promise<ApiResponse<any>> {
+    const qs = params ? new URLSearchParams(
+      Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined)) as Record<string, string>
+    ).toString() : '';
+    return this.get(qs ? `/api/transactions/aggregates?${qs}` : '/api/transactions/aggregates');
+  }
+
   async createTransaction(transactionData: any): Promise<ApiResponse<any>> {
     // Filter out fields that backend will set automatically
     const { createdBy, id, createdAt, ...cleanData } = transactionData;
     return this.post('/api/transactions', cleanData);
+  }
+
+  async batchCreateTransactions(transactions: any[]): Promise<ApiResponse<{ created: number; errors: number; errorDetails: any[] }>> {
+    const cleanedTransactions = transactions.map(({ createdBy, id, createdAt, ...rest }) => rest);
+    return this.post('/api/transactions/batch', { transactions: cleanedTransactions });
   }
 
   async updateTransaction(id: string, transactionData: any): Promise<ApiResponse<any>> {

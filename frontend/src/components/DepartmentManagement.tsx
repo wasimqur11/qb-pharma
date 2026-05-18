@@ -154,18 +154,19 @@ const DepartmentManagement: React.FC = () => {
     dept.description?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleDepartmentSubmit = (data: DepartmentFormData) => {
-    if (editingDepartment) {
-      updateDepartment(editingDepartment.id, data);
-      setEditingDepartment(null);
-    } else {
-      addDepartment({
-        name: data.name,
-        description: data.description,
-        isActive: true
-      });
+  const handleDepartmentSubmit = async (data: DepartmentFormData) => {
+    try {
+      if (editingDepartment) {
+        await updateDepartment(editingDepartment.id, data);
+        setEditingDepartment(null);
+      } else {
+        await addDepartment({ name: data.name, description: data.description, isActive: true });
+      }
+      setShowAddForm(false);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Operation failed';
+      alert(`Department error: ${msg}`);
     }
-    setShowAddForm(false);
   };
 
   const handleEdit = (department: Department) => {
@@ -173,17 +174,27 @@ const DepartmentManagement: React.FC = () => {
     setShowAddForm(true);
   };
 
-  const handleDelete = (departmentId: string) => {
+  const handleDelete = async (departmentId: string) => {
     const department = departments.find(d => d.id === departmentId);
     if (!department) return;
 
     if (confirm(`Are you sure you want to delete the "${department.name}" department? This action cannot be undone.`)) {
-      deleteDepartment(departmentId);
+      try {
+        await deleteDepartment(departmentId);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : 'Delete failed';
+        alert(`Department error: ${msg}`);
+      }
     }
   };
 
-  const toggleActive = (departmentId: string) => {
-    toggleDepartmentStatus(departmentId);
+  const toggleActive = async (departmentId: string) => {
+    try {
+      await toggleDepartmentStatus(departmentId);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Update failed';
+      alert(`Department error: ${msg}`);
+    }
   };
 
   return (

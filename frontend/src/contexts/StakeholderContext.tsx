@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import type { Doctor, BusinessPartner, Employee, Distributor, Patient } from '../types';
 import apiClient from '../utils/apiClient';
@@ -415,58 +415,58 @@ export const StakeholderProvider: React.FC<StakeholderProviderProps> = ({ childr
   const getTotalStakeholders = () => doctors.length + businessPartners.length + employees.length + distributors.length + patients.length;
   const getActivePatients = () => patients.filter(patient => patient.isActive);
 
-  const contextValue: StakeholderContextType = {
+  const contextValue = useMemo((): StakeholderContextType => ({
     // Data
     doctors,
     businessPartners,
     employees,
     distributors,
     patients,
-    
+
     // Loading state
     isLoading,
-    
+
     // Data loading
     loadAllData,
-    
+
     // Doctor operations
     addDoctor,
     updateDoctor,
     deleteDoctor,
-    
+
     // Business Partner operations
     addBusinessPartner,
     updateBusinessPartner,
     deleteBusinessPartner,
-    
+
     // Employee operations
     addEmployee,
     updateEmployee,
     deleteEmployee,
     updateEmployeeSalaryDueDate,
-    
+
     // Distributor operations
     addDistributor,
     updateDistributor,
     deleteDistributor,
-    
+
     // Patient operations
     addPatient,
     updatePatient,
     deletePatient,
     togglePatientStatus,
-    
+
     // Utility functions
     getDoctorById,
     getBusinessPartnerById,
     getEmployeeById,
     getDistributorById,
     getPatientById,
-    
+
     // Stats
     getTotalStakeholders,
     getActivePatients
-  };
+  }), [doctors, businessPartners, employees, distributors, patients, isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <StakeholderContext.Provider value={contextValue}>

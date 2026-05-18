@@ -100,7 +100,7 @@ router.get('/:type', requirePermission('stakeholders', 'read'), async (req: Auth
       };
     }
     
-    const whereClause = { ...pharmaUnitFilter, ...searchFilter };
+    const whereClause = { ...pharmaUnitFilter, ...searchFilter, deletedAt: null };
     
     // Pagination
     const pageNum = Math.max(1, parseInt(page as string));
@@ -244,7 +244,8 @@ router.post('/:type', requirePermission('stakeholders', 'create'), async (req: A
       const existingDistributor = await prisma.distributor.findFirst({
         where: {
           name: validatedData.name,
-          pharmaUnitId
+          pharmaUnitId,
+          deletedAt: null
         }
       });
 
@@ -325,46 +326,46 @@ router.get('/:type/:id', requirePermission('stakeholders', 'read'), async (req: 
     // Fetch stakeholder based on type
     switch (type) {
       case 'doctors':
-        stakeholder = await prisma.doctor.findUnique({
-          where: { id },
+        stakeholder = await prisma.doctor.findFirst({
+          where: { id, deletedAt: null },
           include: { pharmaUnit: true }
         });
         break;
       case 'business-partners':
-        stakeholder = await prisma.businessPartner.findUnique({
-          where: { id },
+        stakeholder = await prisma.businessPartner.findFirst({
+          where: { id, deletedAt: null },
           include: { pharmaUnit: true }
         });
         break;
       case 'employees':
-        stakeholder = await prisma.employee.findUnique({
-          where: { id },
+        stakeholder = await prisma.employee.findFirst({
+          where: { id, deletedAt: null },
           include: { pharmaUnit: true }
         });
         break;
       case 'distributors':
-        stakeholder = await prisma.distributor.findUnique({
-          where: { id },
+        stakeholder = await prisma.distributor.findFirst({
+          where: { id, deletedAt: null },
           include: { pharmaUnit: true }
         });
         break;
       case 'patients':
-        stakeholder = await prisma.patient.findUnique({
-          where: { id },
+        stakeholder = await prisma.patient.findFirst({
+          where: { id, deletedAt: null },
           include: { pharmaUnit: true }
         });
         break;
     }
-    
+
     if (!stakeholder) {
       return res.status(404).json({ error: 'Stakeholder not found' });
     }
-    
+
     // Check access permissions
     if (req.user?.role !== 'super_admin' && stakeholder.pharmaUnitId !== req.user?.pharmaUnitId) {
       return res.status(403).json({ error: 'Access denied to stakeholders from other pharma units' });
     }
-    
+
     res.json({
       stakeholder: {
         ...stakeholder,
@@ -391,26 +392,26 @@ router.put('/:type/:id', requirePermission('stakeholders', 'update'), async (req
     let existingStakeholder: any;
     switch (type) {
       case 'doctors':
-        existingStakeholder = await prisma.doctor.findUnique({ where: { id } });
+        existingStakeholder = await prisma.doctor.findFirst({ where: { id, deletedAt: null } });
         break;
       case 'business-partners':
-        existingStakeholder = await prisma.businessPartner.findUnique({ where: { id } });
+        existingStakeholder = await prisma.businessPartner.findFirst({ where: { id, deletedAt: null } });
         break;
       case 'employees':
-        existingStakeholder = await prisma.employee.findUnique({ where: { id } });
+        existingStakeholder = await prisma.employee.findFirst({ where: { id, deletedAt: null } });
         break;
       case 'distributors':
-        existingStakeholder = await prisma.distributor.findUnique({ where: { id } });
+        existingStakeholder = await prisma.distributor.findFirst({ where: { id, deletedAt: null } });
         break;
       case 'patients':
-        existingStakeholder = await prisma.patient.findUnique({ where: { id } });
+        existingStakeholder = await prisma.patient.findFirst({ where: { id, deletedAt: null } });
         break;
     }
-    
+
     if (!existingStakeholder) {
       return res.status(404).json({ error: 'Stakeholder not found' });
     }
-    
+
     // Check access permissions
     if (req.user?.role !== 'super_admin' && existingStakeholder.pharmaUnitId !== req.user?.pharmaUnitId) {
       return res.status(403).json({ error: 'Access denied to stakeholders from other pharma units' });
@@ -444,6 +445,7 @@ router.put('/:type/:id', requirePermission('stakeholders', 'update'), async (req
         where: {
           name: updateData.name,
           pharmaUnitId: existingStakeholder.pharmaUnitId,
+          deletedAt: null,
           NOT: { id }
         }
       });
@@ -576,7 +578,8 @@ router.post('/:type/bulk', requirePermission('stakeholders', 'create'), async (r
           const existingDistributor = await prisma.distributor.findFirst({
             where: {
               name: validatedData.name,
-              pharmaUnitId
+              pharmaUnitId,
+              deletedAt: null
             }
           });
 
@@ -656,80 +659,54 @@ router.delete('/:type/:id', requirePermission('stakeholders', 'delete'), async (
     let existingStakeholder: any;
     switch (type) {
       case 'doctors':
-        existingStakeholder = await prisma.doctor.findUnique({ where: { id } });
+        existingStakeholder = await prisma.doctor.findFirst({ where: { id, deletedAt: null } });
         break;
       case 'business-partners':
-        existingStakeholder = await prisma.businessPartner.findUnique({ where: { id } });
+        existingStakeholder = await prisma.businessPartner.findFirst({ where: { id, deletedAt: null } });
         break;
       case 'employees':
-        existingStakeholder = await prisma.employee.findUnique({ where: { id } });
+        existingStakeholder = await prisma.employee.findFirst({ where: { id, deletedAt: null } });
         break;
       case 'distributors':
-        existingStakeholder = await prisma.distributor.findUnique({ where: { id } });
+        existingStakeholder = await prisma.distributor.findFirst({ where: { id, deletedAt: null } });
         break;
       case 'patients':
-        existingStakeholder = await prisma.patient.findUnique({ where: { id } });
+        existingStakeholder = await prisma.patient.findFirst({ where: { id, deletedAt: null } });
         break;
     }
-    
+
     if (!existingStakeholder) {
       return res.status(404).json({ error: 'Stakeholder not found' });
     }
-    
+
     // Check access permissions
     if (req.user?.role !== 'super_admin' && existingStakeholder.pharmaUnitId !== req.user?.pharmaUnitId) {
       return res.status(403).json({ error: 'Access denied to stakeholders from other pharma units' });
     }
-    
-    // Check if stakeholder has transactions
-    const transactionCount = await prisma.transaction.count({
-      where: { stakeholderId: id }
-    });
-    
-    if (transactionCount > 0) {
-      // For patients, we can deactivate them instead of hard delete
-      if (type === 'patients') {
-        await prisma.patient.update({
-          where: { id },
-          data: { isActive: false }
-        });
-        
-        return res.json({ 
-          message: 'Patient deactivated successfully (has transaction history)',
-          deleted: false,
-          deactivated: true
-        });
-      } else {
-        return res.status(400).json({ 
-          error: 'Cannot delete stakeholder with transaction history',
-          transactionCount
-        });
-      }
-    }
-    
-    // Delete stakeholder
+
+    // Soft delete — preserves transaction history
+    const now = new Date();
     switch (type) {
       case 'doctors':
-        await prisma.doctor.delete({ where: { id } });
+        await prisma.doctor.update({ where: { id }, data: { deletedAt: now } });
         break;
       case 'business-partners':
-        await prisma.businessPartner.delete({ where: { id } });
+        await prisma.businessPartner.update({ where: { id }, data: { deletedAt: now } });
         break;
       case 'employees':
-        await prisma.employee.delete({ where: { id } });
+        await prisma.employee.update({ where: { id }, data: { deletedAt: now } });
         break;
       case 'distributors':
-        await prisma.distributor.delete({ where: { id } });
+        await prisma.distributor.update({ where: { id }, data: { deletedAt: now } });
         break;
       case 'patients':
-        await prisma.patient.delete({ where: { id } });
+        await prisma.patient.update({ where: { id }, data: { deletedAt: now, isActive: false } });
         break;
     }
-    
-    res.json({ 
+
+    res.json({
       message: `${type.slice(0, -1)} deleted successfully`,
-      deleted: true,
-      deactivated: false
+      deleted: true
     });
   } catch (error) {
     console.error('Delete stakeholder error:', error);

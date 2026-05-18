@@ -17,7 +17,8 @@ import { useStakeholders } from '../contexts/StakeholderContext';
 import { useTransactions } from '../contexts/TransactionContext';
 // import { useToast } from '../contexts/ToastContext';
 import { TRANSACTION_TYPES } from '../constants/transactionTypes';
-import SearchableSelect, { SearchableSelectOption } from './SearchableSelect';
+import SearchableSelect from './SearchableSelect';
+import type { SearchableSelectOption } from './SearchableSelect';
 import clsx from 'clsx';
 
 interface TransactionFormData {
@@ -33,10 +34,13 @@ interface TransactionFormData {
 interface TransactionFormProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: TransactionFormData) => void;
+  onSubmit: (data: TransactionFormData) => void | Promise<void>;
+  defaultCategory?: TransactionCategory;
 }
 
-const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSubmit }) => {
+const DRAFT_KEY = 'qb-pharma-transaction-draft';
+
+const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSubmit, defaultCategory }) => {
   const { doctors, businessPartners, employees, distributors, patients } = useStakeholders();
   const { transactions, getCashPosition, getPharmacyCashPosition } = useTransactions();
   // const { showError } = useToast();
@@ -61,6 +65,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
     billNo: '',
     date: new Date().toISOString().split('T')[0]
   });
+
+  const [draftRestored, setDraftRestored] = useState(false);
 
   const transactionTypes = TRANSACTION_TYPES;
 
@@ -277,6 +283,34 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
     setHasUnsavedChanges(hasChanges);
   }, [formData, initialFormData]);
 
+  // Save draft to sessionStorage whenever form content changes (while open)
+  useEffect(() => {
+    if (!isOpen) return;
+    const isEmpty =
+      formData.category === 'pharmacy_sale' &&
+      formData.amount === '' &&
+      formData.description === '' &&
+      !formData.billNo &&
+      !formData.stakeholderId;
+    if (!isEmpty) {
+      try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify(formData)); } catch {}
+    }
+  }, [formData, isOpen]);
+
+  // Restore draft when form opens (skip if opened with a preset category via keyboard shortcut)
+  useEffect(() => {
+    if (!isOpen || defaultCategory) return;
+    try {
+      const saved = sessionStorage.getItem(DRAFT_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved) as TransactionFormData;
+        setFormData(parsed);
+        setDraftRestored(true);
+        setTimeout(() => setDraftRestored(false), 4000);
+      }
+    } catch {}
+  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Handle ESC key press
   useEffect(() => {
     const handleEscapeKey = (event: KeyboardEvent) => {
@@ -295,6 +329,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
     };
   }, [isOpen, hasUnsavedChanges]);
 
+  // Set default category when form opens with a preset category
+  useEffect(() => {
+    if (isOpen && defaultCategory) {
+      handleCategoryChange(defaultCategory);
+    }
+  }, [isOpen, defaultCategory]);
+
   // Smart close handler with confirmation
   const handleClose = () => {
     if (hasUnsavedChanges) {
@@ -311,8 +352,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
     }
   };
 
-  // Reset form to initial state
+  // Reset form to initial state and clear any saved draft
   const resetForm = () => {
+    try { sessionStorage.removeItem(DRAFT_KEY); } catch {}
     setFormData({
       category: 'pharmacy_sale',
       amount: '',
@@ -321,6 +363,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
       date: new Date().toISOString().split('T')[0]
     });
     setHasUnsavedChanges(false);
+    setDraftRestored(false);
   };
 
   // Get daily entry status for current selection
@@ -510,7 +553,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSu
           <div className="mt-1.5 text-center">
             <span className="text-xs text-gray-500">
               Press Ctrl+Enter to add • ESC to close
-              {hasUnsavedChanges && <span className="text-amber-400"> • Unsaved changes</span>}
+              {draftRestored && <span className="text-emerald-400"> • Draft restored</span>}
+              {!draftRestored && hasUnsavedChanges && <span className="text-amber-400"> • Unsaved changes</span>}
             </span>
           </div>
         </div>
